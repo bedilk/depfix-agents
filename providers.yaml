@@ -1,0 +1,75 @@
+# Providers depfix watches. Each provider has N change feeds.
+#
+# Implemented feed kinds: npm_dist_tag, github_release, openapi_spec
+# Declared, not yet implemented (Week 2): changelog_file, changelog_html, rss
+#
+# Spec URLs move. If a poll reports `not_found` for an openapi_spec feed,
+# check the URL before assuming detection is broken.
+
+providers:
+  - id: openai
+    name: OpenAI
+    api_version_scheme: semver
+    api_base_urls:
+      - https://api.openai.com
+    sdk_packages:
+      - name: openai
+        ecosystem: npm
+    # Week 3 uses these as the seed grep set, before AST work.
+    call_site_anchors:
+      - "new OpenAI("
+      - "openai.chat.completions"
+      - "openai.responses"
+      - "openai.embeddings"
+      - "api.openai.com"
+    feeds:
+      - kind: npm_dist_tag
+        package: openai
+        dist_tag: latest
+      - kind: github_release
+        repo: openai/openai-node
+      - kind: openapi_spec
+        url: https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
+
+  - id: stripe
+    name: Stripe
+    # Dated API versions — the case no registry watcher can see, because
+    # nothing in package.json pins Stripe-Version.
+    api_version_scheme: dated
+    api_base_urls:
+      - https://api.stripe.com
+    sdk_packages:
+      - name: stripe
+        ecosystem: npm
+    call_site_anchors:
+      - "new Stripe("
+      - "stripe.charges"
+      - "stripe.paymentIntents"
+      - "stripe.checkout.sessions"
+      - "apiVersion:"
+      - "api.stripe.com"
+    feeds:
+      - kind: npm_dist_tag
+        package: stripe
+        dist_tag: latest
+      - kind: github_release
+        repo: stripe/stripe-node
+      - kind: openapi_spec
+        url: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+      - kind: changelog_html
+        url: https://docs.stripe.com/changelog
+
+  - id: anthropic
+    name: Anthropic
+    enabled: false # flip on once OpenAI + Stripe are green
+    api_version_scheme: dated
+    api_base_urls:
+      - https://api.anthropic.com
+    sdk_packages:
+      - name: "@anthropic-ai/sdk"
+        ecosystem: npm
+    feeds:
+      - kind: npm_dist_tag
+        package: "@anthropic-ai/sdk"
+      - kind: github_release
+        repo: anthropics/anthropic-sdk-typescript

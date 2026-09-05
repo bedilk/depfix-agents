@@ -1,0 +1,2 @@
+[console_scripts]
+depfix = depfix.cli:main
