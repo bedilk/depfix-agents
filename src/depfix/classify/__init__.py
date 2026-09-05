@@ -1,0 +1,31 @@
+"""Turn a detected change into structured, actionable ``BreakingChange`` rows."""
+
+from depfix.classify.classifier import Classifier
+from depfix.classify.llm import GeminiCompleter, LLMCompleter, LLMResponse, OllamaCompleter
+from depfix.classify.models import ClassifyOutcome
+from depfix.classify.notes import NotesClassifier
+from depfix.classify.spec_rules import classify_spec_changes, sdk_path_hints
+from depfix.classify.store import (
+    ClassifyRunSummary,
+    classify_pending,
+    event_from_row,
+    load_unclassified_events,
+    persist_classification,
+)
+
+__all__ = [
+    "Classifier",
+    "ClassifyOutcome",
+    "ClassifyRunSummary",
+    "GeminiCompleter",
+    "LLMCompleter",
+    "LLMResponse",
+    "NotesClassifier",
+    "OllamaCompleter",
+    "classify_pending",
+    "classify_spec_changes",
+    "event_from_row",
+    "load_unclassified_events",
+    "persist_classification",
+    "sdk_path_hints",
+]
