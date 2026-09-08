@@ -14,6 +14,7 @@ from depfix.core.models import (
     ValidationResult,
     ValidationStatus,
 )
+from depfix.core.pipeline import FixPipeline, FixPipelineResult
 
 __all__ = [
     "AgentResult",
@@ -23,6 +24,8 @@ __all__ = [
     "DependencyFixAgent",
     "FileUsage",
     "FixConfidence",
+    "FixPipeline",
+    "FixPipelineResult",
     "FixResult",
     "LLMCall",
     "Usage",

@@ -6,11 +6,18 @@ from depfix.evals.models import (
     EvalCase,
     EvalCategory,
     EvalReport,
+    ExpectedCallSite,
     ExpectedChange,
     FixAssertion,
 )
 from depfix.evals.runner import EvalRunner, load_report, save_report
-from depfix.evals.scoring import Regression, compare_reports, score_classification, score_fix
+from depfix.evals.scoring import (
+    Regression,
+    compare_reports,
+    score_call_sites,
+    score_classification,
+    score_fix,
+)
 
 __all__ = [
     "CaseResult",
@@ -19,6 +26,7 @@ __all__ = [
     "EvalCategory",
     "EvalReport",
     "EvalRunner",
+    "ExpectedCallSite",
     "ExpectedChange",
     "FixAssertion",
     "Regression",
@@ -27,6 +35,7 @@ __all__ = [
     "load_corpus_file",
     "load_report",
     "save_report",
+    "score_call_sites",
     "score_classification",
     "score_fix",
 ]

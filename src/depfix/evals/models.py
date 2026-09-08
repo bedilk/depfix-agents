@@ -13,6 +13,7 @@ class EvalCategory(StrEnum):
     SPEC_DIFF = "spec_diff"  # deterministic — diff_specs() + classify_spec_changes()
     RELEASE_NOTES = "release_notes"  # LLM — NotesClassifier
     FIX_GENERATION = "fix_generation"  # LLM — FixGenerator/OllamaFixGenerator + FixValidator
+    CALL_SITES = "call_sites"  # deterministic — CallSiteScanner, Week 3
 
 
 @dataclass
@@ -35,6 +36,19 @@ class FixAssertion:
     must_contain: list[str] = field(default_factory=list)
     must_not_contain: list[str] = field(default_factory=list)
     max_changed_line_ratio: float | None = None
+
+
+@dataclass
+class ExpectedCallSite:
+    """What a ``call_sites`` case expects to find, matched loosely (substrings
+    + a minimum confidence floor) for the same reason ``ExpectedChange``
+    is loose: exact-match on a scanner's exact line/column measures
+    incidental formatting, not "did it find the call"."""
+
+    symbol_contains: str = ""
+    kind: str = ""  # a CallSiteKind value, or "" to match any kind
+    file_contains: str = ""
+    min_confidence: str = "low"  # "low" | "medium" | "high"
 
 
 @dataclass
@@ -66,6 +80,16 @@ class EvalCase:
     target_file: str = ""
     fix_assertion: FixAssertion | None = None
 
+    # call_sites (Week 3) -- `fixture` above is reused as the checkout dir
+    provider_id: str = ""
+    sdk_packages: list[str] = field(default_factory=list)
+    api_base_urls: list[str] = field(default_factory=list)
+    call_site_anchors: list[str] = field(default_factory=list)
+    symbols: list[str] = field(default_factory=list)
+    expected_call_sites: list[ExpectedCallSite] = field(default_factory=list)
+    forbidden_files: list[str] = field(default_factory=list)
+    min_recall: float | None = None
+
 
 @dataclass
 class CaseResult:
@@ -76,6 +100,7 @@ class CaseResult:
     detail: str = ""
     cost: float = 0.0
     skipped: bool = False
+    duration_ms: int = 0
 
 
 @dataclass

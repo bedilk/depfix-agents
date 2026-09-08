@@ -5,7 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from depfix.core.models import BreakingChange
-from depfix.evals.models import EvalReport, ExpectedChange, FixAssertion
+from depfix.evals.models import EvalReport, ExpectedCallSite, ExpectedChange, FixAssertion
+from depfix.scanners.models import CallSite
+
+# Mirrors Settings.scan_min_recall's default -- kept as a plain literal here
+# rather than importing depfix.config, since scoring stays pure/import-light
+# and a case-level `min_recall` override is expected to be the common path.
+_DEFAULT_MIN_RECALL = 0.85
+_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
 
 
 def score_classification(
@@ -62,6 +69,74 @@ def score_fix(assertion: FixAssertion, original: str, fixed: str) -> tuple[bool,
             )
 
     return True, "fix assertions satisfied"
+
+
+def _call_site_matches(exp: ExpectedCallSite, site: CallSite) -> bool:
+    if exp.symbol_contains and exp.symbol_contains.lower() not in site.symbol.lower():
+        return False
+    if exp.kind and site.kind.value != exp.kind:
+        return False
+    if exp.file_contains and exp.file_contains not in site.filepath:
+        return False
+    return _CONFIDENCE_RANK[site.confidence.value] >= _CONFIDENCE_RANK[exp.min_confidence]
+
+
+def score_call_sites(
+    expected: list[ExpectedCallSite],
+    forbidden_files: list[str],
+    call_sites: list[CallSite],
+    *,
+    min_recall: float | None = None,
+) -> tuple[bool, str]:
+    """Score one ``call_sites`` case.
+
+    ``forbidden_files`` is an absolute precision gate, checked first: if any
+    *actionable* (HIGH/MEDIUM) call site lands in a forbidden file, the case
+    fails outright regardless of recall -- a scanner that finds every real
+    call site but also flags an unrelated repo's file is not safe to hand to
+    a fixer.
+
+    Recall against ``expected`` is then graded against ``min_recall`` (a
+    per-case override, falling back to the corpus-wide floor from
+    ``docs/plan.md``) rather than requiring every expectation to match --
+    below that floor is the documented trigger to bring in tree-sitter
+    instead of tightening regexes further.
+    """
+    actionable_violations = sorted(
+        {
+            site.filepath
+            for site in call_sites
+            if site.is_actionable and any(f in site.filepath for f in forbidden_files)
+        }
+    )
+    if actionable_violations:
+        return False, "forbidden_files violated by actionable call site(s) in: " + "; ".join(
+            actionable_violations
+        )
+
+    if not expected:
+        return True, "no expected call sites"
+
+    floor = min_recall if min_recall is not None else _DEFAULT_MIN_RECALL
+    remaining = list(call_sites)
+    misses: list[str] = []
+    for exp in expected:
+        match = next((s for s in remaining if _call_site_matches(exp, s)), None)
+        if match is None:
+            misses.append(f"symbol~={exp.symbol_contains!r} kind={exp.kind!r}")
+        else:
+            remaining.remove(match)
+
+    recall = (len(expected) - len(misses)) / len(expected)
+    if recall < floor:
+        return False, (
+            f"recall {recall:.2f} below floor {floor:.2f}; unmatched: " + "; ".join(misses)
+        )
+    if misses:
+        return True, (
+            f"recall {recall:.2f} meets floor {floor:.2f}; unmatched: " + "; ".join(misses)
+        )
+    return True, f"matched {len(expected)}/{len(expected)} expected call site(s)"
 
 
 @dataclass(frozen=True)

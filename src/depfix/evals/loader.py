@@ -14,7 +14,13 @@ from typing import Any
 
 import yaml
 
-from depfix.evals.models import EvalCase, EvalCategory, ExpectedChange, FixAssertion
+from depfix.evals.models import (
+    EvalCase,
+    EvalCategory,
+    ExpectedCallSite,
+    ExpectedChange,
+    FixAssertion,
+)
 
 
 class CorpusError(ValueError):
@@ -37,6 +43,24 @@ def _parse_expected_changes(data: dict[str, Any], case_id: str) -> list[Expected
                 kind=item["kind"],
                 old_api_contains=item.get("old_api_contains", ""),
                 min_confidence=float(item.get("min_confidence", 0.0)),
+            )
+        )
+    return out
+
+
+def _parse_expected_call_sites(data: dict[str, Any], case_id: str) -> list[ExpectedCallSite]:
+    out = []
+    for item in data.get("expected_call_sites", []):
+        if "symbol_contains" not in item and "kind" not in item:
+            raise CorpusError(
+                f"case '{case_id}': expected_call_sites entry needs 'symbol_contains' or 'kind'"
+            )
+        out.append(
+            ExpectedCallSite(
+                symbol_contains=str(item.get("symbol_contains", "")),
+                kind=str(item.get("kind", "")),
+                file_contains=str(item.get("file_contains", "")),
+                min_confidence=str(item.get("min_confidence", "low")),
             )
         )
     return out
@@ -68,7 +92,11 @@ def _parse_case(data: dict[str, Any]) -> EvalCase:
             f"case '{case_id}': unknown category '{category_raw}' (valid: {valid})"
         ) from exc
 
-    default_requires_llm = category is not EvalCategory.SPEC_DIFF
+    # spec_diff and call_sites are both deterministic (no LLM in the loop);
+    # release_notes and fix_generation both need one.
+    default_requires_llm = category not in (EvalCategory.SPEC_DIFF, EvalCategory.CALL_SITES)
+
+    min_recall = data.get("min_recall")
 
     return EvalCase(
         id=case_id,
@@ -88,6 +116,14 @@ def _parse_case(data: dict[str, Any]) -> EvalCase:
         fixture=str(data.get("fixture", "")),
         target_file=str(data.get("target_file", "")),
         fix_assertion=_parse_fix_assertion(data),
+        provider_id=str(data.get("provider_id", "")),
+        sdk_packages=list(data.get("sdk_packages", [])),
+        api_base_urls=list(data.get("api_base_urls", [])),
+        call_site_anchors=list(data.get("call_site_anchors", [])),
+        symbols=list(data.get("symbols", [])),
+        expected_call_sites=_parse_expected_call_sites(data, case_id),
+        forbidden_files=list(data.get("forbidden_files", [])),
+        min_recall=float(min_recall) if min_recall is not None else None,
     )
 
 
