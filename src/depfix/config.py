@@ -91,6 +91,85 @@ class Settings(BaseSettings):
         description="Where `depfix eval --save` writes JSON reports.",
     )
 
+    # --- GitHub App (Week 3) ----------------------------------------------------
+    # Distinct from `github_token` above: that's a PAT used for polling public
+    # feeds; this is a GitHub App used to clone and scan a specific installed
+    # repo with a short-lived, least-privilege token minted per scan.
+    github_app_id: str = Field(default="", description="GitHub App ID (numeric, as a string).")
+    github_app_private_key: str = Field(
+        default="",
+        description="PEM-encoded RSA private key for the GitHub App, inline. "
+        "Mutually exclusive with github_app_private_key_path (this one wins if both are set).",
+    )
+    github_app_private_key_path: str = Field(
+        default="",
+        description="Path to a .pem file with the GitHub App's private key, "
+        "for environments where an inline multi-line env var is awkward.",
+    )
+
+    # --- Repo checkout (Week 3) --------------------------------------------------
+    clone_dir: str = Field(
+        default="", description="Base directory for repo clones. Empty uses the system temp dir."
+    )
+    clone_timeout: float = Field(default=120.0, ge=1.0, le=600.0)
+    clone_max_repo_mb: int = Field(
+        default=500, ge=1, description="Reject a clone once its working tree exceeds this size."
+    )
+
+    # --- Repo/call-site scanner (Week 3) -----------------------------------------
+    scan_max_file_bytes: int = Field(
+        default=2_000_000,
+        ge=1024,
+        description="Skip individual source files larger than this during a repo scan.",
+    )
+    scan_max_files: int = Field(
+        default=20_000,
+        ge=1,
+        description="Hard cap on files scanned per repo, to bound worst-case scan time.",
+    )
+    scan_min_recall: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Recall floor for the call_sites eval category. Per docs/plan.md, "
+        "falling below this is the trigger to bring in tree-sitter instead of regex.",
+    )
+
+    # --- Fix generation + verification (Week 4) ----------------------------------
+    fix_validate_syntax: bool = Field(
+        default=True,
+        description="Run FixValidator's syntax/sanity checks before writing an edit to disk.",
+    )
+    verify_enabled: bool = Field(
+        default=True,
+        description="Whether `depfix fix` runs the repo's own test suite to confirm "
+        "each edit. Off by default in CI-less environments where no runtime is available.",
+    )
+    verify_install_timeout: float = Field(
+        default=300.0,
+        ge=1.0,
+        le=1800.0,
+        description="Wall-clock cap for `npm ci`/`yarn install`/`pnpm install` before Verifier "
+        "gives up and marks the run's edits SUSPECT rather than hanging indefinitely.",
+    )
+    verify_test_timeout: float = Field(
+        default=300.0,
+        ge=1.0,
+        le=1800.0,
+        description="Wall-clock cap for one baseline or after-fix test run.",
+    )
+    verify_ignore_scripts: bool = Field(
+        default=True,
+        description="Pass --ignore-scripts to the install command so a hostile repo's "
+        "package.json can't run arbitrary code (postinstall, etc.) during verification.",
+    )
+    verify_max_output_bytes: int = Field(
+        default=2_000_000,
+        ge=1024,
+        description="Truncate captured install/test stdout+stderr past this size, so a "
+        "runaway or malicious process can't exhaust memory holding its output.",
+    )
+
     # --- Observability --------------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     environment: Literal["development", "staging", "production", "test"] = "development"

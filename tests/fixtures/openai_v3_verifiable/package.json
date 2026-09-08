@@ -1,0 +1,9 @@
+{
+  "name": "openai-v3-verifiable-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Week 4 Verifier fixture: like openai_v3_project, but with a self-contained SDK shim (no real npm dependency, no network) and a real node:test suite, so depfix.verify.Verifier can install (a no-op -- zero dependencies) and run tests for real.",
+  "scripts": {
+    "test": "node --test --test-reporter=tap"
+  }
+}

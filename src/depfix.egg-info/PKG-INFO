@@ -24,6 +24,7 @@ Requires-Dist: httpx>=0.27.0
 Requires-Dist: SQLAlchemy>=2.0.0
 Requires-Dist: psycopg[binary]>=3.1.0
 Requires-Dist: PyYAML>=6.0
+Requires-Dist: PyJWT[crypto]>=2.8.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
 Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
@@ -33,7 +34,7 @@ Requires-Dist: mypy>=1.10.0; extra == "dev"
 Requires-Dist: types-requests; extra == "dev"
 Requires-Dist: types-PyYAML; extra == "dev"
 Requires-Dist: pre-commit>=3.7.0; extra == "dev"
-Requires-Dist: bandit>=1.7.0; extra == "dev"
+Requires-Dist: bandit[toml]>=1.7.0; extra == "dev"
 Requires-Dist: respx>=0.21.0; extra == "dev"
 
 # depfix — Dependency Fix Agent
@@ -147,6 +148,44 @@ depfix eval --save report.json           # persist a JSON report
 depfix eval --compare report.json        # fail on any case that regressed pass->fail
 ```
 
+## Scanning a repo for call sites
+
+`depfix scan` finds usages of a provider's SDK across a codebase — either a
+local directory or a remote repo cloned on the fly via a GitHub App
+installation — and reports/persists the call sites it finds, with a
+confidence level (`HIGH`/`MEDIUM`/`LOW`) reflecting how directly each usage
+traces back to the SDK import.
+
+```bash
+# Scan a local checkout for every OpenAI SDK symbol.
+depfix scan --path ./my-app --provider openai --no-save
+
+# Narrow the scan to the symbols touched by one classified breaking change.
+depfix scan --path ./my-app --provider openai --from-event 42
+
+# Scan a remote repo by cloning it via the GitHub App (needs GITHUB_APP_ID +
+# a private key configured -- see below).
+depfix scan --repo acme/widgets --provider stripe
+
+# See what repos the App installation(s) can see.
+depfix repos
+```
+
+To scan remote repos, register a GitHub App with `contents: read` permission,
+install it on the target repo(s)/org, and set:
+
+| Variable | Purpose |
+| --- | --- |
+| `GITHUB_APP_ID` | Numeric GitHub App ID |
+| `GITHUB_APP_PRIVATE_KEY` | PEM private key, inline (wins over the path below if both are set) |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | Path to a `.pem` file with the private key |
+| `CLONE_DIR` | Base directory for shallow clones (defaults to the system temp dir) |
+| `CLONE_MAX_REPO_MB` | Reject a clone once its working tree exceeds this size (default `500`) |
+
+`depfix scan` mints a short-lived, least-privilege installation token per
+scan and shallow-clones (`--depth=1`) into a temp directory that's removed
+after the scan regardless of outcome.
+
 ## Common tasks
 
 ```bash
@@ -162,6 +201,8 @@ make eval                 # depfix eval --no-llm (CI gate)
 make eval-full            # depfix eval with LLM-backed cases included
 make eval-compare         # depfix eval --compare against the last saved report
 make classify             # depfix classify
+make scan ARGS="--path ./my-app --provider openai --no-save"
+make repos                 # depfix repos
 make docker-up            # postgres + redis + app via docker compose
 ```
 
@@ -171,12 +212,14 @@ make docker-up            # postgres + redis + app via docker compose
 dependency-fix-agent/
 ├── src/depfix/               # main package
 │   ├── core/                 # models + agent orchestrator
-│   ├── scanners/             # codebase scanning
+│   ├── scanners/             # codebase scanning (manifest + call-site + repo orchestration)
 │   ├── fixers/               # LLM-based fix generation
 │   ├── validators/           # syntax / semantic validation
 │   ├── sources/               # change feeds (npm dist-tag, GitHub, OpenAPI diff)
 │   ├── classify/              # ChangeEvent -> BreakingChange (deterministic + LLM)
 │   ├── evals/                 # YAML corpus + scoring harness (`depfix eval`)
+│   ├── gh/                   # GitHub App auth (JWT + installation tokens)
+│   ├── clone/                 # shallow-clone service
 │   ├── api/                  # (placeholder) HTTP surface
 │   ├── workers/              # (placeholder) background jobs
 │   ├── registry/             # npm registry HTTP client
@@ -212,6 +255,11 @@ All configuration is read from environment variables (or a local `.env` file). S
 | `CLASSIFY_MIN_CONFIDENCE` | `0.5`        | Drop LLM-derived (release-notes) changes below this confidence |
 | `EVAL_CORPUS_DIR` | packaged corpus      | Directory of `*.yaml` eval corpus files  |
 | `EVAL_RESULTS_DIR`| `./.depfix-cache/eval-results` | Where `depfix eval --save` writes JSON reports |
+| `GITHUB_APP_ID`   | unset                | GitHub App ID for `depfix scan --repo`/`depfix repos` |
+| `GITHUB_APP_PRIVATE_KEY` / `GITHUB_APP_PRIVATE_KEY_PATH` | unset | GitHub App private key, inline or by path |
+| `CLONE_DIR`       | system temp dir      | Base directory for shallow clones        |
+| `CLONE_MAX_REPO_MB` | `500`               | Reject a clone once its working tree exceeds this size |
+| `SCAN_MAX_FILES`  | `20000`              | Hard cap on files scanned per repo       |
 | `LOG_LEVEL`       | `INFO`               | Root logging level                       |
 | `SENTRY_DSN`      | unset                | Sentry DSN for error reporting           |
 

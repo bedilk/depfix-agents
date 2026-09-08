@@ -17,6 +17,8 @@ src/depfix/classify/models.py
 src/depfix/classify/notes.py
 src/depfix/classify/spec_rules.py
 src/depfix/classify/store.py
+src/depfix/clone/__init__.py
+src/depfix/clone/service.py
 src/depfix/core/__init__.py
 src/depfix/core/agent.py
 src/depfix/core/models.py
@@ -28,6 +30,9 @@ src/depfix/evals/scoring.py
 src/depfix/fixers/__init__.py
 src/depfix/fixers/gemini.py
 src/depfix/fixers/ollama.py
+src/depfix/gh/__init__.py
+src/depfix/gh/app.py
+src/depfix/gh/models.py
 src/depfix/providers/__init__.py
 src/depfix/providers/loader.py
 src/depfix/providers/models.py
@@ -36,6 +41,11 @@ src/depfix/registry/client.py
 src/depfix/registry/models.py
 src/depfix/scanners/__init__.py
 src/depfix/scanners/base.py
+src/depfix/scanners/callsites.py
+src/depfix/scanners/manifest.py
+src/depfix/scanners/models.py
+src/depfix/scanners/repo.py
+src/depfix/scanners/store.py
 src/depfix/sources/__init__.py
 src/depfix/sources/base.py
 src/depfix/sources/factory.py

@@ -6,23 +6,33 @@ orchestrates a whole-codebase run (scan -> fix every file -> write diffs),
 whereas an eval case is "does this one fixture file get fixed correctly" —
 the agent's file-discovery and diff-writing steps would just be overhead and
 extra failure surface unrelated to what's being scored.
+
+``spec_diff`` and ``release_notes`` cases, by contrast, both run through the
+same :class:`~depfix.classify.classifier.Classifier` that ``depfix classify``
+uses in production — it already branches on whether the built ``ChangeEvent``
+carries structural spec deltas (deterministic path) or only prose (LLM path),
+so scoring them through two separate methods here would just be a second copy
+of that branch to keep in sync.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Protocol
 
+from depfix.classify.classifier import Classifier
 from depfix.classify.llm import LLMCompleter
-from depfix.classify.notes import NotesClassifier
-from depfix.classify.spec_rules import classify_spec_changes
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.evals.models import CaseResult, EvalCase, EvalCategory, EvalReport
-from depfix.evals.scoring import score_classification, score_fix
+from depfix.evals.scoring import score_call_sites, score_classification, score_fix
 from depfix.scanners.base import CodebaseScanner, build_pattern_for_api
+from depfix.scanners.callsites import CallSiteScanner
+from depfix.scanners.models import ScanTarget
+from depfix.sources.models import ChangeEvent, SourceKind
 from depfix.sources.openapi_diff import diff_specs
 from depfix.validators.javascript import FixValidator
 
@@ -51,11 +61,13 @@ class EvalRunner:
         fixtures_dir: Path | None = None,
     ) -> None:
         self._completer = completer
+        self._classifier = Classifier(completer)
         self._fixer = fixer
         self._fixtures_dir = fixtures_dir or (
             Path(__file__).resolve().parents[3] / "tests" / "fixtures"
         )
         self._scanner = CodebaseScanner(context_lines=5)
+        self._call_site_scanner = CallSiteScanner()
         self._validator = FixValidator()
 
     def run(self, cases: list[EvalCase], *, use_llm: bool) -> EvalReport:
@@ -77,51 +89,53 @@ class EvalRunner:
         return report
 
     def _run_case(self, case: EvalCase) -> CaseResult:
+        started = time.time()
         try:
-            if case.category is EvalCategory.SPEC_DIFF:
-                return self._run_spec_diff(case)
-            if case.category is EvalCategory.RELEASE_NOTES:
-                return self._run_release_notes(case)
-            if case.category is EvalCategory.FIX_GENERATION:
-                return self._run_fix(case)
+            if case.category in (EvalCategory.SPEC_DIFF, EvalCategory.RELEASE_NOTES):
+                result = self._run_classification(case)
+            elif case.category is EvalCategory.FIX_GENERATION:
+                result = self._run_fix(case)
+            elif case.category is EvalCategory.CALL_SITES:
+                result = self._run_call_sites(case)
+            else:
+                raise AssertionError(  # pragma: no cover
+                    f"unhandled eval category: {case.category}"
+                )
         except Exception as exc:
             logger.exception("eval case %s raised", case.id)
-            return CaseResult(
+            result = CaseResult(
                 case_id=case.id,
                 category=case.category,
                 passed=False,
                 verified=case.verified,
                 detail=f"raised {type(exc).__name__}: {exc}",
             )
-        raise AssertionError(f"unhandled eval category: {case.category}")  # pragma: no cover
+        result.duration_ms = int((time.time() - started) * 1000)
+        return result
 
-    def _run_spec_diff(self, case: EvalCase) -> CaseResult:
-        changes = diff_specs(case.old_spec or {}, case.new_spec or {})
-        actual = classify_spec_changes(
-            changes,
-            package=case.package,
-            old_version=case.old_version,
-            new_version=case.new_version,
+    def _run_classification(self, case: EvalCase) -> CaseResult:
+        """Score a ``spec_diff`` or ``release_notes`` case through the real
+        ``Classifier`` — same entry point ``depfix classify`` uses, so a case
+        that only passes here and not in production is measuring the harness,
+        not the pipeline."""
+        event = ChangeEvent(
             provider_id=case.package,
+            feed_key=f"eval:{case.id}",
+            source_kind=SourceKind.OPENAPI_SPEC
+            if case.category is EvalCategory.SPEC_DIFF
+            else SourceKind.GITHUB_RELEASE,
             source_url=None,
+            old_token=case.old_version,
+            new_token=case.new_version,
+            body=case.release_notes_body,
+            spec_changes=diff_specs(case.old_spec or {}, case.new_spec or {}),
         )
-        passed, detail = score_classification(case.expected_changes, actual)
-        return CaseResult(case.id, case.category, passed, case.verified, detail)
-
-    def _run_release_notes(self, case: EvalCase) -> CaseResult:
-        if self._completer is None:
+        outcome = self._classifier.classify(event)
+        if outcome.errors:
             return CaseResult(
-                case.id, case.category, False, case.verified, "no LLM completer configured"
+                case.id, case.category, False, case.verified, "; ".join(outcome.errors)
             )
-        classifier = NotesClassifier(self._completer)
-        actual = classifier.classify(
-            case.release_notes_body,
-            package=case.package,
-            old_version=case.old_version,
-            new_version=case.new_version,
-            provider_id=case.package,
-        )
-        passed, detail = score_classification(case.expected_changes, actual)
+        passed, detail = score_classification(case.expected_changes, outcome.changes)
         return CaseResult(case.id, case.category, passed, case.verified, detail)
 
     def _run_fix(self, case: EvalCase) -> CaseResult:
@@ -182,6 +196,38 @@ class EvalRunner:
         passed, detail = score_fix(case.fix_assertion, file_usage.file_content, fixed_code)
         return CaseResult(case.id, case.category, passed, case.verified, detail, cost=cost)
 
+    def _run_call_sites(self, case: EvalCase) -> CaseResult:
+        """Score a ``call_sites`` case through the real ``CallSiteScanner``,
+        against ``case.fixture`` -- a checkout-shaped directory under
+        ``tests/fixtures/``, same convention as ``fix_generation``'s
+        ``fixture``, just scanned as a whole tree instead of one file."""
+        if not case.fixture:
+            return CaseResult(
+                case.id, case.category, False, case.verified, "case is missing fixture"
+            )
+
+        fixture_dir = self._fixtures_dir / case.fixture
+        if not fixture_dir.exists():
+            return CaseResult(
+                case.id, case.category, False, case.verified, f"fixture not found: {fixture_dir}"
+            )
+
+        target = ScanTarget(
+            provider_id=case.provider_id,
+            sdk_packages=tuple(case.sdk_packages),
+            api_base_urls=tuple(case.api_base_urls),
+            call_site_anchors=tuple(case.call_site_anchors),
+            symbols=tuple(case.symbols),
+        )
+        result = self._call_site_scanner.scan(fixture_dir, target)
+        passed, detail = score_call_sites(
+            case.expected_call_sites,
+            case.forbidden_files,
+            result.call_sites,
+            min_recall=case.min_recall,
+        )
+        return CaseResult(case.id, case.category, passed, case.verified, detail)
+
 
 def save_report(report: EvalReport, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,6 +246,7 @@ def load_report(path: Path) -> EvalReport:
             detail=item.get("detail", ""),
             cost=item.get("cost", 0.0),
             skipped=item.get("skipped", False),
+            duration_ms=item.get("duration_ms", 0),
         )
         for item in raw
     ]

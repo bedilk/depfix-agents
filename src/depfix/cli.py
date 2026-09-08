@@ -13,6 +13,14 @@ Subcommands
   ``BreakingChangeRow``s (deterministic spec-diff, or LLM release-notes).
 * ``depfix eval [--no-llm]`` — score the classify/fixer pipeline against the
   YAML corpus in ``evals/corpus``.
+* ``depfix scan (--repo OWNER/NAME | --path DIR) --provider ID`` — find SDK
+  call sites in a local checkout or a repo cloned via the GitHub App.
+* ``depfix fix (--repo OWNER/NAME | --path DIR) --provider ID (--change-file
+  ... | --from-event ID)`` — scan, generate + write fixes for every
+  actionable call site, and (unless ``--no-verify``) confirm each one
+  against the repo's own test suite.
+* ``depfix repos`` — list repos visible to the configured GitHub App
+  installation(s), useful before pointing ``scan``/``fix`` at one.
 
 When invoked without a subcommand (e.g. ``depfix --codebase X``), ``run`` is
 assumed for backwards compatibility with the Day 1-2 CLI.
@@ -33,6 +41,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from depfix import DependencyFixAgent
+from depfix.apply import EditVerdict, FileEdit, WorkspaceEditor
 from depfix.classify import (
     Classifier,
     GeminiCompleter,
@@ -40,8 +49,10 @@ from depfix.classify import (
     OllamaCompleter,
     classify_pending,
 )
+from depfix.clone import CloneError, CloneService
 from depfix.config import get_settings
 from depfix.core.models import AgentResult, BreakingChange, ChangeKind, ClassificationSource
+from depfix.core.pipeline import FixPipeline, FixPipelineResult
 from depfix.evals import (
     CorpusError,
     EvalCategory,
@@ -54,16 +65,29 @@ from depfix.evals import (
 )
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
+from depfix.gh import GitHubAppAuth, GitHubAppError
 from depfix.providers.loader import ProviderConfigError, load_providers_file
+from depfix.scanners import (
+    CallSiteScanner,
+    MatchConfidence,
+    RepoScanResult,
+    build_scan_target,
+    record_scan,
+    scan_checkout,
+    scan_path,
+    scan_repo,
+)
 from depfix.sources.factory import SourceDeps
 from depfix.sources.models import Severity
-from depfix.storage import BreakingChangeRow, init_schema, session_scope
+from depfix.storage import BreakingChangeRow, init_schema, record_fix_run, session_scope
+from depfix.validators.javascript import FixValidator
+from depfix.verify import Verifier
 from depfix.watcher.runner import Watcher, WatchOutcome
 
 console = Console()
 logger = logging.getLogger(__name__)
 
-_RUN_COMMANDS = {"run", "watch", "classify", "eval"}
+_RUN_COMMANDS = {"run", "watch", "classify", "eval", "scan", "fix", "repos"}
 _TOP_LEVEL_FLAGS = {"-h", "--help"}
 
 
@@ -117,6 +141,30 @@ def _load_breaking_change(args: argparse.Namespace) -> BreakingChange:
         "no breaking change specified: pass --change-file <path>.json or "
         "--from-event <id> (run `depfix classify` first to populate rows)"
     )
+
+
+def _load_optional_breaking_change(args: argparse.Namespace) -> BreakingChange | None:
+    """Like ``_load_breaking_change``, but for a `scan` invocation where
+    narrowing to one breaking change's symbols is optional -- a plain
+    ``depfix scan --provider X`` with neither flag scans for every symbol
+    the provider declares."""
+    if not args.change_file and args.from_event is None:
+        return None
+    return _load_breaking_change(args)
+
+
+def _build_gh_auth(settings) -> GitHubAppAuth | None:
+    """Build a ``GitHubAppAuth`` from settings, or ``None`` if the App isn't
+    configured -- callers turn that into an actionable CLI error rather than
+    letting a blank app_id/private_key fail deep inside a JWT-signing call."""
+    if not settings.github_app_id:
+        return None
+    private_key = settings.github_app_private_key
+    if not private_key and settings.github_app_private_key_path:
+        private_key = Path(settings.github_app_private_key_path).read_text(encoding="utf-8")
+    if not private_key:
+        return None
+    return GitHubAppAuth(app_id=settings.github_app_id, private_key=private_key)
 
 
 def _build_completer(settings) -> LLMCompleter | None:
@@ -274,6 +322,48 @@ def _print_watch_outcome(outcome: WatchOutcome, show_changes: bool) -> None:
         console.print()
 
 
+_CONFIDENCE_STYLE = {
+    MatchConfidence.HIGH: "[green]high[/green]",
+    MatchConfidence.MEDIUM: "[yellow]medium[/yellow]",
+    MatchConfidence.LOW: "[dim]low[/dim]",
+}
+
+
+def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
+    sites = result.call_sites if show_low else result.actionable_sites
+
+    table = Table(title=f"Call Sites — {result.repo_full_name or '(local)'}")
+    table.add_column("File", style="cyan")
+    table.add_column("Line", justify="right")
+    table.add_column("Kind")
+    table.add_column("Confidence")
+    table.add_column("Symbol")
+    for site in sorted(sites, key=lambda s: (s.filepath, s.line_number)):
+        table.add_row(
+            site.filepath,
+            str(site.line_number),
+            site.kind.value,
+            _CONFIDENCE_STYLE.get(site.confidence, site.confidence.value),
+            site.symbol,
+        )
+    console.print(table)
+    console.print(
+        f"[dim]files scanned:[/dim] {result.files_scanned}  "
+        f"[dim]call sites:[/dim] {len(result.call_sites)} "
+        f"({len(result.actionable_sites)} actionable)  "
+        f"[dim]commit:[/dim] {result.commit_sha or '?'}\n"
+    )
+
+    if result.manifest_matches:
+        console.print("[bold]Manifest matches:[/bold]")
+        for match in result.manifest_matches:
+            console.print(f"  {match}")
+        console.print()
+
+    for err in result.errors:
+        console.print(f"  [yellow]{err}[/yellow]")
+
+
 def _cmd_watch(args: argparse.Namespace) -> int:
     settings = get_settings()
     providers_file = args.providers_file or settings.providers_file
@@ -348,6 +438,387 @@ def _cmd_classify(args: argparse.Namespace) -> int:
     )
     for err in summary.errors:
         console.print(f"  [yellow]{err}[/yellow]")
+    return 0
+
+
+def _cmd_scan(args: argparse.Namespace) -> int:
+    settings = get_settings()
+
+    if bool(args.repo) == bool(args.path):
+        console.print("[red]Error: pass exactly one of --repo OWNER/NAME or --path DIR[/red]")
+        return 2
+    if args.repo and "/" not in args.repo:
+        console.print("[red]Error: --repo must be OWNER/NAME[/red]")
+        return 2
+
+    providers_file = args.providers_file or settings.providers_file
+    try:
+        providers = load_providers_file(providers_file)
+    except (FileNotFoundError, ProviderConfigError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 2
+
+    provider = next((p for p in providers if p.id == args.provider), None)
+    if provider is None:
+        known = ", ".join(sorted(p.id for p in providers))
+        console.print(f"[red]Error: unknown provider id {args.provider!r} (known: {known})[/red]")
+        return 2
+
+    try:
+        change = _load_optional_breaking_change(args)
+    except (FileNotFoundError, ValueError, LookupError, json.JSONDecodeError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 2
+
+    target = build_scan_target(provider, change)
+    scanner = CallSiteScanner(
+        max_file_bytes=settings.scan_max_file_bytes, max_files=settings.scan_max_files
+    )
+
+    _print_header()
+
+    owner = name = ""
+    gh_auth: GitHubAppAuth | None = None
+    try:
+        if args.path:
+            repo_full_name = str(Path(args.path).resolve())
+            result = scan_path(args.path, target, repo_full_name=repo_full_name, scanner=scanner)
+        else:
+            owner, name = args.repo.split("/", 1)
+            gh_auth = _build_gh_auth(settings)
+            if gh_auth is None:
+                console.print(
+                    "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+                    "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
+                )
+                return 2
+            clone_service = CloneService(
+                clone_dir=settings.clone_dir or None,
+                timeout=settings.clone_timeout,
+                max_repo_mb=settings.clone_max_repo_mb,
+            )
+            repo_full_name = f"{owner}/{name}"
+            result = scan_repo(
+                owner,
+                name,
+                target,
+                gh_auth=gh_auth,
+                clone_service=clone_service,
+                ref=args.ref,
+                scanner=scanner,
+            )
+    except (CloneError, GitHubAppError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 1
+    finally:
+        if gh_auth is not None:
+            gh_auth.close()
+
+    _print_scan_result(result, show_low=args.show_low)
+
+    if not args.no_save:
+        init_schema()
+        with session_scope() as session:
+            record_scan(
+                session,
+                repo_full_name=repo_full_name,
+                owner=owner or "local",
+                name=name or Path(args.path).name,
+                result=result,
+                provider_id=provider.id,
+            )
+        console.print(f"[dim]saved scan to database ({repo_full_name})[/dim]\n")
+
+    return 0
+
+
+_VERDICT_STYLE = {
+    EditVerdict.APPLIED: "green",
+    EditVerdict.KEPT: "green",
+    EditVerdict.SUSPECT: "yellow",
+    EditVerdict.REVERTED: "red",
+    EditVerdict.SKIPPED: "dim",
+}
+
+
+def _print_fix_result(result: FixPipelineResult) -> None:
+    table = Table(title="Fix Results")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", justify="right")
+    table.add_row("Files Scanned", str(result.files_scanned))
+    table.add_row("Files Affected", str(result.files_affected))
+    table.add_row("Total Usages Fixed", str(result.total_usages_fixed))
+    table.add_row("Total Cost", f"${result.total_cost:.4f}")
+    table.add_row("Total Tokens", str(result.total_tokens))
+    table.add_row("Duration", f"{result.duration_ms}ms")
+
+    verification = result.verification
+    if verification is not None:
+        table.add_row(
+            "Verified", "yes" if verification.ran else f"no ({verification.skipped_reason})"
+        )
+        if verification.ran and verification.baseline is not None:
+            table.add_row("New Test Failures", str(verification.new_failure_count))
+    console.print(table)
+    console.print()
+
+    if result.edits:
+        console.print("[bold]File Details:[/bold]")
+        for edit in result.edits:
+            style = _VERDICT_STYLE[edit.verdict]
+            console.print(
+                f"  [{style}]{edit.verdict.value:>8}[/{style}] [cyan]{edit.relpath}[/cyan] - "
+                f"{edit.usages_fixed} usages - confidence: {edit.confidence:.2f}"
+            )
+            if edit.error_message:
+                console.print(f"      [red]{edit.error_message}[/red]")
+    console.print()
+
+
+def _print_fix_diffs(result: FixPipelineResult, show_full: bool) -> None:
+    console.print("[bold]Generated Diffs:[/bold]\n")
+    for edit in result.edits:
+        if not edit.diff:
+            continue
+        console.print(f"[cyan]{edit.relpath}[/cyan]")
+        if show_full:
+            console.print(Syntax(edit.diff, "diff", theme="monokai", line_numbers=True))
+        else:
+            lines = edit.diff.split("\n")
+            preview = "\n".join(lines[:30])
+            console.print(Syntax(preview, "diff", theme="monokai"))
+            if len(lines) > 30:
+                console.print(f"[dim]... ({len(lines) - 30} more lines)[/dim]")
+        console.print()
+
+
+def _write_fix_diffs(edits: list[FileEdit], output_dir: str) -> None:
+    """Write each on-disk edit's diff as ``output_dir/<flattened-relpath>.patch``
+    -- same convention as :meth:`depfix.core.agent.DependencyFixAgent._write_diffs`,
+    so ``git apply {output}/*.patch`` works identically for both commands."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    for edit in edits:
+        if not edit.diff:
+            continue
+        safe_name = edit.relpath.replace("/", "_").replace("\\", "_")
+        (output_path / f"{safe_name}.patch").write_text(edit.diff)
+
+
+def _cmd_fix(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    api_key = args.api_key or settings.google_api_key
+    model = args.model or settings.gemini_model
+    llm_provider = args.llm_provider or settings.llm_provider
+    ollama_model = args.ollama_model or settings.ollama_model
+
+    if llm_provider == "gemini" and not api_key:
+        console.print("[red]Error: GOOGLE_API_KEY not set. Use --api-key or .env[/red]")
+        return 2
+
+    if bool(args.repo) == bool(args.path):
+        console.print("[red]Error: pass exactly one of --repo OWNER/NAME or --path DIR[/red]")
+        return 2
+    if args.repo and "/" not in args.repo:
+        console.print("[red]Error: --repo must be OWNER/NAME[/red]")
+        return 2
+
+    providers_file = args.providers_file or settings.providers_file
+    try:
+        providers = load_providers_file(providers_file)
+    except (FileNotFoundError, ProviderConfigError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 2
+
+    provider = next((p for p in providers if p.id == args.provider), None)
+    if provider is None:
+        known = ", ".join(sorted(p.id for p in providers))
+        console.print(f"[red]Error: unknown provider id {args.provider!r} (known: {known})[/red]")
+        return 2
+
+    try:
+        breaking = _load_breaking_change(args)
+    except (FileNotFoundError, ValueError, LookupError, json.JSONDecodeError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 2
+
+    if llm_provider == "gemini":
+        fixer = FixGenerator(api_key=api_key, model=model)
+    else:
+        fixer = OllamaFixGenerator(
+            model=ollama_model, base_url=settings.ollama_base_url, timeout=settings.ollama_timeout
+        )
+
+    target = build_scan_target(provider, breaking)
+    scanner = CallSiteScanner(
+        max_file_bytes=settings.scan_max_file_bytes, max_files=settings.scan_max_files
+    )
+
+    _print_header()
+    _print_breaking_change(breaking)
+    if llm_provider == "ollama":
+        console.print(f"[dim]Using provider: ollama  model: {ollama_model}[/dim]\n")
+    else:
+        console.print(f"[dim]Using provider: gemini  model: {model}[/dim]\n")
+
+    clone_service = CloneService(
+        clone_dir=settings.clone_dir or None,
+        timeout=settings.clone_timeout,
+        max_repo_mb=settings.clone_max_repo_mb,
+    )
+
+    owner = name = ""
+    repo_full_name = ""
+    gh_auth: GitHubAppAuth | None = None
+    checkout = None
+    result: FixPipelineResult | None = None
+    try:
+        if args.path:
+            owner, name = "local", Path(args.path).name
+            repo_full_name = str(Path(args.path).resolve())
+            checkout = clone_service.copy_local(args.path)
+        else:
+            owner, name = args.repo.split("/", 1)
+            gh_auth = _build_gh_auth(settings)
+            if gh_auth is None:
+                console.print(
+                    "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+                    "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
+                )
+                return 2
+            installation = gh_auth.resolve_installation_for_repo(owner, name)
+            token = gh_auth.installation_token(installation.id, repositories=(name,))
+            resolved_ref = args.ref or gh_auth.default_ref(owner, name)
+            checkout = clone_service.clone(owner, name, ref=resolved_ref, token=token.token)
+            repo_full_name = f"{owner}/{name}"
+
+        scan_result = scan_checkout(
+            checkout, target, repo_full_name=repo_full_name, scanner=scanner
+        )
+        if not scan_result.actionable_sites:
+            console.print("[yellow]No actionable call sites found for this change.[/yellow]")
+            return 0
+
+        editor = WorkspaceEditor(checkout)
+        verifier: Verifier | None = None
+        if not args.no_verify and settings.verify_enabled:
+            verifier = Verifier(
+                editor,
+                install_timeout=settings.verify_install_timeout,
+                test_timeout=settings.verify_test_timeout,
+                ignore_scripts=settings.verify_ignore_scripts,
+                max_output_bytes=settings.verify_max_output_bytes,
+            )
+
+        pipeline = FixPipeline(
+            fixer,
+            validator=FixValidator(use_ast_validation=settings.fix_validate_syntax),
+            verifier=verifier,
+        )
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Fixing and verifying...", total=None)
+            result = pipeline.run(scan_result, breaking, editor)
+            progress.update(task, completed=True)
+    except (CloneError, GitHubAppError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 1
+    except Exception as e:  # noqa: BLE001 - surfaced to the user, then re-logged with a traceback
+        console.print(f"[red]Fix pipeline failed: {e}[/red]")
+        logger.exception("Fix pipeline crashed")
+        return 1
+    finally:
+        if gh_auth is not None:
+            gh_auth.close()
+        if checkout is not None:
+            clone_service.cleanup(checkout)
+
+    assert result is not None
+    console.print()
+    _print_fix_result(result)
+    if args.show_diffs:
+        _print_fix_diffs(result, show_full=True)
+
+    output = args.output or settings.output_dir
+    if result.applied_edits:
+        _write_fix_diffs(result.applied_edits, output)
+        console.print(
+            f"[green]Diffs written to: {output}[/green]\n"
+            f"[dim]Apply with: git apply {output}/*.patch[/dim]"
+        )
+
+    if not args.no_save:
+        init_schema()
+        with session_scope() as session:
+            record_fix_run(
+                session,
+                repo_full_name=repo_full_name,
+                owner=owner,
+                name=name,
+                result=result,
+            )
+        console.print(f"[dim]saved fix run to database ({repo_full_name})[/dim]")
+
+    if result.reverted_edits or result.suspect_edits:
+        return 1
+    return 0
+
+
+def _cmd_repos(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    gh_auth = _build_gh_auth(settings)
+    if gh_auth is None:
+        console.print(
+            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+            "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
+        )
+        return 2
+
+    _print_header()
+    try:
+        installations = gh_auth.list_installations()
+        if args.installation is not None:
+            installations = [i for i in installations if i.id == args.installation]
+            if not installations:
+                console.print(f"[red]Error: no installation with id={args.installation}[/red]")
+                return 2
+
+        table = Table(title="GitHub App Installations & Repos")
+        table.add_column("Installation", style="cyan")
+        table.add_column("Account Type")
+        table.add_column("Repo")
+        table.add_column("Default Branch")
+        table.add_column("Private", justify="center")
+
+        for installation in installations:
+            repos = gh_auth.list_repositories(installation.id)
+            if not repos:
+                table.add_row(
+                    installation.account_login,
+                    installation.account_type,
+                    "[dim](none)[/dim]",
+                    "",
+                    "",
+                )
+                continue
+            for repo in repos:
+                table.add_row(
+                    installation.account_login,
+                    installation.account_type,
+                    repo.full_name,
+                    repo.default_branch,
+                    "yes" if repo.private else "no",
+                )
+        console.print(table)
+    except GitHubAppError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 1
+    finally:
+        gh_auth.close()
     return 0
 
 
@@ -577,6 +1048,146 @@ def build_parser() -> argparse.ArgumentParser:
     )
     eval_p.add_argument("--log-level", type=str, default=None)
 
+    # -- scan -------------------------------------------------------------------
+    scan_p = sub.add_parser("scan", help="Find SDK call sites in a local checkout or a cloned repo")
+    scan_p.add_argument(
+        "--repo",
+        type=str,
+        default=None,
+        metavar="OWNER/NAME",
+        help="Remote repo to clone via the GitHub App and scan",
+    )
+    scan_p.add_argument(
+        "--path", type=str, default=None, help="Local directory to scan instead of cloning"
+    )
+    scan_p.add_argument(
+        "--ref",
+        type=str,
+        default=None,
+        help="Branch/tag/sha to clone (only with --repo; default: the repo's default branch)",
+    )
+    scan_p.add_argument(
+        "--provider", type=str, required=True, help="Provider id from providers.yaml to scan for"
+    )
+    scan_p.add_argument(
+        "--providers-file",
+        type=str,
+        default=None,
+        help="Path to providers.yaml (default: PROVIDERS_FILE env)",
+    )
+    scan_p.add_argument(
+        "--change-file",
+        type=str,
+        default=None,
+        help="Narrow the scan to one BreakingChange's symbols (see `run --change-file`)",
+    )
+    scan_p.add_argument(
+        "--from-event",
+        type=int,
+        default=None,
+        metavar="ID",
+        help="Narrow the scan to a breaking_change row's symbols",
+    )
+    scan_p.add_argument(
+        "--no-save", action="store_true", help="Don't persist this scan to the database"
+    )
+    scan_p.add_argument(
+        "--show-low",
+        action="store_true",
+        help="Also print LOW-confidence (report-only, never auto-fixed) call sites",
+    )
+    scan_p.add_argument("--log-level", type=str, default=None)
+
+    # -- fix --------------------------------------------------------------------
+    fix_p = sub.add_parser(
+        "fix", help="Generate, apply, and verify fixes for one breaking change"
+    )
+    fix_p.add_argument(
+        "--repo",
+        type=str,
+        default=None,
+        metavar="OWNER/NAME",
+        help="Remote repo to clone via the GitHub App and fix",
+    )
+    fix_p.add_argument(
+        "--path",
+        type=str,
+        default=None,
+        help="Local directory to fix instead of cloning. Never mutated in place -- "
+        "fixes are written to a disposable copy; see --output for the diffs.",
+    )
+    fix_p.add_argument(
+        "--ref",
+        type=str,
+        default=None,
+        help="Branch/tag/sha to clone (only with --repo; default: the repo's default branch)",
+    )
+    fix_p.add_argument(
+        "--provider", type=str, required=True, help="Provider id from providers.yaml to scan for"
+    )
+    fix_p.add_argument(
+        "--providers-file",
+        type=str,
+        default=None,
+        help="Path to providers.yaml (default: PROVIDERS_FILE env)",
+    )
+    fix_p.add_argument(
+        "--change-file",
+        type=str,
+        default=None,
+        help="Path to a JSON file with a single BreakingChange (see core.models.BreakingChange)",
+    )
+    fix_p.add_argument(
+        "--from-event",
+        type=int,
+        default=None,
+        metavar="ID",
+        help="breaking_change row id, as produced by `depfix classify`",
+    )
+    fix_p.add_argument(
+        "--output", "-o", type=str, default=None, help="Where to write .patch diffs"
+    )
+    fix_p.add_argument("--show-diffs", action="store_true", help="Print full diffs")
+    fix_p.add_argument(
+        "--api-key", type=str, default=None, help="Google API key (or set GOOGLE_API_KEY)"
+    )
+    fix_p.add_argument("--model", type=str, default=None, help="Gemini model name (overrides env)")
+    fix_p.add_argument(
+        "--llm-provider",
+        type=str,
+        choices=["gemini", "ollama"],
+        default=None,
+        help="LLM backend (default: LLM_PROVIDER env, else gemini)",
+    )
+    fix_p.add_argument(
+        "--ollama-model",
+        type=str,
+        default=None,
+        help="Ollama model tag when --llm-provider=ollama (default: qwen2.5-coder:7b)",
+    )
+    fix_p.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip running the repo's own test suite to confirm each edit",
+    )
+    fix_p.add_argument(
+        "--no-save", action="store_true", help="Don't persist this fix run to the database"
+    )
+    fix_p.add_argument("--log-level", type=str, default=None)
+
+    # -- repos --------------------------------------------------------------------
+    repos_p = sub.add_parser(
+        "repos", help="List repos visible to the configured GitHub App installation(s)"
+    )
+    repos_p.add_argument(
+        "--installation",
+        type=int,
+        default=None,
+        metavar="ID",
+        help="Only list repos for this installation id",
+    )
+    repos_p.add_argument("--log-level", type=str, default=None)
+
     return p
 
 
@@ -672,6 +1283,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_classify(args)
     if args.command == "eval":
         return _cmd_eval(args)
+    if args.command == "scan":
+        return _cmd_scan(args)
+    if args.command == "fix":
+        return _cmd_fix(args)
+    if args.command == "repos":
+        return _cmd_repos(args)
     return _cmd_run(args)
 
 

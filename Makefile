@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify docker-build docker-up docker-down
+.PHONY: help install install-dev test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan fix repos docker-build docker-up docker-down
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -56,6 +56,15 @@ eval-compare:  ## Run the full eval corpus and fail on any per-case regression v
 
 classify:  ## Classify pending change events into breaking changes
 	depfix classify
+
+scan:  ## Scan a repo/path for provider call sites (pass ARGS="--repo owner/name --provider openai")
+	depfix scan $(ARGS)
+
+fix:  ## Generate, apply, and verify fixes (pass ARGS="--path ./my-app --provider openai --change-file change.json")
+	depfix fix $(ARGS)
+
+repos:  ## List repos visible to the GitHub App installation(s)
+	depfix repos $(ARGS)
 
 docker-build:  ## Build the depfix Docker image
 	docker build -t depfix:local .

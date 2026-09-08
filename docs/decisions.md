@@ -265,3 +265,248 @@ the registry return at time T" for something other than debugging.
   and test suite now exercise a real SDK migration
   (`openai.createChatCompletion` -> `openai.chat.completions.create`,
   openai-node v3 -> v4) via `--change-file`/`--from-event`.
+
+# Week 3 Decisions — repo access + call-site scanner
+
+## GitHub App auth
+
+- **GitHub App, not a PAT, for repo access.** `github_token` (Week 1) remains
+  a PAT used only to poll public release feeds; a separate GitHub App
+  (`GitHubAppAuth`) mints short-lived, least-privilege installation tokens
+  (`contents: read`, scoped to the specific repo) per scan. A long-lived PAT
+  with broad repo access would be a standing credential for something that
+  only ever needs read-only, single-repo, few-minutes-lifetime access.
+- **App JWT signed with `PyJWT[crypto]` (RS256)**, not a hand-rolled signer.
+  The private key is accepted either inline (`github_app_private_key`, for
+  secret-manager-injected env vars) or via a `.pem` file path
+  (`github_app_private_key_path`, for local dev) — the inline value wins if
+  both are set, so a deploy env can override a checked-in dev key without
+  editing files.
+- **Installation tokens are cached in-process until expiry**, keyed by
+  installation id, rather than re-minted on every call — GitHub rate-limits
+  token creation, and a scan touches the API more than once per run.
+- **`InstallationToken.__repr__`/`__str__` scrub the secret.** A token
+  accidentally landing in a log line or exception traceback must not leak
+  the credential itself.
+
+## Shallow clone service
+
+- **`git clone --depth=1`, not the GitHub REST/tarball API.** A shallow clone
+  gives a real working tree (needed for the manifest + call-site scanners to
+  just read files off disk) with bounded network/disk cost, and reuses the
+  same `git` binary already required for local `--path` scans instead of a
+  second code path for "how do I get these files."
+- **Size-capped and always cleaned up.** `clone_max_repo_mb` rejects an
+  oversized checkout after the clone completes; either way (success or cap
+  violation) the temp directory is removed — a scanner that leaks clones to
+  disk on every run of a scheduled job is a slow-motion outage.
+- **Tokens are scrubbed from clone-failure error messages.** A failed `git
+  clone` embeds the URL (with credentials) in its stderr by default; that
+  string is redacted before it's ever raised, logged, or surfaced to a CLI
+  user.
+- **`Checkout.resolve_inside` blocks path traversal.** Scan results reference
+  file paths relative to the checkout root; resolving them without checking
+  they stay inside that root would let a crafted repo (e.g. a symlink or a
+  `../`-laden manifest reference) point the scanner at files outside the
+  clone.
+
+## Repo / call-site scanner
+
+- **Regex + binding propagation, not a full parser (yet).** `callsites.py`
+  tracks `require`/`import` bindings and re-export hops (`module.exports =
+  client`, `export const client = ...`) across files with degrading
+  confidence (HIGH direct → MEDIUM one-hop → LOW two-hop wrapper), rather
+  than building/depending on a JS/TS AST. `scan_min_recall` (default `0.85`)
+  is the trigger, per `docs/plan.md`: if the `call_sites` eval category's
+  recall drops below that floor, the regex approach is retired in favor of
+  tree-sitter — not before, since a parser dependency is a bigger cost than
+  the regex approach's current known gaps (e.g. quoted-key version-pin
+  literals, see `test_callsites.py`).
+- **`build_scan_target` narrows scope from a `BreakingChange` when one is
+  supplied**, using `call_site_hints` plus a dotted-symbol extraction off
+  `old_api` (prose descriptions are ignored, not mistaken for a symbol) —
+  scanning for every symbol in the provider when the caller already knows
+  which API changed wastes time and produces noisier reports.
+  With no change given, every provider symbol is in scope (the "which repos
+  even use this SDK at all" case).
+  A directory that happens to be nested inside a resolved but unrelated
+  outer repo (e.g. this tool's own checkout, or a subfolder of some
+  monorepo) must not report the outer repo's commit as if it belonged to
+  the scanned path — that's a metadata-integrity bug, not just cosmetic.
+- **Manifest scanning resolves from the lockfile when present, else falls
+  back to the declared range.** A lockfile pins the exact installed
+  version; without one, `range_allows_major` conservatively decides whether
+  the *declared* semver range could resolve to a version affected by a
+  given breaking change. Ranges it can't reason about (`latest`, `*`, git
+  URLs, `workspace:`, multi-constraint space-separated specs) return
+  `None` (unknown) rather than guessing — a false "not affected" is worse
+  than an honest "can't tell."
+
+## Persistence
+
+- **New tables only: `repo`, `repo_scan`, `call_site`.** No existing table is
+  touched. `upsert_repo` never clobbers a previously-recorded field
+  (`installation_id`, `default_branch`, etc.) with `None` on a later call
+  that doesn't have that information — e.g. a local `--path` scan (no
+  installation) must not blank out a repo's installation id recorded by an
+  earlier `--repo` scan of the same repo.
+- **Every call site is persisted, not just actionable ones.** LOW-confidence
+  sites are report-only (never auto-fixed) but still valuable for a human
+  reviewing scan history; `depfix scan` filters them from the default CLI
+  output (`--show-low` to include them) without dropping them from the DB.
+
+## CLI
+
+- **`depfix scan`** clones (`--repo owner/name`) or reads a local checkout
+  (`--path`), narrows to a `BreakingChange`'s symbols when
+  `--change-file`/`--from-event` is given, and by default persists the
+  result (`--no-save` to skip). **`depfix repos`** lists repos visible to
+  the configured GitHub App installation(s) — the "what can I even scan"
+  discovery step before a real `--repo` invocation.
+
+# Week 4 Decisions — apply/verify pipeline
+
+## Workspace editing
+
+- **`WorkspaceEditor` preserves byte-level formatting on write, not just
+  content.** `write_fix` captures a file's original bytes/mode before its
+  first write and re-encodes the fixed text to match the original's BOM,
+  CRLF-vs-LF line endings, and trailing-newline presence. A diff (and a
+  revert) full of incidental whitespace churn because the tool normalized
+  line endings on the way in would bury the actual fix.
+- **Atomic writes (`os.replace` after a same-directory temp-file write)**,
+  not an in-place truncate. A process interrupted mid-write must never
+  leave a half-written source file on disk — that's a self-inflicted
+  outage in whatever repo is being fixed.
+- **Revert restores the *first*-observed bytes, not the previous write's.**
+  `write_fix` only captures `_originals[relpath]` the first time a given
+  path is touched; this is what lets `Verifier` write a candidate fix,
+  revert to run a clean baseline, rewrite the fix, and ultimately land back
+  on the pre-fix state no matter how many times it toggles the file.
+- **`session()`'s `keep_on_exit` is only honored for temporary checkouts.**
+  A caller-supplied local directory (`depfix fix --path`) is never left
+  modified, even if the caller asks — silently mutating someone's real
+  working tree from a `--path` invocation would be a much worse surprise
+  than ignoring the flag.
+
+## Verification
+
+- **Identity-based baseline-vs-after-fix comparison, not a pass/fail
+  count.** `VerificationReport.new_failure_count` diffs
+  `after_fix.failed_identities - baseline.failed_identities`. A repo with
+  3 pre-existing failures where a fix breaks a 4th distinct test must not
+  be waved through as "still 3 failures" just because some unrelated flaky
+  test happened to pass in the same run.
+- **A degraded parse on *either* run marks every on-disk edit `SUSPECT`,
+  never `KEPT` or `REVERTED`.** `used_fallback_parser` means only
+  aggregate pass/fail counts were recoverable (no per-test identities), so
+  there's no reliable way to tell "the same failures, just reordered" from
+  "a different failure with the same count" — the tool says "couldn't
+  confirm" rather than guessing either way.
+- **Verification runs `npm install` for real, inside a disposable copy of
+  the checkout, not a mock.** The whole point of Week 4 is to catch fixes
+  that are syntactically fine but semantically wrong (call the right
+  method with the wrong shape, miss a renamed field); nothing short of
+  actually running the target repo's own tests would catch that class of
+  bug.
+- **A missing test script, a failed install, or a crashed/timed-out test
+  run all mark edits `SUSPECT` (kept on disk, not reverted).** Failing
+  *open* is deliberate: verification's job is to catch a fix that broke
+  something, not to auto-revert a good fix just because the environment
+  couldn't prove it — a scan-only repo with no `test` script and an LLM fix
+  that's actually correct shouldn't be thrown away for lack of evidence
+  either way.
+
+## Sandbox execution
+
+- **Allowlisted environment, not a denylist, for every `npm`/`node`
+  subprocess this tool runs on a target repo's behalf.** `ENV_ALLOWLIST`
+  (`sandbox.py`) names the handful of vars `npm`/`node`/`yarn`/`pnpm`
+  actually need; everything else in this process's environment —
+  credentials, tokens, cloud SDK config — is stripped rather than trying
+  to enumerate every secret-shaped name a deployment might set.
+- **Fixed argv, never a shell string.** `run_sandboxed` always calls
+  `subprocess.Popen` with a list, so nothing in a target repo's
+  `package.json` (script text, package names) is ever interpreted by a
+  shell.
+- **`--ignore-scripts` on install by default.** `postinstall`/`preinstall`
+  hooks are exactly where a hostile dependency tree would put arbitrary
+  code execution; verification needs the *dependencies* installed to run
+  tests, not permission to run their install-time scripts.
+- **Timeout kills the whole process group (`killpg`), not just the direct
+  child.** Test runners spawn workers/watchers; killing only the parent
+  process on timeout would leave orphaned children running.
+- **Output is byte-capped in memory (`DEFAULT_MAX_OUTPUT_BYTES = 2_000_000`),
+  not buffered unbounded.** A runaway `console.log` loop in a repo's own
+  test script is untrusted output from this tool's perspective and
+  shouldn't be able to exhaust memory just because verification ran it.
+
+## Failure attribution
+
+- **Four-tier trust order, most to least reliable, documented directly on
+  `attribution.py`:** (1) import graph — a failing test file that actually
+  imports the touched file via the scanner's own relative-import
+  resolution; (2) filename convention — `chat.test.js`/`__tests__/chat.js`
+  naming `chat.js`; (3) sole-candidate elimination — if only one file was
+  touched at all, every new failure must be about it by definition; (4)
+  unattributed — reported as such, never guessed at. A batch fix touching
+  several files needs to know *which* file a new failure is about so only
+  that file gets reverted, not the whole batch.
+- **Any unattributed failure marks every remaining on-disk edit in that
+  batch `SUSPECT`, not just the one nearest the failure.** Clearing an
+  edit as confirmed-`KEPT` while some new failure in the same run can't be
+  pinned on anything would be trusting a guess.
+
+## Persistence (`fix_store`)
+
+- **New tables only: `fix_run`, `file_fix`, `test_run`.** Mirrors the Week
+  3 scanner's "additive, never touch existing tables" convention.
+- **Every edit is persisted regardless of verdict, not just the ones that
+  ended up on disk.** A `SKIPPED`/`REVERTED` edit *is* the "why didn't this
+  get fixed" record a human reviewing a fix run needs — dropping anything
+  but `KEPT` edits would make failed fix attempts invisible after the
+  fact.
+- **Baseline and after-fix test runs are both persisted (`test_run.phase`)
+  when verification actually ran**, with per-run `failed_identities`, not
+  just counts — the same identity-over-count principle as
+  `new_failure_count` applies to what gets stored, not just what gets
+  compared live.
+
+## Local-copy cloning
+
+- **`CloneService.copy_local`, a second entry point alongside `clone()`.**
+  `depfix fix --path` needs a disposable copy to install dependencies into
+  and run tests against — `local()` (Week 3) deliberately never deletes or
+  mutates its target, since it's presumed to be the caller's real working
+  tree, so it can't be reused for something that needs to write files.
+  `copy_local` returns `is_temporary=True` for exactly this reason.
+- **`.git`/`node_modules` are excluded from both the size check and the
+  copy itself.** Neither is needed by the fix/verify pipeline (dependencies
+  get reinstalled fresh either way); copying them would just inflate the
+  size check against `clone_max_repo_mb` for repos that happen to have a
+  large `node_modules` checked in.
+- **Symlinks are dereferenced during the copy (`symlinks=False`), same
+  rationale as `clone()`'s `core.symlinks=false`.** A symlink materialized
+  as a real file/directory can't be used to smuggle a reference to
+  something outside the copy back into what's supposed to be a sandboxed
+  checkout.
+
+## Verifiable fixture
+
+- **`tests/fixtures/openai_v3_verifiable` ships a self-contained SDK shim,
+  not a real `openai` dependency.** Zero real npm packages means
+  `npm install` has nothing to fetch over the network, and the fixture's
+  own `client.js`/`openai-shim.js` exposes both the v3 method
+  (`createModeration`) and the v4 replacement
+  (`moderations.create`) on the same object — enough surface for one
+  fixture to exercise both a correct migration (`KEPT`) and a broken one
+  (`REVERTED`) against a real `node --test` run, without needing network
+  access or a paid API key.
+- **The fixture's `test` script pins `--test-reporter=tap`
+  (`node --test --test-reporter=tap`), not bare `node --test`.** Node's
+  default `node --test` reporter varies by Node version (newer versions
+  default to a "spec"-style unicode summary rather than TAP even when
+  output isn't a TTY); `depfix.verify.runner` only requests an explicit
+  reporter for Jest/Vitest/Mocha, so pinning TAP here is what keeps the
+  fixture's baseline/after-fix runs parseable across Node versions instead
+  of silently falling back to the degraded aggregate-count parser.

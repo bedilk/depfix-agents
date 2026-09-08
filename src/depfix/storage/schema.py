@@ -7,11 +7,13 @@ multi-source model.
 
 Migrations are still deferred: :func:`depfix.storage.db.init_schema` calls
 ``Base.metadata.create_all`` at start-up, which is sufficient for new
-tables (``breaking_change``) but *not* for the new ``classified_at`` column
-on the pre-existing ``change_event`` table — that needs a manual
-``ALTER TABLE ... ADD COLUMN`` (or a drop/recreate in dev). Alembic adoption
-is pushed to Week 3, once idempotent-write requirements force a real
-migration story instead of one-off ALTERs.
+tables (``breaking_change``, Week 3's ``repo``/``repo_scan``/``call_site``,
+and Week 4's ``fix_run``/``file_fix``/``test_run``) but *not* for a new
+column on a pre-existing table -- that still needs a manual ``ALTER TABLE
+... ADD COLUMN`` (see ``_ensure_classified_at_column`` in ``storage/db.py``).
+Week 3 and Week 4 both add only new tables, so no new ALTER was needed;
+Alembic adoption is deferred again, until a future week's change is a
+column edit rather than an addition.
 """
 
 from __future__ import annotations
@@ -223,3 +225,220 @@ class BreakingChangeRow(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"BreakingChangeRow({self.package} {self.kind} {self.old_api!r})"
+
+
+# ============================================================================
+#  Week 3 — repo / call-site scan tables
+# ============================================================================
+
+
+class RepoRow(Base):
+    """A repo depfix has scanned at least once. ``id`` is ``owner/name`` --
+    stable, human-readable, and already unique on GitHub, so there is no
+    reason to mint a surrogate key for it.
+    """
+
+    __tablename__ = "repo"
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    installation_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    default_branch: Mapped[str | None] = mapped_column(String(128), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    last_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    scans: Mapped[list[RepoScanRow]] = relationship(
+        back_populates="repo", cascade="all, delete-orphan"
+    )
+    fix_runs: Mapped[list[FixRunRow]] = relationship(
+        back_populates="repo", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"RepoRow({self.id})"
+
+
+class RepoScanRow(Base):
+    """One run of the call-site scanner against one repo at one commit.
+
+    Kept separate from ``call_site`` (one row per scan, many rows per scan's
+    call sites) so "how many actionable sites did the last scan of this repo
+    find" is a single indexed lookup, not a per-scan aggregate query.
+    """
+
+    __tablename__ = "repo_scan"
+    __table_args__ = (Index("ix_repo_scan_repo_scanned", "repo_id", "scanned_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    repo_id: Mapped[str] = mapped_column(
+        ForeignKey("repo.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    commit_sha: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    scanner_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    files_scanned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    manifest_matches: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    errors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    scanned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    repo: Mapped[RepoRow] = relationship(back_populates="scans")
+    call_sites: Mapped[list[CallSiteRow]] = relationship(
+        back_populates="repo_scan", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"RepoScanRow({self.repo_id}@{self.commit_sha[:8]})"
+
+
+class CallSiteRow(Base):
+    """One matched call site from one scan.
+
+    Indexed on ``(repo_scan_id, confidence)`` because the load-bearing query
+    is "give me this scan's actionable (HIGH/MEDIUM) sites" -- the same
+    HIGH/MEDIUM-only filter ``RepoScanResult.actionable_sites`` applies
+    in-memory during a scan.
+    """
+
+    __tablename__ = "call_site"
+    __table_args__ = (Index("ix_call_site_scan_confidence", "repo_scan_id", "confidence"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    repo_scan_id: Mapped[int] = mapped_column(
+        ForeignKey("repo_scan.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    filepath: Mapped[str] = mapped_column(Text, nullable=False)
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    column: Mapped[int] = mapped_column(Integer, nullable=False)
+    line_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False)
+    symbol: Mapped[str] = mapped_column(Text, nullable=False)
+    provider_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    evidence: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    repo_scan: Mapped[RepoScanRow] = relationship(back_populates="call_sites")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"CallSiteRow({self.filepath}:{self.line_number} {self.symbol})"
+
+
+# ============================================================================
+#  Week 4 — fix generation + test verification
+# ============================================================================
+
+
+class FixRunRow(Base):
+    """One run of :class:`depfix.core.pipeline.FixPipeline` against one repo,
+    for one breaking change.
+
+    Breaking-change fields are denormalized rather than a hard FK to
+    ``breaking_change`` -- same rationale as ``RepoScanRow`` denormalizing
+    ``provider_id`` instead of FK'ing to ``provider``: a manually-supplied
+    change (``depfix fix --change-file``) may never have been persisted as
+    a ``BreakingChangeRow`` at all.
+    """
+
+    __tablename__ = "fix_run"
+    __table_args__ = (Index("ix_fix_run_repo_started", "repo_id", "started_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    repo_id: Mapped[str] = mapped_column(
+        ForeignKey("repo.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    repo_scan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("repo_scan.id", ondelete="SET NULL"), default=None
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    package: Mapped[str] = mapped_column(String(214), nullable=False, default="")
+    old_api: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    new_api: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(48), nullable=False, default="")
+    files_scanned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    files_affected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_usages_fixed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Whether Verifier actually ran the repo's own test suite (as opposed to
+    # skipping -- no test script, install failure, ...); see
+    # `verification_skipped_reason` for why, when this is False.
+    verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    verification_skipped_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    repo: Mapped[RepoRow] = relationship(back_populates="fix_runs")
+    file_fixes: Mapped[list[FileFixRow]] = relationship(
+        back_populates="fix_run", cascade="all, delete-orphan"
+    )
+    test_runs: Mapped[list[TestRunRow]] = relationship(
+        back_populates="fix_run", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"FixRunRow({self.repo_id} {self.old_api!r} -> {self.new_api!r})"
+
+
+class FileFixRow(Base):
+    """One file's edit within a fix run -- mirrors
+    :class:`depfix.apply.models.FileEdit`."""
+
+    __tablename__ = "file_fix"
+    __table_args__ = (Index("ix_file_fix_run_verdict", "fix_run_id", "verdict"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fix_run_id: Mapped[int] = mapped_column(
+        ForeignKey("fix_run.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    relpath: Mapped[str] = mapped_column(Text, nullable=False)
+    verdict: Mapped[str] = mapped_column(String(16), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    usages_fixed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    diff: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    fix_run: Mapped[FixRunRow] = relationship(back_populates="file_fixes")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"FileFixRow({self.relpath} {self.verdict})"
+
+
+class TestRunRow(Base):
+    """One baseline or after-fix test run within a fix run's verification
+    step -- one row each, uniquely keyed on ``(fix_run_id, phase)`` since a
+    :class:`depfix.verify.verifier.Verifier` run produces at most one of
+    each. See :class:`depfix.verify.models.TestRunResult`.
+    """
+
+    __tablename__ = "test_run"
+    __table_args__ = (UniqueConstraint("fix_run_id", "phase", name="uq_test_run_fix_run_phase"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fix_run_id: Mapped[int] = mapped_column(
+        ForeignKey("fix_run.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    phase: Mapped[str] = mapped_column(String(16), nullable=False)  # "baseline" | "after_fix"
+    framework: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    exit_code: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duration_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    passed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Failed test identities (`TestCase.identity`), not full case objects --
+    # enough to eyeball what regressed without persisting every case's full
+    # message text on every run.
+    failed_identities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    used_fallback_parser: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    timed_out: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    parse_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    fix_run: Mapped[FixRunRow] = relationship(back_populates="test_runs")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"TestRunRow({self.phase} {self.passed_count}p/{self.failed_count}f)"
