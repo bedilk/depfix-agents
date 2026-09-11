@@ -18,6 +18,7 @@ column edit rather than an addition.
 
 from __future__ import annotations
 
+import enum
 from datetime import UTC, datetime
 
 from sqlalchemy import (
@@ -256,6 +257,9 @@ class RepoRow(Base):
     fix_runs: Mapped[list[FixRunRow]] = relationship(
         back_populates="repo", cascade="all, delete-orphan"
     )
+    change_attempts: Mapped[list[ChangeAttemptRow]] = relationship(
+        back_populates="repo", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"RepoRow({self.id})"
@@ -380,6 +384,9 @@ class FixRunRow(Base):
     test_runs: Mapped[list[TestRunRow]] = relationship(
         back_populates="fix_run", cascade="all, delete-orphan"
     )
+    pull_request: Mapped[PullRequestRow | None] = relationship(
+        back_populates="fix_run", cascade="all, delete-orphan", uselist=False
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"FixRunRow({self.repo_id} {self.old_api!r} -> {self.new_api!r})"
@@ -442,3 +449,105 @@ class TestRunRow(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"TestRunRow({self.phase} {self.passed_count}p/{self.failed_count}f)"
+
+
+# ============================================================================
+#  Week 5 — PR creation
+# ============================================================================
+
+
+class PullRequestRow(Base):
+    """The PR (if any) opened for a fix run -- at most one per
+    ``fix_run``, hence the unique FK rather than a one-to-many.
+    """
+
+    __tablename__ = "pull_request"
+    __table_args__ = (UniqueConstraint("fix_run_id", name="uq_pull_request_fix_run"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fix_run_id: Mapped[int] = mapped_column(
+        ForeignKey("fix_run.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    html_url: Mapped[str] = mapped_column(Text, nullable=False)
+    head_branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    already_existed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    fix_run: Mapped[FixRunRow] = relationship(back_populates="pull_request")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"PullRequestRow(#{self.number} {self.head_branch} -> {self.base_branch})"
+
+
+# ============================================================================
+#  Week 6 — fleet orchestrator idempotency ledger
+# ============================================================================
+
+
+class AttemptStatus(enum.StrEnum):
+    """Outcome of one ``(repo, breaking change)`` combination the fleet
+    orchestrator has attempted.
+
+    Only ``PR_OPENED`` and ``IGNORED`` are terminal (see ``is_terminal``) --
+    everything else is a reason a later cron tick may legitimately want to
+    try again (a transient failure, a fix that produced no kept edits this
+    time, ...). ``NO_CALL_SITES`` in particular is not just non-terminal but
+    deliberately cheap to recheck: see ``ChangeAttemptRow.last_checked_ref_sha``.
+    """
+
+    PR_OPENED = "pr_opened"
+    FIXED_NO_PR = "fixed_no_pr"
+    NO_CALL_SITES = "no_call_sites"
+    NO_KEPT_EDITS = "no_kept_edits"
+    FAILED = "failed"
+    IGNORED = "ignored"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in (AttemptStatus.PR_OPENED, AttemptStatus.IGNORED)
+
+
+class ChangeAttemptRow(Base):
+    """Idempotency ledger: at most one row per ``(repo_id, dedupe_key)`` --
+    the anchor that stops the fleet orchestrator from reopening a PR or
+    re-fixing a change a human already told it to ignore on every cron
+    tick. See ``AttemptStatus``.
+    """
+
+    __tablename__ = "change_attempt"
+    __table_args__ = (
+        UniqueConstraint("repo_id", "dedupe_key", name="uq_change_attempt_repo_dedupe"),
+        Index("ix_change_attempt_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    repo_id: Mapped[str] = mapped_column(
+        ForeignKey("repo.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempts_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fix_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("fix_run.id", ondelete="SET NULL"), default=None
+    )
+    last_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # HEAD sha of the repo's default branch as of the last time this row was
+    # (re)checked -- lets a NO_CALL_SITES outcome be skipped cheaply until
+    # the repo actually changes, instead of being re-scanned on every tick.
+    last_checked_ref_sha: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+    repo: Mapped[RepoRow] = relationship(back_populates="change_attempts")
+    fix_run: Mapped[FixRunRow | None] = relationship()
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"ChangeAttemptRow({self.repo_id} {self.dedupe_key[:12]} {self.status})"

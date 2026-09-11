@@ -170,6 +170,54 @@ class Settings(BaseSettings):
         "runaway or malicious process can't exhaust memory holding its output.",
     )
 
+    # --- Retry loop (Week 5) ----------------------------------------------------
+    retry_max_rounds: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Bounded number of times `depfix fix` re-attempts a SUSPECT/REVERTED "
+        "edit by feeding its concrete failure back to the LLM. 0 disables retries.",
+    )
+
+    # --- Fleet orchestrator (Week 6) --------------------------------------------
+    repo_config_filename: str = Field(
+        default=".depfix.yml",
+        description="Per-repo opt-in pipeline config file the orchestrator looks for "
+        "at the repo root before touching it at all.",
+    )
+    pipeline_require_config_file: bool = Field(
+        default=True,
+        description="Refuse to touch a repo that has no repo_config_filename at all. "
+        "The whole point of the fleet orchestrator is that it never acts on a repo "
+        "that hasn't explicitly opted in.",
+    )
+    pipeline_max_open_prs: int = Field(
+        default=5,
+        ge=1,
+        description="Per-repo cap on simultaneously open depfix-authored PRs. Once "
+        "reached, the orchestrator skips new changes for that repo until one closes.",
+    )
+    pipeline_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Per-(repo, change) cap on non-terminal orchestrator attempts "
+        "(see AttemptStatus.is_terminal) before it gives up and leaves the change FAILED.",
+    )
+    pipeline_retry_cooldown_hours: float = Field(
+        default=6.0,
+        ge=0.0,
+        description="Minimum time between two orchestrator attempts at the same "
+        "(repo, change), so a flaky failure doesn't get hammered on every cron tick.",
+    )
+    pipeline_max_changes_per_repo: int = Field(
+        default=3,
+        ge=1,
+        description="Hard cap on how many distinct breaking changes the orchestrator "
+        "processes for one repo in a single run, overridable lower (never higher) by "
+        "that repo's own .depfix.yml max_changes_per_run.",
+    )
+
     # --- Observability --------------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     environment: Literal["development", "staging", "production", "test"] = "development"

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from depfix.classify.classifier import Classifier
 from depfix.classify.models import ClassifyOutcome
+from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.sources.models import ChangeEvent, Severity, SourceKind, SpecChange, SpecChangeKind
 from depfix.storage.schema import BreakingChangeRow, ChangeEventRow, SpecChangeRow
 
@@ -62,6 +63,29 @@ def _spec_change_from_row(row: SpecChangeRow) -> SpecChange:
         direction=row.direction,
         before=row.before,
         after=row.after,
+    )
+
+
+def breaking_change_from_row(row: BreakingChangeRow) -> BreakingChange:
+    """Reconstruct the ``BreakingChange`` a ``BreakingChangeRow`` was
+    persisted from. Shared by ``depfix run``/``fix`` (``--from-event``) and
+    the Week 6 fleet orchestrator, which both need to go from a stored row
+    back to the dataclass the fix pipeline actually operates on."""
+    return BreakingChange(
+        package=row.package,
+        old_version=row.old_version,
+        new_version=row.new_version,
+        old_api=row.old_api,
+        new_api=row.new_api,
+        description=row.description,
+        migration_guide=row.migration_guide,
+        kind=ChangeKind(row.kind),
+        source=ClassificationSource(row.source),
+        provider_id=row.provider_id,
+        source_url=row.source_url,
+        evidence=row.evidence,
+        confidence=row.confidence,
+        call_site_hints=list(row.call_site_hints),
     )
 
 

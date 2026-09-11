@@ -1,0 +1,39 @@
+--- a/custom-payment-flow/client/html/p24.js
++++ b/custom-payment-flow/client/html/p24.js
+@@ -11,7 +11,7 @@
+   }
+ 
+   const stripe = Stripe(publishableKey, {
+-    apiVersion: '2020-08-27',
++    apiVersion: '2023-10-16',
+   });
+ 
+   const elements = stripe.elements();
+@@ -32,8 +32,9 @@
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
++          amount: 1099,
+           currency: 'eur',
+-          paymentMethodType: 'p24',
++          payment_method_types: ['p24'],
+         }),
+       }
+     ).then((r) => r.json());
+@@ -61,16 +62,6 @@
+             email: emailInput.value,
+           },
+         },
+-        payment_method_options: {
+-          p24: {
+-            // In order to be able to pass the `tos_shown_and_accepted` parameter, you must
+-            // ensure that the P24 regulations and information obligation consent
+-            // text is clearly visible to the customer. See
+-            // https://stripe.com/docs/payments/p24/accept-a-payment#requirements
+-            // for directions.
+-            tos_shown_and_accepted: true,
+-          },
+-        },
+         return_url: `${window.location.origin}/return.html`,
+       }
+     );

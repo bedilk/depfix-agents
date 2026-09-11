@@ -16,9 +16,10 @@ from sqlalchemy.pool import StaticPool
 from depfix.apply.models import EditVerdict, FileEdit
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.core.pipeline import FixPipelineResult
+from depfix.gh.models import PullRequest
 from depfix.storage import db as db_module
-from depfix.storage.fix_store import latest_fix_run, record_fix_run
-from depfix.storage.schema import Base, RepoRow
+from depfix.storage.fix_store import latest_fix_run, record_fix_run, record_pull_request
+from depfix.storage.schema import Base, PullRequestRow, RepoRow
 from depfix.verify.models import TestCase, TestFramework, TestRunResult, TestStatus
 from depfix.verify.verifier import VerificationReport
 
@@ -240,3 +241,32 @@ def test_latest_fix_run_returns_the_most_recent_of_several_runs(db_session: Sess
 
     assert latest is not None
     assert latest.total_usages_fixed == 99
+
+
+# -- record_pull_request -----------------------------------------------------------
+
+
+def test_record_pull_request_persists_fields_and_links_to_fix_run(db_session: Session) -> None:
+    run = record_fix_run(
+        db_session, repo_full_name="acme/widgets", owner="acme", name="widgets", result=_result()
+    )
+    db_session.commit()
+
+    pr = PullRequest(
+        number=42,
+        html_url="https://github.example/acme/widgets/pull/42",
+        head_branch="depfix/abc123",
+        base_branch="main",
+        already_existed=False,
+    )
+    row = record_pull_request(db_session, run, pr)
+    db_session.commit()
+
+    assert isinstance(row, PullRequestRow)
+    assert row.fix_run_id == run.id
+    assert row.number == 42
+    assert row.html_url == "https://github.example/acme/widgets/pull/42"
+    assert row.head_branch == "depfix/abc123"
+    assert row.base_branch == "main"
+    assert row.already_existed is False
+    assert run.pull_request is row

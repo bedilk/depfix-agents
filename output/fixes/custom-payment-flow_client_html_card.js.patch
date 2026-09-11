@@ -1,0 +1,21 @@
+--- a/custom-payment-flow/client/html/card.js
++++ b/custom-payment-flow/client/html/card.js
+@@ -38,8 +38,9 @@
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
++          amount: 1099,
+           currency: 'usd',
+-          paymentMethodType: 'card',
++          payment_method_types: ['card'],
+         }),
+       }
+     ).then((r) => r.json());
+@@ -69,6 +70,7 @@
+             name: nameInput.value,
+           },
+         },
++        confirm: true,
+       }
+     );
+ 

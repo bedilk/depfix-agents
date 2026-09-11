@@ -1,0 +1,31 @@
+--- a/custom-payment-flow/client/html/link.js
++++ b/custom-payment-flow/client/html/link.js
+@@ -19,8 +19,9 @@
+       'Content-Type': 'application/json',
+     },
+     body: JSON.stringify({
++      amount: 1099,
+       currency: 'usd',
+-      paymentMethodType: 'link',
++      payment_method_types: ['card'],
+     }),
+   }).then((r) => r.json());
+ 
+@@ -32,7 +33,7 @@
+   // Create an elements group from the Stripe instance passing in the clientSecret and enabling the loader UI.
+   const elements = stripe.elements({ clientSecret, loader });
+ 
+-  const linkAuthenticationElement = elements.create('linkAuthentication');
++  const cardElement = elements.create('card');
+ 
+   // Passing in defaultValues is optional, but useful if you want to prefill customer information to simplify the customer experience.
+   const paymentElement = elements.create('payment', {
+@@ -45,7 +46,7 @@
+   });
+ 
+   // Mount the Elements to their corresponding DOM node
+-  linkAuthenticationElement.mount('#link-authentication-element');
++  cardElement.mount('#card-element');
+   paymentElement.mount('#payment-element');
+ 
+   // When the form is submitted...

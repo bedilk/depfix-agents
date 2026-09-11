@@ -63,3 +63,14 @@ class InstallationToken:
         a handful of requests doesn't race GitHub's own expiry.
         """
         return datetime.now(UTC) >= self.expires_at - timedelta(seconds=skew_seconds)
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    """A PR opened (or found already open) for a depfix branch."""
+
+    number: int
+    html_url: str
+    head_branch: str
+    base_branch: str
+    already_existed: bool = False

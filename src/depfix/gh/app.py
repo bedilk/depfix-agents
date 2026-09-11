@@ -17,14 +17,16 @@ see."
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from datetime import UTC, datetime
+from urllib.parse import urlencode
 
 import httpx
 import jwt
 
-from depfix.gh.models import Installation, InstallationToken, Repository
+from depfix.gh.models import Installation, InstallationToken, PullRequest, Repository
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +60,14 @@ class GitHubAppAuth:
         self._api_url = api_url.rstrip("/")
         self._client = client or httpx.Client(timeout=http_timeout)
         self._owns_client = client is None
-        # (installation_id, repo scope) -> token. Scope is part of the key
-        # because a token minted for repo A must never be handed out for repo B.
-        self._token_cache: dict[tuple[int, tuple[str, ...]], InstallationToken] = {}
+        # (installation_id, repo scope, permissions) -> token. Scope and
+        # permissions are both part of the key: a token minted for repo A
+        # must never be handed out for repo B, and a read-only token cached
+        # for a repo must never be handed out when a caller asks for
+        # write access to that same repo.
+        self._token_cache: dict[
+            tuple[int, tuple[str, ...], tuple[tuple[str, str], ...]], InstallationToken
+        ] = {}
 
     def close(self) -> None:
         if self._owns_client:
@@ -167,12 +174,14 @@ class GitHubAppAuth:
         Defaults to ``{"contents": "read"}`` scoped to ``repositories``,
         regardless of what the installation itself was granted.
         """
-        cache_key = (installation_id, repositories)
+        effective_permissions = permissions or {"contents": "read"}
+        permissions_key = tuple(sorted(effective_permissions.items()))
+        cache_key = (installation_id, repositories, permissions_key)
         cached = self._token_cache.get(cache_key)
         if cached is not None and not cached.is_expired():
             return cached
 
-        payload: dict[str, object] = {"permissions": permissions or {"contents": "read"}}
+        payload: dict[str, object] = {"permissions": effective_permissions}
         if repositories:
             payload["repositories"] = list(repositories)
 
@@ -195,9 +204,15 @@ class GitHubAppAuth:
         return token
 
     def _installation_headers(
-        self, installation_id: int, *, repositories: tuple[str, ...] = ()
+        self,
+        installation_id: int,
+        *,
+        repositories: tuple[str, ...] = (),
+        permissions: dict[str, str] | None = None,
     ) -> dict[str, str]:
-        token = self.installation_token(installation_id, repositories=repositories)
+        token = self.installation_token(
+            installation_id, repositories=repositories, permissions=permissions
+        )
         return {
             "Authorization": f"token {token.token}",
             "Accept": "application/vnd.github+json",
@@ -223,6 +238,67 @@ class GitHubAppAuth:
     def default_ref(self, owner: str, repo: str) -> str:
         return self.get_repository(owner, repo).default_branch
 
+    # -- Pre-flight reads (fleet orchestrator) ---------------------------------
+    #
+    # Cheap, read-only lookups the orchestrator needs *before* deciding
+    # whether a repo is worth cloning at all: does it opt in via
+    # `.depfix.yml`, has its HEAD moved since the last run, and do we
+    # already have an open PR for this change.
+
+    def get_file_contents(
+        self, owner: str, repo: str, path: str, *, ref: str | None = None
+    ) -> str | None:
+        """Decoded text contents of ``path`` at ``ref``, or ``None`` if it
+        doesn't exist there. A missing file is the common case here (most
+        repos haven't opted in to ``.depfix.yml``) -- not an error."""
+        installation = self.resolve_installation_for_repo(owner, repo)
+        headers = self._installation_headers(installation.id, repositories=(repo,))
+        url = f"{self._api_url}/repos/{owner}/{repo}/contents/{path}"
+        resp = self._client.get(url, headers=headers, params={"ref": ref} if ref else None)
+        if resp.status_code == 404:
+            return None
+        self._raise_for_status(resp)
+        data = resp.json()
+        if isinstance(data, list):
+            raise GitHubAppError(f"{owner}/{repo}:{path} is a directory, not a file")
+        encoding = data.get("encoding", "base64")
+        if encoding != "base64":
+            raise GitHubAppError(f"{owner}/{repo}:{path}: unsupported content encoding {encoding!r}")
+        return base64.b64decode(data["content"]).decode("utf-8")
+
+    def ref_sha(self, owner: str, repo: str, ref: str) -> str:
+        """The commit sha ``refs/heads/{ref}`` currently points at. Lets the
+        orchestrator tell whether a repo has moved since its last run --
+        outcomes like ``no_call_sites`` only need rechecking once HEAD
+        actually changes, not on every cron tick."""
+        installation = self.resolve_installation_for_repo(owner, repo)
+        headers = self._installation_headers(installation.id, repositories=(repo,))
+        resp = self._client.get(
+            f"{self._api_url}/repos/{owner}/{repo}/git/ref/heads/{ref}", headers=headers
+        )
+        self._raise_for_status(resp)
+        return str(resp.json()["object"]["sha"])
+
+    def list_open_pull_requests(
+        self, owner: str, repo: str, *, head: str | None = None, base: str | None = None
+    ) -> list[PullRequest]:
+        """Open PRs for ``owner/repo``, optionally filtered by head/base
+        branch. Lets the orchestrator check "did we already open a PR for
+        this branch" with a read-only token, before ever minting one scoped
+        to ``pull_requests: write``."""
+        installation = self.resolve_installation_for_repo(owner, repo)
+        headers = self._installation_headers(
+            installation.id, repositories=(repo,), permissions={"pull_requests": "read"}
+        )
+        params: dict[str, str] = {"state": "open"}
+        if head:
+            params["head"] = f"{owner}:{head}"
+        if base:
+            params["base"] = base
+        url = f"{self._api_url}/repos/{owner}/{repo}/pulls?{urlencode(params)}"
+        raw = self._paginate(url, headers)
+        return [_pull_request_from_dict(item) for item in raw]
+
 
 def _installation_from_dict(item: dict) -> Installation:
     account = item.get("account") or {}
@@ -240,6 +316,16 @@ def _repository_from_dict(item: dict) -> Repository:
         full_name=item["full_name"],
         default_branch=item.get("default_branch", "main"),
         private=bool(item.get("private", False)),
+    )
+
+
+def _pull_request_from_dict(item: dict) -> PullRequest:
+    return PullRequest(
+        number=item["number"],
+        html_url=item["html_url"],
+        head_branch=item["head"]["ref"],
+        base_branch=item["base"]["ref"],
+        already_existed=False,
     )
 
 

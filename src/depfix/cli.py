@@ -21,6 +21,10 @@ Subcommands
   against the repo's own test suite.
 * ``depfix repos`` — list repos visible to the configured GitHub App
   installation(s), useful before pointing ``scan``/``fix`` at one.
+* ``depfix pipeline [--repo OWNER/NAME ...]`` — the Week 6 fleet
+  orchestrator: unattended scan -> fix -> verify -> PR across every repo's
+  own opt-in ``.depfix.yml``, gated by the idempotency ledger so cron
+  reruns never reopen a PR or reprocess a terminal outcome.
 
 When invoked without a subcommand (e.g. ``depfix --codebase X``), ``run`` is
 assumed for backwards compatibility with the Day 1-2 CLI.
@@ -39,6 +43,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
+from sqlalchemy import select
 
 from depfix import DependencyFixAgent
 from depfix.apply import EditVerdict, FileEdit, WorkspaceEditor
@@ -47,6 +52,7 @@ from depfix.classify import (
     GeminiCompleter,
     LLMCompleter,
     OllamaCompleter,
+    breaking_change_from_row,
     classify_pending,
 )
 from depfix.clone import CloneError, CloneService
@@ -65,8 +71,20 @@ from depfix.evals import (
 )
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
-from depfix.gh import GitHubAppAuth, GitHubAppError
+from depfix.gh import (
+    BranchWriter,
+    GitHubAppAuth,
+    GitHubAppError,
+    PullRequest,
+    branch_name_for,
+    build_pr_body,
+    kept_edits,
+    open_pull_request,
+    pr_title_for,
+)
+from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome
 from depfix.providers.loader import ProviderConfigError, load_providers_file
+from depfix.retry import RetryLoop
 from depfix.scanners import (
     CallSiteScanner,
     MatchConfidence,
@@ -79,7 +97,14 @@ from depfix.scanners import (
 )
 from depfix.sources.factory import SourceDeps
 from depfix.sources.models import Severity
-from depfix.storage import BreakingChangeRow, init_schema, record_fix_run, session_scope
+from depfix.storage import (
+    AttemptStatus,
+    BreakingChangeRow,
+    init_schema,
+    record_fix_run,
+    record_pull_request,
+    session_scope,
+)
 from depfix.validators.javascript import FixValidator
 from depfix.verify import Verifier
 from depfix.watcher.runner import Watcher, WatchOutcome
@@ -87,7 +112,7 @@ from depfix.watcher.runner import Watcher, WatchOutcome
 console = Console()
 logger = logging.getLogger(__name__)
 
-_RUN_COMMANDS = {"run", "watch", "classify", "eval", "scan", "fix", "repos"}
+_RUN_COMMANDS = {"run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline"}
 _TOP_LEVEL_FLAGS = {"-h", "--help"}
 
 
@@ -100,25 +125,6 @@ def _breaking_change_from_json(data: dict) -> BreakingChange:
     if "examples" in payload:
         payload["examples"] = [tuple(e) for e in payload["examples"]]
     return BreakingChange(**payload)
-
-
-def _breaking_change_from_row(row: BreakingChangeRow) -> BreakingChange:
-    return BreakingChange(
-        package=row.package,
-        old_version=row.old_version,
-        new_version=row.new_version,
-        old_api=row.old_api,
-        new_api=row.new_api,
-        description=row.description,
-        migration_guide=row.migration_guide,
-        kind=ChangeKind(row.kind),
-        source=ClassificationSource(row.source),
-        provider_id=row.provider_id,
-        source_url=row.source_url,
-        evidence=row.evidence,
-        confidence=row.confidence,
-        call_site_hints=list(row.call_site_hints),
-    )
 
 
 def _load_breaking_change(args: argparse.Namespace) -> BreakingChange:
@@ -136,7 +142,7 @@ def _load_breaking_change(args: argparse.Namespace) -> BreakingChange:
             row = session.get(BreakingChangeRow, args.from_event)
             if row is None:
                 raise LookupError(f"no breaking_change row with id={args.from_event}")
-            return _breaking_change_from_row(row)
+            return breaking_change_from_row(row)
     raise ValueError(
         "no breaking change specified: pass --change-file <path>.json or "
         "--from-event <id> (run `depfix classify` first to populate rows)"
@@ -151,6 +157,49 @@ def _load_optional_breaking_change(args: argparse.Namespace) -> BreakingChange |
     if not args.change_file and args.from_event is None:
         return None
     return _load_breaking_change(args)
+
+
+def _load_pipeline_changes(args: argparse.Namespace) -> list[BreakingChange]:
+    """Resolve the breaking changes a `pipeline` run should consider.
+
+    ``--change-file``/``--from-event`` (both repeatable) narrow this to an
+    explicit, ad hoc set -- the default, with neither given, is every
+    classified ``breaking_change`` row in the database, which is the normal
+    cron-driven fleet behavior (see ``classify.store.breaking_change_from_row``).
+    """
+    changes: list[BreakingChange] = []
+    for path in args.change_file or []:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        changes.append(_breaking_change_from_json(data))
+    for event_id in args.from_event or []:
+        with session_scope() as session:
+            row = session.get(BreakingChangeRow, event_id)
+            if row is None:
+                raise LookupError(f"no breaking_change row with id={event_id}")
+            changes.append(breaking_change_from_row(row))
+    if changes:
+        return changes
+
+    with session_scope() as session:
+        stmt = select(BreakingChangeRow).order_by(BreakingChangeRow.created_at)
+        if args.limit is not None:
+            stmt = stmt.limit(args.limit)
+        return [breaking_change_from_row(row) for row in session.scalars(stmt)]
+
+
+def _load_pipeline_repos(args: argparse.Namespace, gh_auth: GitHubAppAuth) -> list[str]:
+    """Resolve the repos a `pipeline` run should process.
+
+    ``--repo`` (repeatable) narrows this to an explicit, ad hoc set -- the
+    default is every repo visible to every installation of the configured
+    GitHub App, which is the normal cron-driven fleet behavior.
+    """
+    if args.repo:
+        return list(args.repo)
+    repo_full_names: list[str] = []
+    for installation in gh_auth.list_installations():
+        repo_full_names.extend(r.full_name for r in gh_auth.list_repositories(installation.id))
+    return repo_full_names
 
 
 def _build_gh_auth(settings) -> GitHubAppAuth | None:
@@ -362,6 +411,53 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
 
     for err in result.errors:
         console.print(f"  [yellow]{err}[/yellow]")
+
+
+def _outcome_text(change: ChangeOutcome) -> str:
+    if change.skip_reason is not None:
+        return f"[dim]skip: {change.skip_reason.value}[/dim]"
+    if change.attempt_status == AttemptStatus.PR_OPENED:
+        return "[green]pr_opened[/green]"
+    if change.attempt_status == AttemptStatus.FAILED:
+        return "[red]failed[/red]"
+    if change.attempt_status is not None:
+        return change.attempt_status.value
+    return "?"
+
+
+def _print_orchestrator_outcome(outcome: OrchestratorOutcome) -> None:
+    table = Table(title="Fleet Pipeline Run")
+    table.add_column("Repo", style="cyan")
+    table.add_column("Change")
+    table.add_column("Outcome")
+    table.add_column("Detail", style="dim")
+
+    for repo in outcome.repos:
+        if repo.skip_reason is not None:
+            table.add_row(
+                repo.repo_full_name, "—", f"[yellow]skip: {repo.skip_reason.value}[/yellow]", ""
+            )
+            continue
+        if repo.error:
+            table.add_row(repo.repo_full_name, "—", "[red]error[/red]", repo.error)
+            continue
+        if not repo.changes:
+            table.add_row(repo.repo_full_name, "—", "[dim](no changes considered)[/dim]", "")
+            continue
+        for change in repo.changes:
+            table.add_row(
+                repo.repo_full_name,
+                f"{change.package}: {change.old_api}",
+                _outcome_text(change),
+                change.pr_url or change.detail,
+            )
+    console.print(table)
+    console.print(
+        f"[dim]repos:[/dim] {len(outcome.repos)}  "
+        f"[dim]repo failures:[/dim] {len(outcome.failures)}  "
+        f"[dim]PRs opened:[/dim] {outcome.prs_opened}  "
+        f"[dim]changes failed:[/dim] {outcome.changes_failed}\n"
+    )
 
 
 def _cmd_watch(args: argparse.Namespace) -> int:
@@ -605,6 +701,74 @@ def _write_fix_diffs(edits: list[FileEdit], output_dir: str) -> None:
         (output_path / f"{safe_name}.patch").write_text(edit.diff)
 
 
+def _open_pr_for_fix(
+    args: argparse.Namespace,
+    settings,
+    owner: str,
+    name: str,
+    breaking: BreakingChange,
+    result: FixPipelineResult,
+) -> PullRequest | None:
+    """Push KEPT edits to a deterministic branch and open (or reuse) a PR.
+
+    Remote repos only -- a ``--path`` run has nowhere to push. Requires the
+    fix to have actually been verified against the real test suite: an
+    unverified edit is never trustworthy enough to land in a PR.
+    """
+    if not args.repo:
+        console.print("[yellow]Skipping --open-pr: only supported with --repo, not --path.[/yellow]")
+        return None
+    if result.verification is None or not result.verification.ran:
+        console.print(
+            "[yellow]Skipping --open-pr: fix was not verified against the real test "
+            "suite (see --no-verify).[/yellow]"
+        )
+        return None
+    kept = kept_edits(result)
+    if not kept:
+        console.print("[yellow]Skipping --open-pr: no KEPT (test-confirmed) edits.[/yellow]")
+        return None
+
+    pr_gh_auth = _build_gh_auth(settings)
+    if pr_gh_auth is None:
+        console.print("[red]Error: GitHub App not configured, cannot open a PR.[/red]")
+        return None
+    try:
+        installation = pr_gh_auth.resolve_installation_for_repo(owner, name)
+        write_token = pr_gh_auth.installation_token(
+            installation.id,
+            repositories=(name,),
+            permissions={"contents": "write", "pull_requests": "write"},
+        )
+        base_branch = args.base_branch or pr_gh_auth.default_ref(owner, name)
+        head_branch = branch_name_for(breaking)
+        with BranchWriter(write_token.token, owner, name) as writer:
+            writer.commit_edits(
+                branch=head_branch,
+                base_branch=base_branch,
+                message=f"depfix: migrate {breaking.old_api} -> {breaking.replacement}",
+                edits=kept,
+            )
+        pr = open_pull_request(
+            owner=owner,
+            repo=name,
+            token=write_token.token,
+            head_branch=head_branch,
+            base_branch=base_branch,
+            title=pr_title_for(breaking),
+            body=build_pr_body(breaking, result),
+            draft=args.draft_pr,
+        )
+        verb = "Reused existing" if pr.already_existed else "Opened"
+        console.print(f"[green]{verb} PR: {pr.html_url}[/green]")
+        return pr
+    except GitHubAppError as exc:
+        console.print(f"[red]Error opening PR: {exc}[/red]")
+        return None
+    finally:
+        pr_gh_auth.close()
+
+
 def _cmd_fix(args: argparse.Namespace) -> int:
     settings = get_settings()
     api_key = args.api_key or settings.google_api_key
@@ -642,6 +806,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
         console.print(f"[red]Error: {exc}[/red]")
         return 2
 
+    fixer: FixGenerator | OllamaFixGenerator
     if llm_provider == "gemini":
         fixer = FixGenerator(api_key=api_key, model=model)
     else:
@@ -710,10 +875,23 @@ def _cmd_fix(args: argparse.Namespace) -> int:
                 max_output_bytes=settings.verify_max_output_bytes,
             )
 
+        max_retries = 0 if args.no_retry else (
+            args.max_retries if args.max_retries is not None else settings.retry_max_rounds
+        )
+        retry_loop: RetryLoop | None = None
+        if verifier is not None and max_retries > 0:
+            retry_loop = RetryLoop(
+                fixer,
+                FixValidator(use_ast_validation=settings.fix_validate_syntax),
+                verifier,
+                max_rounds=max_retries,
+            )
+
         pipeline = FixPipeline(
             fixer,
             validator=FixValidator(use_ast_validation=settings.fix_validate_syntax),
             verifier=verifier,
+            retry_loop=retry_loop,
         )
 
         with Progress(
@@ -727,7 +905,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
     except (CloneError, GitHubAppError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
         return 1
-    except Exception as e:  # noqa: BLE001 - surfaced to the user, then re-logged with a traceback
+    except Exception as e:  # surfaced to the user, then re-logged with a traceback
         console.print(f"[red]Fix pipeline failed: {e}[/red]")
         logger.exception("Fix pipeline crashed")
         return 1
@@ -751,16 +929,22 @@ def _cmd_fix(args: argparse.Namespace) -> int:
             f"[dim]Apply with: git apply {output}/*.patch[/dim]"
         )
 
+    pr_result: PullRequest | None = None
+    if args.open_pr:
+        pr_result = _open_pr_for_fix(args, settings, owner, name, breaking, result)
+
     if not args.no_save:
         init_schema()
         with session_scope() as session:
-            record_fix_run(
+            run = record_fix_run(
                 session,
                 repo_full_name=repo_full_name,
                 owner=owner,
                 name=name,
                 result=result,
             )
+            if pr_result is not None:
+                record_pull_request(session, run, pr_result)
         console.print(f"[dim]saved fix run to database ({repo_full_name})[/dim]")
 
     if result.reverted_edits or result.suspect_edits:
@@ -820,6 +1004,100 @@ def _cmd_repos(args: argparse.Namespace) -> int:
     finally:
         gh_auth.close()
     return 0
+
+
+def _cmd_pipeline(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    api_key = args.api_key or settings.google_api_key
+    model = args.model or settings.gemini_model
+    llm_provider = args.llm_provider or settings.llm_provider
+    ollama_model = args.ollama_model or settings.ollama_model
+
+    if llm_provider == "gemini" and not api_key:
+        console.print("[red]Error: GOOGLE_API_KEY not set. Use --api-key or .env[/red]")
+        return 2
+
+    providers_file = args.providers_file or settings.providers_file
+    try:
+        providers = load_providers_file(providers_file)
+    except (FileNotFoundError, ProviderConfigError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 2
+
+    gh_auth = _build_gh_auth(settings)
+    if gh_auth is None:
+        console.print(
+            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+            "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
+        )
+        return 2
+
+    init_schema()
+    try:
+        repo_full_names = _load_pipeline_repos(args, gh_auth)
+    except GitHubAppError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        gh_auth.close()
+        return 1
+    if not repo_full_names:
+        console.print("[yellow]No repos to process.[/yellow]")
+        gh_auth.close()
+        return 0
+
+    try:
+        changes = _load_pipeline_changes(args)
+    except (FileNotFoundError, LookupError, json.JSONDecodeError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        gh_auth.close()
+        return 2
+    if args.provider:
+        wanted = set(args.provider)
+        changes = [c for c in changes if c.provider_id in wanted]
+    if not changes:
+        console.print("[yellow]No breaking changes to process.[/yellow]")
+        gh_auth.close()
+        return 0
+
+    def fixer_factory() -> FixGenerator | OllamaFixGenerator:
+        if llm_provider == "gemini":
+            return FixGenerator(api_key=api_key, model=model)
+        return OllamaFixGenerator(
+            model=ollama_model, base_url=settings.ollama_base_url, timeout=settings.ollama_timeout
+        )
+
+    clone_service = CloneService(
+        clone_dir=settings.clone_dir or None,
+        timeout=settings.clone_timeout,
+        max_repo_mb=settings.clone_max_repo_mb,
+    )
+
+    _print_header()
+    console.print(
+        f"[dim]Repos:[/dim] {len(repo_full_names)}  [dim]Changes:[/dim] {len(changes)}  "
+        f"[dim]Mode:[/dim] {'force' if args.force else 'normal'}\n"
+    )
+
+    orchestrator = Orchestrator(
+        settings=settings,
+        gh_auth=gh_auth,
+        clone_service=clone_service,
+        providers=providers,
+        fixer_factory=fixer_factory,
+        force=args.force,
+    )
+
+    try:
+        outcome = orchestrator.run(repo_full_names, changes)
+    except Exception as e:
+        console.print(f"[red]Pipeline failed: {e}[/red]")
+        logger.exception("Orchestrator crashed")
+        return 1
+    finally:
+        gh_auth.close()
+
+    _print_orchestrator_outcome(outcome)
+
+    return 1 if outcome.failures else 0
 
 
 def _print_eval_report(report: EvalReport) -> None:
@@ -1171,7 +1449,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip running the repo's own test suite to confirm each edit",
     )
     fix_p.add_argument(
+        "--max-retries",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Bounded re-attempts for SUSPECT/REVERTED edits, feeding the concrete "
+        "failure back to the LLM (default: RETRY_MAX_ROUNDS env, else 2)",
+    )
+    fix_p.add_argument(
+        "--no-retry",
+        action="store_true",
+        help="Disable the retry loop entirely, regardless of --max-retries",
+    )
+    fix_p.add_argument(
         "--no-save", action="store_true", help="Don't persist this fix run to the database"
+    )
+    fix_p.add_argument(
+        "--open-pr",
+        action="store_true",
+        help="Push KEPT (test-confirmed) edits to a branch and open a PR (--repo only)",
+    )
+    fix_p.add_argument(
+        "--draft-pr", action="store_true", help="Open the PR (with --open-pr) as a draft"
+    )
+    fix_p.add_argument(
+        "--base-branch",
+        type=str,
+        default=None,
+        help="PR base branch (with --open-pr; default: the repo's default branch)",
     )
     fix_p.add_argument("--log-level", type=str, default=None)
 
@@ -1187,6 +1492,84 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only list repos for this installation id",
     )
     repos_p.add_argument("--log-level", type=str, default=None)
+
+    # -- pipeline -----------------------------------------------------------------
+    pipeline_p = sub.add_parser(
+        "pipeline",
+        help="Fleet orchestrator: scan -> fix -> verify -> PR across many repos, "
+        "gated by each repo's own .depfix.yml",
+    )
+    pipeline_p.add_argument(
+        "--repo",
+        type=str,
+        action="append",
+        default=None,
+        metavar="OWNER/NAME",
+        help="Repo to process (repeatable). Default: every repo visible to the "
+        "configured GitHub App installation(s)",
+    )
+    pipeline_p.add_argument(
+        "--provider",
+        type=str,
+        action="append",
+        default=None,
+        help="Restrict to breaking changes from this provider id (repeatable)",
+    )
+    pipeline_p.add_argument(
+        "--providers-file",
+        type=str,
+        default=None,
+        help="Path to providers.yaml (default: PROVIDERS_FILE env)",
+    )
+    pipeline_p.add_argument(
+        "--change-file",
+        type=str,
+        action="append",
+        default=None,
+        help="Path to a JSON file with a single BreakingChange (repeatable). Default: "
+        "every classified breaking_change row in the database",
+    )
+    pipeline_p.add_argument(
+        "--from-event",
+        type=int,
+        action="append",
+        default=None,
+        metavar="ID",
+        help="breaking_change row id to include (repeatable)",
+    )
+    pipeline_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cap the number of breaking_change rows loaded from the database "
+        "(only applies when neither --change-file nor --from-event is given)",
+    )
+    pipeline_p.add_argument(
+        "--api-key", type=str, default=None, help="Google API key (or set GOOGLE_API_KEY)"
+    )
+    pipeline_p.add_argument(
+        "--model", type=str, default=None, help="Gemini model name (overrides env)"
+    )
+    pipeline_p.add_argument(
+        "--llm-provider",
+        type=str,
+        choices=["gemini", "ollama"],
+        default=None,
+        help="LLM backend (default: LLM_PROVIDER env, else gemini)",
+    )
+    pipeline_p.add_argument(
+        "--ollama-model",
+        type=str,
+        default=None,
+        help="Ollama model tag when --llm-provider=ollama (default: qwen2.5-coder:7b)",
+    )
+    pipeline_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass bookkeeping skips (already-terminal, max attempts, cooldown, max "
+        "open PRs, max changes per run) -- a repo's own .depfix.yml is never bypassed",
+    )
+    pipeline_p.add_argument("--log-level", type=str, default=None)
 
     return p
 
@@ -1289,6 +1672,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_fix(args)
     if args.command == "repos":
         return _cmd_repos(args)
+    if args.command == "pipeline":
+        return _cmd_pipeline(args)
     return _cmd_run(args)
 
 

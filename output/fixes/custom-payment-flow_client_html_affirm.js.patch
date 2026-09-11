@@ -1,0 +1,39 @@
+--- a/custom-payment-flow/client/html/affirm.js
++++ b/custom-payment-flow/client/html/affirm.js
+@@ -34,8 +34,10 @@
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
++          amount: 1099,
+           currency: 'usd',
+-          paymentMethodType: 'affirm',
++          payment_method_types: ['card'],
++          confirm: true
+         }),
+       }
+     ).then((r) => r.json());
+@@ -68,11 +70,11 @@
+ 
+     // Confirm the affirm payment given the clientSecret from the payment
+     // intent that was just created on the server.
+-    const {error: stripeError, paymentIntent} = await stripe.confirmAffirmPayment(
++    const {error: stripeError, paymentIntent} = await stripe.confirmCardPayment(
+       clientSecret,
+       {
+         payment_method: {
+-          // Optional but recommended
++          card: form.elements.card,
+           billing_details: {
+             email: emailInput.value,
+             name: nameInput.value,
+@@ -84,10 +86,8 @@
+               country: countryInput.value,
+             }
+           },
+-
+         },
+ 
+-        // Required
+         shipping: {
+           name: shippingNameInput.value,
+           address: {

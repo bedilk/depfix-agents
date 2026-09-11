@@ -21,6 +21,7 @@ from depfix.apply.workspace import WorkspaceEditor
 from depfix.core.models import BreakingChange, FileUsage
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
+from depfix.retry.loop import RetryLoop
 from depfix.scanners.models import RepoScanResult
 from depfix.validators.javascript import FixValidator
 from depfix.verify.verifier import VerificationReport, Verifier
@@ -74,10 +75,12 @@ class FixPipeline:
         *,
         validator: FixValidator | None = None,
         verifier: Verifier | None = None,
+        retry_loop: RetryLoop | None = None,
     ) -> None:
         self._fixer = fixer
         self._validator = validator or FixValidator()
         self._verifier = verifier
+        self._retry_loop = retry_loop
 
     def run(
         self,
@@ -99,6 +102,16 @@ class FixPipeline:
         if self._verifier is not None:
             verification = self._verifier.verify(edits)
             edits = list(verification.edits)
+
+            if self._retry_loop is not None:
+                file_usages_by_relpath = {fu.filepath: fu for fu in file_usages}
+                edits, verification, rounds_used = self._retry_loop.run(
+                    edits, verification, file_usages_by_relpath, breaking_change, editor
+                )
+                if rounds_used:
+                    logger.info(
+                        "retry loop used %d round(s) for %s", rounds_used, scan_result.repo_full_name
+                    )
 
         total_usages_fixed = sum(e.usages_fixed for e in edits if e.is_on_disk)
 

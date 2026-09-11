@@ -1,6 +1,6 @@
 "use strict";
 
-const { OpenAI } = require("./openai-shim");
+const { OpenAI } = require("openai");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
