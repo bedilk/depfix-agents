@@ -510,3 +510,229 @@ the registry return at time T" for something other than debugging.
   reporter for Jest/Vitest/Mocha, so pinning TAP here is what keeps the
   fixture's baseline/after-fix runs parseable across Node versions instead
   of silently falling back to the degraded aggregate-count parser.
+
+# Week 5 Decisions — retry loop + PR creation
+
+## Retry loop
+
+- **Only edits with a concrete failure signal are retried — everything
+  else is left alone.** `RetryLoop._find_retryable` only picks up
+  `SUSPECT` edits that carry a real `error_message`, or `REVERTED` edits
+  the latest `VerificationReport.attribution` actually pinned to that
+  file. An edit that's `SUSPECT` for lack of evidence (no test script, a
+  crashed run) or `REVERTED` with no attribution has nothing concrete to
+  feed an LLM — retrying it would just be a second guess, not a targeted
+  fix.
+- **Feedback is the literal failure, not a paraphrase.** `_build_feedback`
+  joins the actual syntax error message or the actual failing test
+  names/messages verbatim into the next `generate_fix` call. Summarizing
+  or reformatting the failure risks losing the one detail (an exact
+  method name, an exact assertion message) that tells the LLM what's
+  actually wrong.
+- **Every round re-verifies the *full* edit list, not just the retried
+  files.** A retried file's fix could interact with an untouched file's
+  edit in a shared test; re-running `Verifier.verify` on everything gives
+  a clean, consistent baseline/after-fix diff each round instead of
+  compounding assumptions from a stale partial report.
+- **Bounded by rounds, not by wall-clock time or LLM calls.** `max_rounds`
+  (default 2, `retry_max_rounds` setting, `--max-retries`/`--no-retry`)
+  caps how many times a batch gets a second look; the loop also stops
+  early the moment a round retries zero edits, so a fully-resolved batch
+  doesn't burn through its remaining rounds for nothing.
+- **No retry-attempt audit table.** Only the *final* verdict/verification
+  is persisted via `record_fix_run`, same as before Week 5 — intermediate
+  rounds are debugging/audit information nobody queries later, and adding
+  a table for it would be schema bloat for data nobody reads.
+
+## GitHub App token cache
+
+- **The cache key gained a third component: sorted permissions.** Before
+  Week 5, `(installation_id, repositories)` was the whole key, which meant
+  a `contents: write` request for a repo already cached read-only would
+  silently hand back the stale read-only token — exactly the bug PR
+  creation would have hit the first time it asked for write access to a
+  repo `fix` had already scanned. The fix is additive: the default path
+  (`permissions=None` -> `{"contents": "read"}`) produces the exact same
+  cache key as before, so every existing call site and test is unaffected.
+
+## Branch + commit (`gh/branch.py`)
+
+- **Git Data API (blobs -> tree -> commit -> ref) over a local git
+  checkout + push.** The rest of `fix` never needs push credentials or a
+  local git binary — cloning already goes through `CloneService`'s
+  API-token-based HTTPS clone, and writing a commit via three small REST
+  calls avoids introducing a second, credential-bearing code path just
+  for this one step.
+- **`BranchWriter` takes a plain bearer `token: str`, never a
+  `GitHubAppAuth`.** Same convention as `CloneService.clone()` — the
+  writer doesn't need to know how its token was minted, only that it's
+  valid for the duration of one `commit_edits()` call.
+- **Deterministic branch names (`branch_name_for`), and `force`-push
+  semantics only on that deterministic branch.** `depfix/{dedupe_key[:12]}`
+  means repeated fix runs for the *same* breaking change land on the same
+  branch instead of piling up a new one every run. The `422 -> PATCH
+  .../refs/heads/{branch}` fallback uses `force: true`, which is only safe
+  because this branch name is owned entirely by depfix and never a branch
+  a human is also pushing to.
+
+## PR body + open (`gh/pr.py`)
+
+- **Only `KEPT` edits are committed to the PR branch, never `SUSPECT`.**
+  `SUSPECT` means verification couldn't confirm the edit one way or the
+  other; a PR is a request for a human to spend review time and then
+  merge, so only test-confirmed changes belong in it.
+- **The PR body is built entirely from real, already-existing fields**
+  (`BreakingChange.description`/`migration_guide`/`evidence`/`source_url`,
+  `FixPipelineResult.edits`/`verification`) — no new evidence-tracking
+  fields were invented for this. A reviewer's first question ("why is
+  this being changed?") is answered by data the pipeline already
+  produced, not by anything the PR-body builder made up.
+- **A 422 on PR creation means "reuse", not "fail".** Combined with
+  `branch_name_for`'s deterministic naming, a second `fix --open-pr` run
+  for the same breaking change finds its own previous PR
+  (`GET .../pulls?head=owner:branch&base=base&state=open`) and returns it
+  with `already_existed=True` rather than erroring — the same idempotency
+  property the branch/commit step already has.
+
+## Persistence
+
+- **One new table, `pull_request`, with a unique FK to `fix_run`.** Same
+  "new tables only" convention as Week 4; the unique constraint encodes
+  "at most one PR per fix run" directly in the schema rather than in
+  application logic.
+- **PR opening is independent of `--no-save`.** The PR itself gets opened
+  against GitHub regardless (that's the point of `--open-pr`); `--no-save`
+  only controls whether the fix run *and* the resulting PR get written to
+  depfix's own database afterward.
+
+# Week 6 Decisions — fleet orchestrator
+
+## Per-repo opt-in config (`repoconfig/`)
+
+- **A repo is invisible to the fleet unless it has its own `.depfix.yml`.**
+  `pipeline_require_config_file` (default `true`) makes a missing config
+  file a hard skip (`no_repo_config`), not a fall-through to defaults —
+  the whole point of a fleet orchestrator is that it never mutates a repo
+  that hasn't explicitly opted in, so silently treating "no file" as
+  "defaults" would defeat that guarantee for every repo an operator simply
+  forgot to configure.
+- **Unknown fields are a hard parse error, not a warning.** `parse_repo_config`
+  rejects any field outside its known set (top-level or nested under
+  `providers`/`paths`) — a typo'd field silently doing nothing (e.g.
+  `verfiy: false`) is worse than a loud failure, since the repo owner would
+  believe they'd configured something that was never read.
+- **`exclude` always wins over `include`, and empty `include` means "no
+  restriction."** Both `providers` and `paths` share one `allows()`
+  semantics (`repoconfig/models.py`) so there's exactly one filtering rule
+  to reason about across the whole config, not two similar-but-different
+  ones.
+- **Globs are segment-aware (`glob_match`), not raw fnmatch.** `*` never
+  crosses a `/` and `**` matches whole path/id segments — `stripe-*`
+  matching `stripe-legacy` but not `stripe/legacy`, and `src/**` matching
+  everything under `src/` but not the bare `src` segment itself, matches
+  how repo owners actually think about "this provider" or "this
+  directory" rather than shell-glob edge cases they'd have to discover the
+  hard way.
+- **Tenant instructions (`enabled: false`, `ignore`) are never
+  bypassable, including by `--force`.** `RepoConfig.is_ignored` and the
+  `enabled` flag are the repo owner's explicit word on what depfix may
+  touch; `--force` exists to unstick the *orchestrator's own* bookkeeping
+  (cooldowns, attempt caps) on a manual re-run, not to override a repo
+  owner's decision.
+
+## Idempotency ledger (`storage/attempt_store.py`, `ChangeAttemptRow`)
+
+- **Keyed on `(repo_id, dedupe_key)`, one row per pair.** The same
+  breaking change is tracked independently per repo (two repos can each be
+  mid-retry, or one terminal and one not, for the identical change) —
+  scoping by repo, not globally, is what makes a multi-repo fleet run safe
+  to re-invoke on a cron without cross-repo interference.
+- **`record_change_attempt` always overwrites `fix_run_id`/`last_error`
+  with the latest attempt's values, including clearing them to
+  empty/`None` when omitted.** The ledger reflects the *current* state of
+  a (repo, change) pair, not a sticky historical best — a retry that fails
+  before reaching a fix run must not leave a stale, misleadingly-successful
+  `fix_run_id` behind from a previous attempt.
+- **`touch_no_call_sites` never consumes attempt budget.** Finding no
+  actionable call sites isn't a failure of the fix pipeline — nothing was
+  attempted, so charging it against `pipeline_max_attempts` would give a
+  repo with a leftover irrelevant `ignore`-able change fewer real attempts
+  at changes that actually matter. Its `ref_sha` is still updated so the
+  policy layer can tell a truly-repeated no-op check apart from "the repo
+  changed, recheck it."
+
+## Policy (`orchestrator/policy.py`)
+
+- **Checks run in a fixed order — tenant instructions, then capability,
+  then bookkeeping — and only the last group is `--force`-bypassable.**
+  `decide()`'s docstring encodes this explicitly so the order is a
+  documented contract, not an accident of how the `if` chain happened to
+  be written: a repo owner's `ignore`/`enabled: false` and depfix's own
+  "do we know this provider" check must both win over any operator's
+  `--force`, while "we already tried this 3 times" or "we're in cooldown"
+  are exactly the kind of self-imposed caution `--force` exists to waive
+  for a deliberate manual re-run.
+- **`decide()` is pure — no DB session, no HTTP client.** Every input
+  (`attempt`, `open_pr_count`, `current_ref_sha`, etc.) is gathered by
+  `Orchestrator._run_repo` beforehand and passed in as plain values, so
+  the entire skip/go-ahead matrix is unit-testable without a database or
+  network fixture at all (`test_orchestrator_policy.py`).
+- **`effective_max_changes_per_run` can only lower the fleet-wide cap,
+  never raise it.** A repo's own `.depfix.yml` is the repo owner's
+  self-imposed limit, not a way to grant itself a bigger slice of a shared
+  fleet run than the operator's global `pipeline_max_changes_per_repo`
+  allows.
+
+## Runner (`orchestrator/runner.py`)
+
+- **Failure isolation at both the repo and the change level**, mirroring
+  `watcher/runner.py`'s existing shape: an uncaught exception while
+  processing one repo (or one change within a repo) is caught, recorded as
+  that repo's/change's own failure outcome, and the batch continues —
+  one flaky repo must never cost the rest of the fleet its results.
+- **Open-PR counting reads `head_branch.startswith("depfix/")`, not a
+  separate counter.** `pipeline_max_open_prs` is meant to bound depfix's
+  own footprint on a repo, not every open PR a human happens to have —
+  and `branch_name_for`'s deterministic `depfix/{dedupe_key[:12]}` prefix
+  (Week 5) already makes that distinction free to compute from data the
+  orchestrator fetches anyway (`list_open_pull_requests`).
+- **Pre-flight reads (`get_file_contents`, `ref_sha`,
+  `list_open_pull_requests`) all go through the installation's default
+  read-scoped token — a `contents: write` token is only ever minted right
+  before `_open_pr`.** Every repo the orchestrator looks at gets touched
+  with read access first regardless of whether a change ultimately needs
+  a PR; minting write access speculatively for every repo would widen the
+  blast radius of a leaked token for no benefit.
+- **A repo with no actionable call sites still gets a ledger row
+  (`NO_CALL_SITES`), and committable-but-empty (`open_pr: true` with
+  nothing `KEPT`) gets its own status (`NO_KEPT_EDITS`).** Both are
+  legitimate terminal-for-now outcomes distinct from `FAILED` — nothing
+  crashed, there just wasn't anything to act on this run — so cron reruns
+  can tell "we checked and there was nothing to do" apart from "we tried
+  and it broke."
+
+## CLI (`depfix pipeline`)
+
+- **Default repo set is every repo visible to every installation of the
+  configured GitHub App; default change set is every classified
+  `breaking_change` row in the database.** Both are overridable
+  (`--repo`, `--change-file`/`--from-event`) for an ad hoc run, but the
+  no-flags invocation is what a cron job actually wants: process
+  everything the App can see against everything already classified.
+  `breaking_change_from_row` (relocated to `classify/store.py` this week)
+  is the shared seam between this default-loading path and `fix
+  --from-event`'s existing one.
+- **No dedicated `test_cli.py`.** Consistent with `_cmd_fix`/`_cmd_watch`/
+  `_cmd_scan`/`_cmd_repos`, none of which have direct unit tests — the
+  thin CLI layer is exercised end-to-end through the argparse-to-handler
+  wiring by hand (`--help`, a no-GitHub-App-configured smoke run) rather
+  than mocked at the unit level, since almost everything it does is
+  already covered by testing `Orchestrator`/`decide()` directly.
+
+## Not done this week
+
+- **No `.env.example` update.** The repo has no `.env.example` file at
+  all despite the README referencing one — a pre-existing gap from before
+  Week 5, out of scope to introduce now; the new `REPO_CONFIG_FILENAME`/
+  `PIPELINE_*` variables are documented in the README's configuration
+  table instead.

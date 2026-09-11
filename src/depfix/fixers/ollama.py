@@ -45,9 +45,16 @@ class OllamaFixGenerator:
         self,
         file_usage: FileUsage,
         breaking_change: BreakingChange,
+        *,
+        feedback: str | None = None,
     ) -> tuple[str, float, LLMCall]:
-        """Generate a fix for a file with breaking-change usages."""
-        prompt = self._build_prompt(file_usage, breaking_change)
+        """Generate a fix for a file with breaking-change usages.
+
+        ``feedback``, when set, is a description of why a previous attempt
+        at fixing this file was rejected (syntax error or test regression),
+        appended to the prompt so the model can course-correct on retry.
+        """
+        prompt = self._build_prompt(file_usage, breaking_change, feedback=feedback)
 
         for attempt in range(self.max_retries):
             try:
@@ -111,7 +118,13 @@ class OllamaFixGenerator:
 
     # -- prompt / parsing helpers (kept identical in spirit to gemini.py) ------
 
-    def _build_prompt(self, file_usage: FileUsage, breaking_change: BreakingChange) -> str:
+    def _build_prompt(
+        self,
+        file_usage: FileUsage,
+        breaking_change: BreakingChange,
+        *,
+        feedback: str | None = None,
+    ) -> str:
         usage_locations = "\n".join(
             f"  - Line {u.line_number}: {u.line_content.strip()}" for u in file_usage.usages
         )
@@ -123,6 +136,10 @@ class OllamaFixGenerator:
                 for before, after in breaking_change.examples
             )
             examples_section = f"\n\nEXAMPLES OF CORRECT MIGRATION:\n{examples}"
+
+        feedback_section = ""
+        if feedback:
+            feedback_section = f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
 
         return f"""You are a senior developer performing a code migration for a breaking API change.
 
@@ -151,7 +168,7 @@ REQUIREMENTS:
 3. Maintain the same code style and formatting
 4. Do not add any comments about the migration
 5. Do not change any imports unless necessary for the new API
-
+{feedback_section}
 OUTPUT:
 Return ONLY the complete updated code. No explanations, no markdown code blocks, just the raw code.
 """

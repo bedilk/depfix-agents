@@ -7,6 +7,7 @@ from depfix.classify.notes import NotesClassifier
 from depfix.classify.spec_rules import classify_spec_changes, sdk_path_hints
 from depfix.classify.store import (
     ClassifyRunSummary,
+    breaking_change_from_row,
     classify_pending,
     event_from_row,
     load_unclassified_events,
@@ -22,6 +23,7 @@ __all__ = [
     "LLMResponse",
     "NotesClassifier",
     "OllamaCompleter",
+    "breaking_change_from_row",
     "classify_pending",
     "classify_spec_changes",
     "event_from_row",

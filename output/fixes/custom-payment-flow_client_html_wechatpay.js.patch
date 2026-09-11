@@ -1,0 +1,36 @@
+--- a/custom-payment-flow/client/html/wechatpay.js
++++ b/custom-payment-flow/client/html/wechatpay.js
+@@ -27,8 +27,9 @@
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
++          amount: 1099,
+           currency: 'cny',
+-          paymentMethodType: 'wechat_pay',
++          payment_method_types: ['wechat_pay'],
+         }),
+       }
+     ).then((r) => r.json());
+@@ -43,16 +44,12 @@
+     // Confirm the payment given the clientSecret from the payment intent that
+     // was just created on the server.
+     const {error: stripeError, paymentIntent} =
+-      await stripe.confirmWechatPayPayment(
+-        clientSecret,
+-        {
+-          payment_method_options: {
+-            wechat_pay: {
+-              client: 'web',
+-            },
+-          }
+-        },
+-      );
++      await stripe.paymentIntents.create({
++        amount: 1099,
++        currency: 'cny',
++        payment_method_types: ['wechat_pay'],
++        confirm: true,
++      });
+ 
+     if (stripeError) {
+       addMessage(stripeError.message);

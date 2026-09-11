@@ -1,0 +1,26 @@
+--- a/custom-payment-flow/client/html/eps.js
++++ b/custom-payment-flow/client/html/eps.js
+@@ -31,8 +31,9 @@
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
++          amount: 1099,
+           currency: 'eur',
+-          paymentMethodType: 'eps',
++          payment_method_types: ['eps'],
+         }),
+       }
+     ).then((r) => r.json());
+@@ -52,12 +53,6 @@
+     const {error: stripeError, paymentIntent} = await stripe.confirmEpsPayment(
+       clientSecret,
+       {
+-        payment_method: {
+-          eps: epsBank,
+-          billing_details: {
+-            name: nameInput.value,
+-          },
+-        },
+         return_url: `${window.location.origin}/return.html`,
+       }
+     );

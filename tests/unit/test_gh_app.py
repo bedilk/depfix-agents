@@ -218,6 +218,49 @@ def test_installation_token_remints_after_expiry(
     assert second.token == "ghs_fresh"
 
 
+@respx.mock(base_url=_BASE)
+def test_installation_token_does_not_reuse_cached_token_for_different_permissions(
+    respx_mock: respx.Router, private_key_pem: str
+) -> None:
+    respx_mock.post("/app/installations/1/access_tokens").mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={
+                    "token": "ghs_readonly",
+                    "expires_at": (datetime.now(UTC) + timedelta(hours=1))
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "token": "ghs_readwrite",
+                    "expires_at": (datetime.now(UTC) + timedelta(hours=1))
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                },
+            ),
+        ]
+    )
+
+    with _auth(private_key_pem) as auth:
+        read_token = auth.installation_token(1, repositories=("widgets",))
+        write_token = auth.installation_token(
+            1, repositories=("widgets",), permissions={"contents": "write"}
+        )
+        # A second call with the same write permissions must hit the cache,
+        # not mint a third token.
+        write_token_again = auth.installation_token(
+            1, repositories=("widgets",), permissions={"contents": "write"}
+        )
+
+    assert read_token.token == "ghs_readonly"
+    assert write_token.token == "ghs_readwrite"
+    assert write_token_again.token == "ghs_readwrite"
+
+
 def test_installation_token_repr_never_leaks_the_secret() -> None:
     token = InstallationToken(
         token="ghs_super_secret",

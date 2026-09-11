@@ -1,0 +1,23 @@
+--- a/custom-payment-flow/client/html/afterpay-clearpay.js
++++ b/custom-payment-flow/client/html/afterpay-clearpay.js
+@@ -28,8 +28,10 @@
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({
++          amount: 2000,
+           currency: 'usd',
+-          paymentMethodType: 'afterpay_clearpay',
++          payment_method_types: ['card'],
++          confirm: true
+         }),
+       }
+     ).then((r) => r.json());
+@@ -62,7 +64,7 @@
+ 
+     // Confirm the payment given the clientSecret from the payment intent that
+     // was just created on the server.
+-    let {error: stripeError, paymentIntent} = await stripe.confirmAfterpayClearpayPayment(
++    let {error: stripeError, paymentIntent} = await stripe.confirmCardPayment(
+       clientSecret,
+       {
+         payment_method: {

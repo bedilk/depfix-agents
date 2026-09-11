@@ -175,6 +175,20 @@ depfix fix --path ./my-app --provider openai --change-file my_change.json --no-v
 # Use a local Ollama model instead of Gemini.
 depfix fix --path ./my-app --provider openai --change-file my_change.json \
     --llm-provider ollama --ollama-model qwen2.5-coder:7b
+
+# Retry SUSPECT/REVERTED edits up to 3 times, feeding each concrete
+# failure (syntax error or failing test) back to the LLM.
+depfix fix --path ./my-app --provider openai --change-file my_change.json --max-retries 3
+
+# Disable the retry loop entirely.
+depfix fix --path ./my-app --provider openai --change-file my_change.json --no-retry
+
+# Fix a remote repo and open a PR with the KEPT (test-confirmed) edits.
+depfix fix --repo acme/widgets --provider openai --from-event 42 --open-pr
+
+# Open the PR as a draft, against a specific base branch.
+depfix fix --repo acme/widgets --provider openai --from-event 42 \
+    --open-pr --draft-pr --base-branch develop
 ```
 
 Each edit ends up with a verdict: `KEPT` (written, and confirmed clean or
@@ -186,6 +200,58 @@ or a test-output format it couldn't parse), or `SKIPPED` (never written --
 e.g. fix generation failed, or the fix was identical to the original).
 Unless `--no-save` is passed, the run (and every edit + baseline/after-fix
 test result) is persisted to the `fix_run`/`file_fix`/`test_run` tables.
+
+When verification is enabled, `SUSPECT`/`REVERTED` edits are retried up to
+`--max-retries` times (default: `RETRY_MAX_ROUNDS` env, else 2), each round
+feeding the concrete syntax error or attributed failing test back to the
+LLM before re-verifying the full batch; `--no-retry` disables this
+regardless of `--max-retries`.
+
+`--open-pr` (remote repos only, and only once verification has actually
+run) pushes the `KEPT` edits to a deterministic branch
+(`depfix/<dedupe-key>`) via the GitHub Git Data API and opens a PR whose
+body links back to the breaking change's description, migration guide,
+and evidence. Re-running with the same breaking change reuses the same
+branch and PR rather than piling up duplicates. `--draft-pr` opens it as a
+draft; `--base-branch` overrides the repo's default branch. Unless
+`--no-save` is passed, the PR is also persisted to the `pull_request`
+table.
+
+## Running the fleet orchestrator
+
+`depfix pipeline` is the Week 6 unattended entrypoint: it runs the same
+scan -> fix -> verify -> PR pipeline as `depfix fix`, but across every repo
+in a batch, gated by each repo's own opt-in `.depfix.yml` (copy
+[`.depfix.yml.example`](.depfix.yml.example) into a target repo's root to
+enable it) and an idempotency ledger (`change_attempt` table) so cron-driven
+reruns never reopen a PR or reprocess an already-terminal outcome.
+
+```bash
+# Process every repo visible to the configured GitHub App installation(s),
+# against every classified breaking_change row in the database.
+depfix pipeline
+
+# Narrow to specific repos and/or a specific provider.
+depfix pipeline --repo acme/widgets --repo acme/gizmos --provider openai
+
+# Narrow to specific breaking changes instead of the full classified backlog.
+depfix pipeline --from-event 42 --from-event 43
+
+# Bypass bookkeeping skips (already-terminal, max attempts, cooldown, max
+# open PRs, max changes per run) for a manual re-run -- a repo's own
+# .depfix.yml (enabled/ignore) is never bypassed, even with --force.
+depfix pipeline --force
+```
+
+A repo with no `.depfix.yml` at all is skipped entirely
+(`no_repo_config`) -- the orchestrator never acts on a repo that hasn't
+explicitly opted in. Within an opted-in repo, each `(repo, change)` pair is
+independently gated by `orchestrator.policy.decide()`: tenant instructions
+(`enabled: false`, `ignore`) are checked first and are never bypassable;
+then capability (`providers` filter, known provider ids); then bookkeeping
+(already-terminal ledger status, max attempts, retry cooldown, max open
+PRs, max changes per run), which *is* bypassable with `--force`. One bad
+repo, or one bad change within a repo, never aborts the rest of the batch.
 
 ## Common tasks
 
@@ -205,6 +271,7 @@ make classify             # depfix classify
 make scan ARGS="--path ./my-app --provider openai --no-save"
 make fix ARGS="--path ./my-app --provider openai --change-file change.json"
 make repos                 # depfix repos
+make pipeline ARGS="--repo acme/widgets --force"  # depfix pipeline
 make docker-up            # postgres + redis + app via docker compose
 ```
 
@@ -219,15 +286,18 @@ dependency-fix-agent/
 │   ├── validators/           # syntax / semantic validation
 │   ├── apply/                 # WorkspaceEditor -- transactional in-place file edits
 │   ├── verify/                 # sandboxed install/test-run verification of a candidate fix
+│   ├── retry/                 # bounded SUSPECT/REVERTED retry loop, fed by verify's attribution
 │   ├── sources/               # change feeds (npm dist-tag, GitHub, OpenAPI diff)
 │   ├── classify/              # ChangeEvent -> BreakingChange (deterministic + LLM)
 │   ├── evals/                 # YAML corpus + scoring harness (`depfix eval`)
-│   ├── gh/                   # GitHub App auth (JWT + installation tokens)
+│   ├── gh/                   # GitHub App auth, branch/commit + PR creation (Git Data API)
 │   ├── clone/                 # shallow-clone / local-copy checkout service
+│   ├── repoconfig/            # per-repo opt-in `.depfix.yml` loader/models
+│   ├── orchestrator/          # Week 6 fleet orchestrator: policy + runner (`depfix pipeline`)
 │   ├── api/                  # (placeholder) HTTP surface
 │   ├── workers/              # (placeholder) background jobs
 │   ├── registry/             # npm registry HTTP client
-│   ├── storage/              # SQLAlchemy schema + session factory + fix_store
+│   ├── storage/              # SQLAlchemy schema + session factory + fix_store/attempt_store
 │   ├── watcher/               # one-shot feed poller (`depfix watch`)
 │   ├── config.py             # Pydantic Settings — env-driven config
 │   └── cli.py                # `depfix` entrypoint
@@ -271,6 +341,13 @@ All configuration is read from environment variables (or a local `.env` file). S
 | `VERIFY_TEST_TIMEOUT` | `300`            | Wall-clock cap (seconds) for one baseline or after-fix test run |
 | `VERIFY_IGNORE_SCRIPTS` | `true`         | Pass `--ignore-scripts` to the install command |
 | `VERIFY_MAX_OUTPUT_BYTES` | `2000000`    | Truncate captured install/test output past this size |
+| `RETRY_MAX_ROUNDS` | `2`                 | Bounded re-attempts for SUSPECT/REVERTED edits (`depfix fix --max-retries`/`--no-retry`) |
+| `REPO_CONFIG_FILENAME` | `.depfix.yml`   | Per-repo opt-in pipeline config file the orchestrator looks for at the repo root |
+| `PIPELINE_REQUIRE_CONFIG_FILE` | `true`  | Refuse to touch a repo with no `REPO_CONFIG_FILENAME` at all |
+| `PIPELINE_MAX_OPEN_PRS` | `5`            | Per-repo cap on simultaneously open depfix-authored PRs |
+| `PIPELINE_MAX_ATTEMPTS` | `3`            | Per-(repo, change) cap on non-terminal orchestrator attempts before giving up |
+| `PIPELINE_RETRY_COOLDOWN_HOURS` | `6.0`  | Minimum time between two orchestrator attempts at the same (repo, change) |
+| `PIPELINE_MAX_CHANGES_PER_REPO` | `3`    | Hard cap on distinct breaking changes processed per repo per `depfix pipeline` run |
 | `LOG_LEVEL`       | `INFO`               | Root logging level                       |
 | `SENTRY_DSN`      | unset                | Sentry DSN for error reporting           |
 

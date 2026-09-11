@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan fix repos docker-build docker-up docker-down
+.PHONY: help install install-dev test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan fix repos pipeline docker-build docker-up docker-down
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -65,6 +65,9 @@ fix:  ## Generate, apply, and verify fixes (pass ARGS="--path ./my-app --provide
 
 repos:  ## List repos visible to the GitHub App installation(s)
 	depfix repos $(ARGS)
+
+pipeline:  ## Fleet orchestrator: scan -> fix -> verify -> PR across many repos' own .depfix.yml
+	depfix pipeline $(ARGS)
 
 docker-build:  ## Build the depfix Docker image
 	docker build -t depfix:local .

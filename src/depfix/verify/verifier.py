@@ -14,7 +14,7 @@ import logging
 
 from depfix.apply.models import EditVerdict, FileEdit
 from depfix.apply.workspace import WorkspaceEditor
-from depfix.verify.attribution import attribute_failures
+from depfix.verify.attribution import AttributionResult, attribute_failures
 from depfix.verify.manager import InstallResult, install_dependencies
 from depfix.verify.models import TestRunResult
 from depfix.verify.runner import has_test_script, run_tests
@@ -33,6 +33,7 @@ class VerificationReport:
     baseline: TestRunResult | None = None
     after_fix: TestRunResult | None = None
     edits: tuple[FileEdit, ...] = ()
+    attribution: AttributionResult | None = None
 
     @property
     def new_failure_count(self) -> int:
@@ -168,7 +169,12 @@ class Verifier:
                 settled_edits.append(self._settle(edit, EditVerdict.KEPT))
 
         return VerificationReport(
-            ran=True, install=install, baseline=baseline, after_fix=after_fix, edits=tuple(settled_edits)
+            ran=True,
+            install=install,
+            baseline=baseline,
+            after_fix=after_fix,
+            edits=tuple(settled_edits),
+            attribution=attribution,
         )
 
     @staticmethod

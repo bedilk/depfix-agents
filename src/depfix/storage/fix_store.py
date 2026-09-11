@@ -11,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from depfix.core.pipeline import FixPipelineResult
-from depfix.storage.schema import FileFixRow, FixRunRow, TestRunRow
+from depfix.gh.models import PullRequest
+from depfix.storage.schema import FileFixRow, FixRunRow, PullRequestRow, TestRunRow
 from depfix.verify.models import TestRunResult, TestStatus
 
 
@@ -105,6 +106,22 @@ def _test_run_row(phase: str, test_run: TestRunResult) -> TestRunRow:
         timed_out=test_run.timed_out,
         parse_error=test_run.parse_error,
     )
+
+
+def record_pull_request(session: Session, fix_run: FixRunRow, pr: PullRequest) -> PullRequestRow:
+    """Persist the PR opened (or reused) for ``fix_run``. At most one per
+    fix run -- see ``PullRequestRow``'s unique FK."""
+    row = PullRequestRow(
+        fix_run_id=fix_run.id,
+        number=pr.number,
+        html_url=pr.html_url,
+        head_branch=pr.head_branch,
+        base_branch=pr.base_branch,
+        already_existed=pr.already_existed,
+    )
+    session.add(row)
+    fix_run.pull_request = row
+    return row
 
 
 def latest_fix_run(session: Session, repo_full_name: str) -> FixRunRow | None:
