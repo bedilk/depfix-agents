@@ -24,6 +24,19 @@ def get_change_attempt(
     return session.execute(stmt).scalar_one_or_none()
 
 
+def attempts_for_repo(session: Session, *, repo_id: str) -> dict[str, ChangeAttemptRow]:
+    """Every ledger row for ``repo_id``, keyed by ``dedupe_key``.
+
+    One bulk query per repo instead of one :func:`get_change_attempt` query
+    per ``(repo, change)`` pair -- with N changes considered per repo per
+    run, the per-change query was an N+1 that this collapses to a single
+    round trip. Callers that need to consult (not update) the ledger before
+    deciding whether to process a change should fetch this once per repo.
+    """
+    stmt = select(ChangeAttemptRow).where(ChangeAttemptRow.repo_id == repo_id)
+    return {row.dedupe_key: row for row in session.execute(stmt).scalars()}
+
+
 def record_change_attempt(
     session: Session,
     *,

@@ -12,6 +12,7 @@ intercepts (same style as ``test_gh_branch.py``/``test_gh_pr.py``).
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -161,6 +162,11 @@ class _FakeFixer:
         fixed = file_usage.file_content.replace(
             "openai.createModeration", "openai.moderations.create"
         )
+        # Real fixers expose `total_cost` as a running sum over their own
+        # `llm_calls` (see FixGenerator.total_cost) -- mirror that here so
+        # FixPipelineResult.total_cost (read from `self._fixer.total_cost`,
+        # not from generate_fix's per-call return value) actually accrues.
+        self.total_cost += 0.3
         return fixed, 0.9, None
 
 
@@ -400,3 +406,183 @@ def test_branch_name_for_is_used_as_pr_head(in_memory_db: Any) -> None:
     which doesn't assert on the literal branch name."""
     change = _change()
     assert branch_name_for(change).startswith("depfix/")
+
+
+# -- Week 7 hardening: disabled providers, paths filter, dry-run, lock, budget --
+
+
+def test_disabled_provider_is_treated_as_unknown(in_memory_db: Any) -> None:
+    """A ``ProviderSpec(enabled=False)`` must be filtered out of
+    ``known_provider_ids`` at construction time, not just skipped later --
+    it should behave exactly as if depfix never registered this provider
+    at all."""
+    change = _change()
+    gh_auth = _FakeGhAuth(config_text="version: 1\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    disabled_provider = ProviderSpec(
+        id="openai", name="OpenAI", sdk_packages=(SdkPackage(name="openai"),), enabled=False
+    )
+    orchestrator = Orchestrator(
+        settings=_settings(),
+        gh_auth=gh_auth,
+        clone_service=clone_service,
+        providers=[disabled_provider],
+        fixer_factory=_FakeFixer,
+    )
+
+    outcome = orchestrator.run(["acme/widgets"], [change])
+
+    (repo,) = outcome.repos
+    (change_outcome,) = repo.changes
+    assert change_outcome.skip_reason == SkipReason.UNKNOWN_PROVIDER
+    assert clone_service.clone_calls == []
+
+
+def test_paths_filter_excludes_before_the_fix_pipeline_runs(in_memory_db: Any) -> None:
+    """A repo-scoped ``paths.exclude`` that covers the only actionable call
+    site must suppress it *before* any fix is generated -- surfaced as
+    ``suppressed_call_sites``, distinct from "no call sites found at
+    all"."""
+    change = _change()
+    gh_auth = _FakeGhAuth(config_text="version: 1\nverify: false\npaths:\n  exclude:\n    - 'src/chat.js'\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = _orchestrator(gh_auth, clone_service)
+
+    outcome = orchestrator.run(["acme/widgets"], [change])
+
+    (repo,) = outcome.repos
+    (change_outcome,) = repo.changes
+    assert change_outcome.attempt_status == AttemptStatus.NO_CALL_SITES
+    assert change_outcome.suppressed_call_sites == 1
+    assert "suppressed" in change_outcome.detail
+
+
+@respx.mock(base_url=BASE)
+def test_dry_run_makes_no_db_writes_or_pr(respx_mock: respx.Router, in_memory_db: Any) -> None:
+    """Under ``dry_run``, the real scan/fix pipeline still runs (so the
+    prediction is accurate) but no ledger row, branch, or PR is created."""
+    change = _change()
+    gh_auth = _FakeGhAuth(config_text="version: 1\nverify: false\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = Orchestrator(
+        settings=_settings(),
+        gh_auth=gh_auth,
+        clone_service=clone_service,
+        providers=[_provider()],
+        fixer_factory=_FakeFixer,
+        dry_run=True,
+    )
+    # No PR endpoints mocked at all -- if the orchestrator tried to hit
+    # them under dry-run, respx would raise on the unmocked call.
+
+    outcome = orchestrator.run(["acme/widgets"], [change])
+
+    (repo,) = outcome.repos
+    (change_outcome,) = repo.changes
+    assert change_outcome.attempt_status == AttemptStatus.PR_OPENED
+    assert change_outcome.planned is True
+
+    with db_module.session_scope() as session:
+        row = session.scalar(
+            select(ChangeAttemptRow).where(ChangeAttemptRow.dedupe_key == change.dedupe_key)
+        )
+        assert row is None
+
+
+def test_lock_not_acquired_skips_the_whole_run(in_memory_db: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """If another orchestrator process already holds the advisory lock,
+    this run must do nothing at all, not even attempt the first repo."""
+    import depfix.orchestrator.runner as runner_module
+
+    @contextlib.contextmanager
+    def _never_acquired(engine: Any, key: int = 0) -> Any:
+        yield False
+
+    monkeypatch.setattr(runner_module, "advisory_lock", _never_acquired)
+
+    gh_auth = _FakeGhAuth(config_text="version: 1\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = _orchestrator(gh_auth, clone_service)
+
+    outcome = orchestrator.run(["acme/widgets"], [_change()])
+
+    assert outcome.locked is False
+    assert outcome.repos == []
+    assert clone_service.clone_calls == []
+
+
+def test_max_duration_stops_the_run_early(in_memory_db: Any) -> None:
+    """An already-expired budget must stop the run before it starts the
+    first repo, and report ``stopped_early``."""
+    gh_auth = _FakeGhAuth(config_text="version: 1\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = Orchestrator(
+        settings=_settings(),
+        gh_auth=gh_auth,
+        clone_service=clone_service,
+        providers=[_provider()],
+        fixer_factory=_FakeFixer,
+        max_duration_seconds=0.0,
+    )
+
+    outcome = orchestrator.run(["acme/widgets", "acme/other"], [_change()])
+
+    assert outcome.stopped_early is True
+    assert outcome.repos == []
+    assert clone_service.clone_calls == []
+
+
+@respx.mock(base_url=BASE)
+def test_cost_ceiling_stops_the_run_early(respx_mock: respx.Router, in_memory_db: Any) -> None:
+    """``pipeline_max_cost_usd_per_run`` is the budget's other ceiling --
+    once the first repo's real ``_FakeFixer`` spend (0.3, accrued onto
+    ``total_cost`` by ``_FakeFixer.generate_fix``) crosses it, the second
+    repo must never be attempted."""
+    gh_auth = _FakeGhAuth(config_text="version: 1\nverify: false\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = _orchestrator(gh_auth, clone_service, pipeline_max_cost_usd_per_run=0.2)
+    _mock_pr_endpoints(respx_mock, owner="acme", repo="widgets", pr_number=7)
+
+    outcome = orchestrator.run(["acme/widgets", "acme/other"], [_change()])
+
+    by_name = {r.repo_full_name: r for r in outcome.repos}
+    assert "acme/widgets" in by_name
+    assert "acme/other" not in by_name
+    assert outcome.stopped_early is True
+    assert clone_service.clone_calls == [("acme", "widgets")]
+
+
+@respx.mock(base_url=BASE)
+def test_no_pr_forces_fixed_no_pr_regardless_of_repo_config(
+    respx_mock: respx.Router, in_memory_db: Any
+) -> None:
+    """``no_pr=True`` must override this repo's own ``.depfix.yml`` (which
+    defaults ``open_pr`` to ``True``) for the whole run -- no branch, no PR,
+    but still a real ledger write (unlike ``dry_run``)."""
+    change = _change()
+    gh_auth = _FakeGhAuth(config_text="version: 1\nverify: false\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = Orchestrator(
+        settings=_settings(),
+        gh_auth=gh_auth,
+        clone_service=clone_service,
+        providers=[_provider()],
+        fixer_factory=_FakeFixer,
+        no_pr=True,
+    )
+    # No PR endpoints mocked -- if the orchestrator tried to open one
+    # despite no_pr, respx would raise on the unmocked call.
+
+    outcome = orchestrator.run(["acme/widgets"], [change])
+
+    (repo,) = outcome.repos
+    (change_outcome,) = repo.changes
+    assert change_outcome.attempt_status == AttemptStatus.FIXED_NO_PR
+    assert change_outcome.pr_url == ""
+
+    with db_module.session_scope() as session:
+        row = session.scalar(
+            select(ChangeAttemptRow).where(ChangeAttemptRow.dedupe_key == change.dedupe_key)
+        )
+        assert row is not None
+        assert row.status == AttemptStatus.FIXED_NO_PR.value

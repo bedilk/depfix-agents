@@ -307,6 +307,7 @@ class Watcher:
             title=event.title,
             summary=event.summary,
             body=event.body,
+            body_url=event.body_url,
             severity=event.severity.value,
             dedupe_key=event.dedupe_key,
             detected_at=event.detected_at,

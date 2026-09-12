@@ -68,7 +68,13 @@ class SourceDeps:
 
 def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSource:
     if feed.kind is SourceKind.NPM_DIST_TAG:
-        return NpmDistTagSource(provider_id, feed.config, deps.npm)
+        return NpmDistTagSource(
+            provider_id,
+            feed.config,
+            deps.npm,
+            http=deps.http,
+            github_api_url=deps.github_api_url,
+        )
     if feed.kind is SourceKind.GITHUB_RELEASE:
         return GitHubReleaseSource(provider_id, feed.config, deps.http, deps.github_api_url)
     if feed.kind is SourceKind.OPENAPI_SPEC:

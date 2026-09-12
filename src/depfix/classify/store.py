@@ -47,6 +47,7 @@ def event_from_row(row: ChangeEventRow) -> ChangeEvent:
         title=row.title or "",
         summary=row.summary or "",
         body=row.body or "",
+        body_url=row.body_url,
         severity=Severity(row.severity),
         spec_changes=[_spec_change_from_row(r) for r in row.spec_changes],
         detected_at=row.detected_at,
@@ -139,6 +140,7 @@ class ClassifyRunSummary:
 
     events_processed: int = 0
     changes_created: int = 0
+    unclassifiable: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -150,6 +152,9 @@ def classify_pending(
     Events whose classification errors (e.g. release notes with no LLM
     configured) are left with ``classified_at`` unset so a later run — once
     an LLM is available — retries them instead of silently giving up forever.
+    Events with no signal to classify at all (``outcome.unclassifiable``) are
+    a different, terminal case: ``classified_at`` is still stamped, since no
+    retry could produce a different answer from an empty body.
     """
     summary = ClassifyRunSummary()
     for row in load_unclassified_events(session, limit=limit):
@@ -159,6 +164,8 @@ def classify_pending(
         if outcome.errors:
             summary.errors.extend(f"event {row.id}: {e}" for e in outcome.errors)
             continue
+        if outcome.unclassifiable:
+            summary.unclassifiable += 1
         created = persist_classification(session, row, outcome)
         summary.changes_created += len(created)
     return summary

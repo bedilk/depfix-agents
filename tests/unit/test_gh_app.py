@@ -112,6 +112,37 @@ def test_resolve_installation_for_repo_404_raises_actionable_error(
 
 
 @respx.mock(base_url=_BASE)
+def test_resolve_installation_for_repo_is_cached_per_repo(
+    respx_mock: respx.Router, private_key_pem: str
+) -> None:
+    """A repo's installation binding doesn't change mid-run -- every
+    pre-flight read that needs it (get_file_contents, ref_sha,
+    list_open_pull_requests, ...) should share one lookup per repo, not
+    re-resolve it on every call. A different repo still gets its own
+    lookup."""
+    widgets_route = respx_mock.get("/repos/acme/widgets/installation").mock(
+        return_value=httpx.Response(
+            200, json={"id": 1, "account": {"login": "acme", "type": "Organization"}}
+        )
+    )
+    other_route = respx_mock.get("/repos/acme/other/installation").mock(
+        return_value=httpx.Response(
+            200, json={"id": 2, "account": {"login": "acme", "type": "Organization"}}
+        )
+    )
+
+    with _auth(private_key_pem) as auth:
+        first = auth.resolve_installation_for_repo("acme", "widgets")
+        second = auth.resolve_installation_for_repo("acme", "widgets")
+        other = auth.resolve_installation_for_repo("acme", "other")
+
+    assert first.id == second.id == 1
+    assert other.id == 2
+    assert widgets_route.call_count == 1
+    assert other_route.call_count == 1
+
+
+@respx.mock(base_url=_BASE)
 def test_unauthorized_raises_clock_skew_hint(
     respx_mock: respx.Router, private_key_pem: str
 ) -> None:

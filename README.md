@@ -219,6 +219,9 @@ table.
 
 ## Running the fleet orchestrator
 
+For the safe beta path—dry run, full verification without a PR, draft PRs,
+then live—see [repository onboarding](docs/onboarding.md).
+
 `depfix pipeline` is the Week 6 unattended entrypoint: it runs the same
 scan -> fix -> verify -> PR pipeline as `depfix fix`, but across every repo
 in a batch, gated by each repo's own opt-in `.depfix.yml` (copy

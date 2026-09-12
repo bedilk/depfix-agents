@@ -28,11 +28,23 @@ def pr_title_for(change: BreakingChange) -> str:
     return f"depfix: migrate {change.old_api} -> {change.replacement}"
 
 
-def build_pr_body(change: BreakingChange, result: FixPipelineResult) -> str:
+def build_pr_body(
+    change: BreakingChange, result: FixPipelineResult, *, edits: list[FileEdit] | None = None
+) -> str:
     """Markdown PR body: change summary, migration guide, source evidence
     (when present), a per-file table of edits, and the verification
     summary -- every field used here is real, read directly off ``change``
-    and ``result``."""
+    and ``result``.
+
+    ``edits`` defaults to ``result.edits`` (every candidate edit, including
+    ones that were reverted or never committed) for backward compatibility,
+    but callers that already filtered down to the actually-committable set
+    (see :func:`committable_edits`) should pass that same list here --
+    otherwise the "Files changed" table lists files the PR doesn't actually
+    touch.
+    """
+    if edits is None:
+        edits = list(result.edits)
     lines = [
         f"## {change.package}: `{change.old_api}` -> `{change.replacement}`",
         "",
@@ -48,7 +60,7 @@ def build_pr_body(change: BreakingChange, result: FixPipelineResult) -> str:
         lines += ["", f"Source: {change.source_url}"]
 
     lines += ["", "### Files changed", "", "| File | Verdict | Usages fixed |", "| --- | --- | --- |"]
-    for edit in result.edits:
+    for edit in edits:
         lines.append(f"| `{edit.relpath}` | {edit.verdict.value} | {edit.usages_fixed} |")
 
     verification = result.verification

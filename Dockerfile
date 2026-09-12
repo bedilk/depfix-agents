@@ -24,10 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml requirements.txt ./
+COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
 
-RUN pip install --prefix=/install -r requirements.txt \
+RUN pip install --prefix=/install --require-hashes --no-deps -r requirements.lock \
  && pip install --prefix=/install --no-deps .
 
 # Node.js + npm are needed at runtime: npm installs a target repo's

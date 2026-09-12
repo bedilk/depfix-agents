@@ -22,12 +22,19 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GITHUB_API_URL = "https://api.github.com"
 
+#: Every branch depfix creates or fast-forwards starts with this prefix --
+#: the one place that literal is defined, so the orchestrator's
+#: open-PR-count check (:meth:`depfix.orchestrator.runner.Orchestrator._run_repo`)
+#: and :func:`branch_name_for` can never drift apart the way they did before
+#: (one hardcoded ``"depfix/"`` here, another hardcoded in the orchestrator).
+BRANCH_PREFIX = "depfix/"
+
 
 def branch_name_for(change: BreakingChange) -> str:
     """Deterministic branch name for ``change``, so repeated runs for the
     same breaking change target the same branch instead of piling up a new
     one every time."""
-    return f"depfix/{change.dedupe_key[:12]}"
+    return f"{BRANCH_PREFIX}{change.dedupe_key[:12]}"
 
 
 class BranchWriter:
