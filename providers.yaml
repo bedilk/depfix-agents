@@ -26,6 +26,7 @@ providers:
       - kind: npm_dist_tag
         package: openai
         dist_tag: latest
+        github_repo: openai/openai-node
       - kind: github_release
         repo: openai/openai-node
       - kind: openapi_spec
@@ -52,6 +53,7 @@ providers:
       - kind: npm_dist_tag
         package: stripe
         dist_tag: latest
+        github_repo: stripe/stripe-node
       - kind: github_release
         repo: stripe/stripe-node
       - kind: openapi_spec

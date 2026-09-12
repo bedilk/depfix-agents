@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan fix repos pipeline docker-build docker-up docker-down
+.PHONY: help install install-dev lock test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan fix repos pipeline migrate migration docker-build docker-up docker-down
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -13,6 +13,9 @@ install:  ## Install runtime dependencies
 install-dev:  ## Install with dev extras (tests, lint, mypy)
 	$(PIP) install -e ".[dev]"
 	pre-commit install || true
+
+lock:  ## Regenerate requirements.lock after changing project dependencies
+	pip-compile --generate-hashes --output-file=requirements.lock pyproject.toml
 
 test:  ## Run all tests (excluding integration/e2e)
 	pytest -m "not integration and not e2e"
@@ -68,6 +71,12 @@ repos:  ## List repos visible to the GitHub App installation(s)
 
 pipeline:  ## Fleet orchestrator: scan -> fix -> verify -> PR across many repos' own .depfix.yml
 	depfix pipeline $(ARGS)
+
+migrate:  ## Apply Alembic migrations up to head (URL comes from DATABASE_URL/.env, not alembic.ini)
+	alembic -c alembic.ini upgrade head
+
+migration:  ## Create a new blank Alembic revision (pass MSG="add foo column")
+	alembic -c alembic.ini revision -m "$(MSG)"
 
 docker-build:  ## Build the depfix Docker image
 	docker build -t depfix:local .

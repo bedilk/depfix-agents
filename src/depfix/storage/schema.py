@@ -5,15 +5,13 @@ model) are gone as of Week 2 — see ``docs/decisions.md``. Everything below is
 provider / feed / change-event / breaking-change, keyed off Week 1's
 multi-source model.
 
-Migrations are still deferred: :func:`depfix.storage.db.init_schema` calls
-``Base.metadata.create_all`` at start-up, which is sufficient for new
-tables (``breaking_change``, Week 3's ``repo``/``repo_scan``/``call_site``,
-and Week 4's ``fix_run``/``file_fix``/``test_run``) but *not* for a new
-column on a pre-existing table -- that still needs a manual ``ALTER TABLE
-... ADD COLUMN`` (see ``_ensure_classified_at_column`` in ``storage/db.py``).
-Week 3 and Week 4 both add only new tables, so no new ALTER was needed;
-Alembic adoption is deferred again, until a future week's change is a
-column edit rather than an addition.
+As of Week 7, this is the ORM's own view of the schema -- the source of
+truth for tests (SQLite, via ``Base.metadata.create_all``) and for
+autogenerate diffs. Production Postgres schema *changes* now go through
+versioned Alembic migrations in ``depfix.migrations`` (see
+:func:`depfix.storage.db.init_schema`), not ``create_all``/manual ALTERs --
+``_ensure_classified_at_column`` in ``storage/db.py`` survives only as a
+defensive no-op for pre-Alembic deployments.
 """
 
 from __future__ import annotations
@@ -126,6 +124,7 @@ class ChangeEventRow(Base):
     title: Mapped[str | None] = mapped_column(Text, default=None)
     summary: Mapped[str | None] = mapped_column(Text, default=None)
     body: Mapped[str | None] = mapped_column(Text, default=None)
+    body_url: Mapped[str | None] = mapped_column(Text, default=None)
     severity: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
     dedupe_key: Mapped[str] = mapped_column(String(64), nullable=False)
     detected_at: Mapped[datetime] = mapped_column(

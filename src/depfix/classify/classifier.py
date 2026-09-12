@@ -41,7 +41,10 @@ class Classifier:
             return ClassifyOutcome(changes=changes)
 
         if not event.body.strip():
-            return ClassifyOutcome()
+            # No spec_changes and nothing to read either -- there is no
+            # signal here to classify, terminal (not an error to retry, and
+            # not a trusted "zero changes" verdict either).
+            return ClassifyOutcome(unclassifiable=True)
 
         if self._notes is None:
             return ClassifyOutcome(

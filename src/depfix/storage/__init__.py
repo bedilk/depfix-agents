@@ -1,6 +1,7 @@
 """SQLAlchemy persistence for depfix."""
 
 from depfix.storage.attempt_store import (
+    attempts_for_repo,
     get_change_attempt,
     record_change_attempt,
     touch_no_call_sites,
@@ -41,6 +42,7 @@ __all__ = [
     "RepoScanRow",
     "SpecChangeRow",
     "TestRunRow",
+    "attempts_for_repo",
     "get_change_attempt",
     "get_engine",
     "init_schema",

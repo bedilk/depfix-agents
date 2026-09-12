@@ -217,11 +217,38 @@ class Settings(BaseSettings):
         "processes for one repo in a single run, overridable lower (never higher) by "
         "that repo's own .depfix.yml max_changes_per_run.",
     )
+    pipeline_max_cost_usd_per_run: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Wall-clock budget's cost-ceiling counterpart: once this run's "
+        "cumulative FixPipelineResult.total_cost crosses this, the orchestrator stops "
+        "before the next repo/change the same way an expired --max-duration does. "
+        "None (default) means uncapped -- only the --max-duration wall clock applies.",
+    )
+    pipeline_default_change_limit: int = Field(
+        default=50,
+        ge=1,
+        description="Maximum classified changes considered by a normal fleet run.",
+    )
+    pipeline_newest_first: bool = Field(
+        default=True,
+        description="Consider recent breaking changes before historical backlog.",
+    )
+    pipeline_max_duration_minutes: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Default fleet-run wall-clock budget in minutes; None is unlimited.",
+    )
+    pipeline_require_lock: bool = Field(
+        default=True,
+        description="Require the Postgres advisory lock for live fleet runs.",
+    )
 
     # --- Observability --------------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     environment: Literal["development", "staging", "production", "test"] = "development"
     sentry_dsn: str = Field(default="")
+    log_format: Literal["text", "json"] = "text"
 
 
 @lru_cache(maxsize=1)

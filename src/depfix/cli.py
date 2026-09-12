@@ -36,6 +36,7 @@ import argparse
 import json
 import logging
 import sys
+from collections import Counter
 from pathlib import Path
 
 from rich.console import Console
@@ -46,7 +47,7 @@ from rich.table import Table
 from sqlalchemy import select
 
 from depfix import DependencyFixAgent
-from depfix.apply import EditVerdict, FileEdit, WorkspaceEditor
+from depfix.apply import EditVerdict, FileEdit
 from depfix.classify import (
     Classifier,
     GeminiCompleter,
@@ -56,9 +57,10 @@ from depfix.classify import (
     classify_pending,
 )
 from depfix.clone import CloneError, CloneService
-from depfix.config import get_settings
+from depfix.config import Settings, get_settings
+from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import AgentResult, BreakingChange, ChangeKind, ClassificationSource
-from depfix.core.pipeline import FixPipeline, FixPipelineResult
+from depfix.core.pipeline import FixPipelineResult
 from depfix.evals import (
     CorpusError,
     EvalCategory,
@@ -78,13 +80,13 @@ from depfix.gh import (
     PullRequest,
     branch_name_for,
     build_pr_body,
-    kept_edits,
     open_pull_request,
     pr_title_for,
 )
+from depfix.obs.logging import configure_logging, configure_sentry
 from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome
 from depfix.providers.loader import ProviderConfigError, load_providers_file
-from depfix.retry import RetryLoop
+from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
 from depfix.scanners import (
     CallSiteScanner,
     MatchConfidence,
@@ -105,15 +107,13 @@ from depfix.storage import (
     record_pull_request,
     session_scope,
 )
-from depfix.validators.javascript import FixValidator
-from depfix.verify import Verifier
 from depfix.watcher.runner import Watcher, WatchOutcome
 
 console = Console()
 logger = logging.getLogger(__name__)
 
 _RUN_COMMANDS = {"run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline"}
-_TOP_LEVEL_FLAGS = {"-h", "--help"}
+_TOP_LEVEL_FLAGS = {"-h", "--help", "--log-level", "--log-format"}
 
 
 def _breaking_change_from_json(data: dict) -> BreakingChange:
@@ -159,13 +159,14 @@ def _load_optional_breaking_change(args: argparse.Namespace) -> BreakingChange |
     return _load_breaking_change(args)
 
 
-def _load_pipeline_changes(args: argparse.Namespace) -> list[BreakingChange]:
+def _load_pipeline_changes(
+    args: argparse.Namespace, settings: Settings, *, limit: int
+) -> list[BreakingChange]:
     """Resolve the breaking changes a `pipeline` run should consider.
 
-    ``--change-file``/``--from-event`` (both repeatable) narrow this to an
-    explicit, ad hoc set -- the default, with neither given, is every
-    classified ``breaking_change`` row in the database, which is the normal
-    cron-driven fleet behavior (see ``classify.store.breaking_change_from_row``).
+    Explicit ``--change-file``/``--from-event`` inputs are never truncated.
+    The normal cron path is bounded and newest-first, so an old backlog does
+    not delay urgent changes or make every tick re-evaluate all history.
     """
     changes: list[BreakingChange] = []
     for path in args.change_file or []:
@@ -181,9 +182,12 @@ def _load_pipeline_changes(args: argparse.Namespace) -> list[BreakingChange]:
         return changes
 
     with session_scope() as session:
-        stmt = select(BreakingChangeRow).order_by(BreakingChangeRow.created_at)
-        if args.limit is not None:
-            stmt = stmt.limit(args.limit)
+        order = (
+            BreakingChangeRow.created_at.desc()
+            if settings.pipeline_newest_first
+            else BreakingChangeRow.created_at.asc()
+        )
+        stmt = select(BreakingChangeRow).order_by(order).limit(limit)
         return [breaking_change_from_row(row) for row in session.scalars(stmt)]
 
 
@@ -194,8 +198,9 @@ def _load_pipeline_repos(args: argparse.Namespace, gh_auth: GitHubAppAuth) -> li
     default is every repo visible to every installation of the configured
     GitHub App, which is the normal cron-driven fleet behavior.
     """
-    if args.repo:
-        return list(args.repo)
+    explicit_repos = [*(args.repos or []), *(args.repo or [])]
+    if explicit_repos:
+        return explicit_repos
     repo_full_names: list[str] = []
     for installation in gh_auth.list_installations():
         repo_full_names.extend(r.full_name for r in gh_auth.list_repositories(installation.id))
@@ -213,7 +218,9 @@ def _build_gh_auth(settings) -> GitHubAppAuth | None:
         private_key = Path(settings.github_app_private_key_path).read_text(encoding="utf-8")
     if not private_key:
         return None
-    return GitHubAppAuth(app_id=settings.github_app_id, private_key=private_key)
+    return GitHubAppAuth(
+        app_id=settings.github_app_id, private_key=private_key, api_url=settings.github_api_url
+    )
 
 
 def _build_completer(settings) -> LLMCompleter | None:
@@ -425,39 +432,45 @@ def _outcome_text(change: ChangeOutcome) -> str:
     return "?"
 
 
-def _print_orchestrator_outcome(outcome: OrchestratorOutcome) -> None:
-    table = Table(title="Fleet Pipeline Run")
-    table.add_column("Repo", style="cyan")
-    table.add_column("Change")
-    table.add_column("Outcome")
-    table.add_column("Detail", style="dim")
-
+def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: bool = False) -> None:
+    """Print actions, not an unbounded matrix of fleet skips."""
+    console.print(f"Fleet pipeline run {outcome.run_id}")
+    skip_tally: Counter[str] = Counter()
     for repo in outcome.repos:
         if repo.skip_reason is not None:
-            table.add_row(
-                repo.repo_full_name, "—", f"[yellow]skip: {repo.skip_reason.value}[/yellow]", ""
-            )
+            skip_tally[repo.skip_reason.value] += 1
+            if show_skips:
+                console.print(f"  {repo.repo_full_name}: skipped ({repo.skip_reason.value})")
             continue
         if repo.error:
-            table.add_row(repo.repo_full_name, "—", "[red]error[/red]", repo.error)
+            console.print(f"  [red]{repo.repo_full_name}: ERROR {repo.error}[/red]")
             continue
-        if not repo.changes:
-            table.add_row(repo.repo_full_name, "—", "[dim](no changes considered)[/dim]", "")
-            continue
+        acted = [change for change in repo.changes if not change.skipped]
         for change in repo.changes:
-            table.add_row(
-                repo.repo_full_name,
-                f"{change.package}: {change.old_api}",
-                _outcome_text(change),
-                change.pr_url or change.detail,
+            if change.skipped:
+                assert change.skip_reason is not None
+                skip_tally[change.skip_reason.value] += 1
+        if not acted:
+            continue
+        console.print(f"  {repo.repo_full_name} ({repo.open_pr_count} open depfix PR(s)):")
+        for change in acted:
+            verb = "would process" if change.planned else _outcome_text(change)
+            suffix = change.pr_url or (f" -- {change.detail}" if change.detail else "")
+            suppressed = (
+                f" [{change.suppressed_call_sites} path-suppressed]"
+                if change.suppressed_call_sites
+                else ""
             )
-    console.print(table)
+            console.print(f"    {change.package} {change.old_api}: {verb}{suppressed}{suffix}")
     console.print(
-        f"[dim]repos:[/dim] {len(outcome.repos)}  "
-        f"[dim]repo failures:[/dim] {len(outcome.failures)}  "
-        f"[dim]PRs opened:[/dim] {outcome.prs_opened}  "
-        f"[dim]changes failed:[/dim] {outcome.changes_failed}\n"
+        f"\n{outcome.prs_opened} PR(s), {outcome.changes_failed} failed change(s), "
+        f"${outcome.total_cost_usd:.4f} spent"
     )
+    if skip_tally and not show_skips:
+        summary = ", ".join(f"{count}x {reason}" for reason, count in skip_tally.most_common())
+        console.print(f"skipped: {summary} (--show-skips for detail)")
+    if outcome.stopped_early:
+        console.print("STOPPED EARLY: budget exhausted -- remaining work resumes next run")
 
 
 def _cmd_watch(args: argparse.Namespace) -> int:
@@ -530,6 +543,7 @@ def _cmd_classify(args: argparse.Namespace) -> int:
     console.print(
         f"[dim]events processed:[/dim] {summary.events_processed}  "
         f"[dim]breaking changes created:[/dim] {summary.changes_created}  "
+        f"[dim]unclassifiable:[/dim] {summary.unclassifiable}  "
         f"[dim]errors:[/dim] {len(summary.errors)}\n"
     )
     for err in summary.errors:
@@ -708,25 +722,14 @@ def _open_pr_for_fix(
     name: str,
     breaking: BreakingChange,
     result: FixPipelineResult,
+    edits: list[FileEdit],
 ) -> PullRequest | None:
-    """Push KEPT edits to a deterministic branch and open (or reuse) a PR.
-
-    Remote repos only -- a ``--path`` run has nowhere to push. Requires the
-    fix to have actually been verified against the real test suite: an
-    unverified edit is never trustworthy enough to land in a PR.
-    """
+    """Push the shared fix-service's committable edits to a PR."""
     if not args.repo:
         console.print("[yellow]Skipping --open-pr: only supported with --repo, not --path.[/yellow]")
         return None
-    if result.verification is None or not result.verification.ran:
-        console.print(
-            "[yellow]Skipping --open-pr: fix was not verified against the real test "
-            "suite (see --no-verify).[/yellow]"
-        )
-        return None
-    kept = kept_edits(result)
-    if not kept:
-        console.print("[yellow]Skipping --open-pr: no KEPT (test-confirmed) edits.[/yellow]")
+    if not edits:
+        console.print("[yellow]Skipping --open-pr: no committable edits.[/yellow]")
         return None
 
     pr_gh_auth = _build_gh_auth(settings)
@@ -747,7 +750,7 @@ def _open_pr_for_fix(
                 branch=head_branch,
                 base_branch=base_branch,
                 message=f"depfix: migrate {breaking.old_api} -> {breaking.replacement}",
-                edits=kept,
+                edits=edits,
             )
         pr = open_pull_request(
             owner=owner,
@@ -837,6 +840,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
     gh_auth: GitHubAppAuth | None = None
     checkout = None
     result: FixPipelineResult | None = None
+    service_result: FixServiceResult | None = None
     try:
         if args.path:
             owner, name = "local", Path(args.path).name
@@ -864,35 +868,10 @@ def _cmd_fix(args: argparse.Namespace) -> int:
             console.print("[yellow]No actionable call sites found for this change.[/yellow]")
             return 0
 
-        editor = WorkspaceEditor(checkout)
-        verifier: Verifier | None = None
-        if not args.no_verify and settings.verify_enabled:
-            verifier = Verifier(
-                editor,
-                install_timeout=settings.verify_install_timeout,
-                test_timeout=settings.verify_test_timeout,
-                ignore_scripts=settings.verify_ignore_scripts,
-                max_output_bytes=settings.verify_max_output_bytes,
-            )
-
         max_retries = 0 if args.no_retry else (
             args.max_retries if args.max_retries is not None else settings.retry_max_rounds
         )
-        retry_loop: RetryLoop | None = None
-        if verifier is not None and max_retries > 0:
-            retry_loop = RetryLoop(
-                fixer,
-                FixValidator(use_ast_validation=settings.fix_validate_syntax),
-                verifier,
-                max_rounds=max_retries,
-            )
-
-        pipeline = FixPipeline(
-            fixer,
-            validator=FixValidator(use_ast_validation=settings.fix_validate_syntax),
-            verifier=verifier,
-            retry_loop=retry_loop,
-        )
+        repo_config = RepoConfig(version=SUPPORTED_VERSION, verify=not args.no_verify)
 
         with Progress(
             SpinnerColumn(),
@@ -900,7 +879,16 @@ def _cmd_fix(args: argparse.Namespace) -> int:
             console=console,
         ) as progress:
             task = progress.add_task("Fixing and verifying...", total=None)
-            result = pipeline.run(scan_result, breaking, editor)
+            service_result = run_fix_for_change(
+                checkout=checkout,
+                scan_result=scan_result,
+                change=breaking,
+                settings=settings,
+                repo_config=repo_config,
+                fixer=fixer,
+                max_retries=max_retries,
+            )
+            result = service_result.pipeline_result
             progress.update(task, completed=True)
     except (CloneError, GitHubAppError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
@@ -916,6 +904,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
             clone_service.cleanup(checkout)
 
     assert result is not None
+    assert service_result is not None
     console.print()
     _print_fix_result(result)
     if args.show_diffs:
@@ -931,7 +920,9 @@ def _cmd_fix(args: argparse.Namespace) -> int:
 
     pr_result: PullRequest | None = None
     if args.open_pr:
-        pr_result = _open_pr_for_fix(args, settings, owner, name, breaking, result)
+        pr_result = _open_pr_for_fix(
+            args, settings, owner, name, breaking, result, service_result.committable
+        )
 
     if not args.no_save:
         init_schema()
@@ -1045,7 +1036,15 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         return 0
 
     try:
-        changes = _load_pipeline_changes(args)
+        changes = _load_pipeline_changes(
+            args,
+            settings,
+            limit=(
+                args.limit
+                if args.limit is not None
+                else settings.pipeline_default_change_limit
+            ),
+        )
     except (FileNotFoundError, LookupError, json.JSONDecodeError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
         gh_auth.close()
@@ -1071,10 +1070,13 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         max_repo_mb=settings.clone_max_repo_mb,
     )
 
+    mode = (
+        "dry-run" if args.dry_run else "no-pr" if args.no_pr else "force" if args.force else "live"
+    )
     _print_header()
     console.print(
         f"[dim]Repos:[/dim] {len(repo_full_names)}  [dim]Changes:[/dim] {len(changes)}  "
-        f"[dim]Mode:[/dim] {'force' if args.force else 'normal'}\n"
+        f"[dim]Mode:[/dim] {mode}\n"
     )
 
     orchestrator = Orchestrator(
@@ -1084,6 +1086,16 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         providers=providers,
         fixer_factory=fixer_factory,
         force=args.force,
+        dry_run=args.dry_run,
+        no_pr=args.no_pr,
+        use_lock=not args.no_lock and not args.dry_run and settings.pipeline_require_lock,
+        max_duration_seconds=(
+            (args.max_duration if args.max_duration is not None else settings.pipeline_max_duration_minutes)
+            * 60.0
+            if (args.max_duration is not None or settings.pipeline_max_duration_minutes is not None)
+            else None
+        ),
+        max_cost_usd=args.max_cost,
     )
 
     try:
@@ -1095,7 +1107,12 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     finally:
         gh_auth.close()
 
-    _print_orchestrator_outcome(outcome)
+    _print_orchestrator_outcome(outcome, show_skips=args.show_skips)
+
+    if outcome.stopped_early:
+        console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
+    if not outcome.locked:
+        console.print("[yellow]Another orchestrator run already holds the lock; skipped.[/yellow]")
 
     return 1 if outcome.failures else 0
 
@@ -1167,7 +1184,9 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     _print_header()
     console.print(f"[dim]Corpus:[/dim] {corpus_dir}  [dim]Cases:[/dim] {len(cases)}\n")
 
-    runner = EvalRunner(completer=completer, fixer=fixer)
+    runner = EvalRunner(
+        completer=completer, fixer=fixer, default_min_recall=settings.scan_min_recall
+    )
     report = runner.run(cases, use_llm=use_llm)
 
     _print_eval_report(report)
@@ -1203,6 +1222,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="depfix",
         description="Fix breaking dependency changes with AI",
     )
+    p.add_argument(
+        "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default=None
+    )
+    p.add_argument("--log-format", choices=["text", "json"], default=None)
     sub = p.add_subparsers(dest="command")
 
     # -- run --------------------------------------------------------------------
@@ -1240,7 +1263,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Ollama model tag when --provider=ollama (default: qwen2.5-coder:7b)",
     )
-    run_p.add_argument("--log-level", type=str, default=None, help="DEBUG/INFO/WARNING/ERROR")
+    run_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS, help="DEBUG/INFO/WARNING/ERROR")
 
     # -- watch ------------------------------------------------------------------
     watch_p = sub.add_parser(
@@ -1272,7 +1295,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the full structural change list for each event",
     )
-    watch_p.add_argument("--log-level", type=str, default=None)
+    watch_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     # -- classify -----------------------------------------------------------------
     classify_p = sub.add_parser(
@@ -1286,7 +1309,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the release-notes LLM path; only spec-diff events classify",
     )
-    classify_p.add_argument("--log-level", type=str, default=None)
+    classify_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     # -- eval ---------------------------------------------------------------------
     eval_p = sub.add_parser("eval", help="Score the classify/fixer pipeline against the corpus")
@@ -1324,7 +1347,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Compare against a previously-saved report; exit non-zero on any regression",
     )
-    eval_p.add_argument("--log-level", type=str, default=None)
+    eval_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     # -- scan -------------------------------------------------------------------
     scan_p = sub.add_parser("scan", help="Find SDK call sites in a local checkout or a cloned repo")
@@ -1374,7 +1397,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also print LOW-confidence (report-only, never auto-fixed) call sites",
     )
-    scan_p.add_argument("--log-level", type=str, default=None)
+    scan_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     # -- fix --------------------------------------------------------------------
     fix_p = sub.add_parser(
@@ -1478,7 +1501,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="PR base branch (with --open-pr; default: the repo's default branch)",
     )
-    fix_p.add_argument("--log-level", type=str, default=None)
+    fix_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     # -- repos --------------------------------------------------------------------
     repos_p = sub.add_parser(
@@ -1491,13 +1514,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         help="Only list repos for this installation id",
     )
-    repos_p.add_argument("--log-level", type=str, default=None)
+    repos_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     # -- pipeline -----------------------------------------------------------------
     pipeline_p = sub.add_parser(
         "pipeline",
         help="Fleet orchestrator: scan -> fix -> verify -> PR across many repos, "
         "gated by each repo's own .depfix.yml",
+    )
+    pipeline_p.add_argument(
+        "repos",
+        nargs="*",
+        help="OWNER/NAME; omit to use every repository visible to the GitHub App",
     )
     pipeline_p.add_argument(
         "--repo",
@@ -1569,7 +1597,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="Bypass bookkeeping skips (already-terminal, max attempts, cooldown, max "
         "open PRs, max changes per run) -- a repo's own .depfix.yml is never bypassed",
     )
-    pipeline_p.add_argument("--log-level", type=str, default=None)
+    pipeline_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run the real scan -> fix -> verify pipeline but write nothing: no ledger "
+        "row, no branch commit, no PR. Reported outcomes are predictions (planned=True), "
+        "the first rung of the onboarding rehearsal ladder before --no-pr and live.",
+    )
+    pipeline_p.add_argument(
+        "--no-pr",
+        action="store_true",
+        help="Fix and verify for real (real ledger writes) but never open a PR, "
+        "regardless of what a repo's own .depfix.yml says -- the middle rung of the "
+        "onboarding rehearsal ladder, between --dry-run and live.",
+    )
+    pipeline_p.add_argument(
+        "--max-duration",
+        type=float,
+        default=None,
+        metavar="MINUTES",
+        help="Stop cleanly between repos after this many minutes (default: "
+        "PIPELINE_MAX_DURATION_MINUTES).",
+    )
+    pipeline_p.add_argument(
+        "--max-cost",
+        type=float,
+        default=None,
+        metavar="USD",
+        help="Stop between changes once LLM spend reaches this USD amount (default: "
+        "PIPELINE_MAX_COST_USD_PER_RUN).",
+    )
+    pipeline_p.add_argument(
+        "--no-lock",
+        action="store_true",
+        help="Proceed without the advisory lock; intended only for deliberate parallel runs.",
+    )
+    pipeline_p.add_argument(
+        "--show-skips",
+        action="store_true",
+        help="Print a row for every skipped repo and change too, not just the ones "
+        "actually processed.",
+    )
+    pipeline_p.add_argument("--log-level", type=str, default=argparse.SUPPRESS)
 
     return p
 
@@ -1655,10 +1724,14 @@ def main(argv: list[str] | None = None) -> int:
 
     args = build_parser().parse_args(raw)
 
-    logging.basicConfig(
-        level=(getattr(args, "log_level", None) or get_settings().log_level).upper(),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    settings = get_settings()
+    log_level = getattr(args, "log_level", None) or settings.log_level
+    # Human-readable in a developer's terminal, JSON lines everywhere else
+    # (staging/production/test) where a log aggregator, not a human, is the
+    # reader. See depfix.obs.logging for the JSON shape.
+    log_format = getattr(args, "log_format", None) or settings.log_format
+    configure_logging(log_level, json_output=log_format == "json")
+    configure_sentry(settings.sentry_dsn, environment=settings.environment)
 
     if args.command == "watch":
         return _cmd_watch(args)

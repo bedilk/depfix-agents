@@ -9,7 +9,14 @@ import yaml
 
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.evals.loader import CorpusError, load_corpus_dir, load_corpus_file
-from depfix.evals.models import CaseResult, EvalCategory, EvalReport, ExpectedChange, FixAssertion
+from depfix.evals.models import (
+    CaseResult,
+    EvalCase,
+    EvalCategory,
+    EvalReport,
+    ExpectedChange,
+    FixAssertion,
+)
 from depfix.evals.runner import EvalRunner, load_report, save_report
 from depfix.evals.scoring import compare_reports, score_classification, score_fix
 
@@ -252,3 +259,57 @@ def test_eval_runner_skips_llm_cases_when_use_llm_false() -> None:
     assert all(c.skipped for c in report.cases)
     assert report.scored_cases == []
     assert report.pass_rate == 1.0
+
+
+# --- EvalRunner: call_sites min_recall wiring (Settings.scan_min_recall) ------
+
+
+def _call_sites_case(*, min_recall: float | None) -> EvalCase:
+    return EvalCase(
+        id="cs-1",
+        category=EvalCategory.CALL_SITES,
+        verified=True,
+        fixture="cs-fixture",
+        min_recall=min_recall,
+    )
+
+
+def test_eval_runner_call_sites_uses_case_min_recall_when_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A case's own ``min_recall`` overrides ``default_min_recall`` --
+    `Settings.scan_min_recall` is only the corpus-wide fallback."""
+    (tmp_path / "cs-fixture").mkdir()
+    seen: dict[str, float | None] = {}
+
+    def fake_score_call_sites(expected, forbidden_files, call_sites, *, min_recall=None):
+        seen["min_recall"] = min_recall
+        return True, "stubbed"
+
+    monkeypatch.setattr("depfix.evals.runner.score_call_sites", fake_score_call_sites)
+
+    runner = EvalRunner(fixtures_dir=tmp_path, default_min_recall=0.5)
+    runner._run_call_sites(_call_sites_case(min_recall=0.99))
+
+    assert seen["min_recall"] == 0.99
+
+
+def test_eval_runner_call_sites_falls_back_to_default_min_recall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No per-case override -- the harness's floor is whatever
+    ``Settings.scan_min_recall`` the CLI passed in as ``default_min_recall``,
+    not a second hardcoded literal."""
+    (tmp_path / "cs-fixture").mkdir()
+    seen: dict[str, float | None] = {}
+
+    def fake_score_call_sites(expected, forbidden_files, call_sites, *, min_recall=None):
+        seen["min_recall"] = min_recall
+        return True, "stubbed"
+
+    monkeypatch.setattr("depfix.evals.runner.score_call_sites", fake_score_call_sites)
+
+    runner = EvalRunner(fixtures_dir=tmp_path, default_min_recall=0.5)
+    runner._run_call_sites(_call_sites_case(min_recall=None))
+
+    assert seen["min_recall"] == 0.5

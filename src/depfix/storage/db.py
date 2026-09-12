@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -37,17 +38,50 @@ def get_engine() -> Engine:
 
 
 def init_schema() -> None:
-    """Create all tables if they do not already exist.
+    """Bring the schema up to date. Cheap and idempotent — safe to invoke
+    on every poller/orchestrator start-up.
 
-    Cheap idempotent call — safe to invoke on every poller start-up until
-    Alembic lands (see docs/decisions.md). ``create_all`` only creates
-    missing *tables*, though — it will not add a column to a table that
-    already exists, so the Week 2 ``classified_at`` column on the
-    pre-existing ``change_event`` table needs its own idempotent ALTER.
+    SQLite (dev/test) keeps the original ``create_all`` shortcut: there's
+    no shared server whose schema needs versioning, and every test's
+    in-memory database is thrown away at the end of the test anyway.
+    Postgres (production) instead runs the real Alembic migrations in
+    ``depfix.migrations`` up to ``head`` — see :func:`_upgrade_to_head`.
+
+    ``_ensure_classified_at_column`` runs after either path as a defensive
+    no-op ALTER: it's what pre-Alembic Postgres deployments relied on to
+    pick up the Week 2 ``classified_at`` column, and stays harmless (``ADD
+    COLUMN IF NOT EXISTS``) now that the baseline migration also creates
+    that column on fresh databases.
     """
     engine = get_engine()
-    Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(engine)
+    else:
+        _upgrade_to_head(engine)
     _ensure_classified_at_column(engine)
+
+
+def _upgrade_to_head(engine: Engine) -> None:
+    """Run ``depfix.migrations`` up to ``head`` against a Postgres database.
+
+    Builds an in-memory Alembic ``Config`` rather than reading
+    ``alembic.ini`` from disk — the orchestrator may be running from
+    inside the Docker image, which only ships ``src/`` (see the
+    Dockerfile), not the repo root. ``script_location`` is resolved
+    relative to this file instead, so it works the same way whether this
+    runs from a checked-out repo or an installed package. ``env.py``
+    itself ignores whatever URL (if any) ends up on this ``Config`` and
+    always reads ``Settings.database_url`` directly, so there's no second
+    "which database" value to keep in sync.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    migrations_dir = Path(__file__).resolve().parent.parent / "migrations"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(migrations_dir))
+    logger.info("running Alembic migrations to head against %s", engine.url.render_as_string())
+    command.upgrade(cfg, "head")
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:

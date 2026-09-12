@@ -120,6 +120,7 @@ class ChangeEvent:
     title: str = ""
     summary: str = ""
     body: str = ""  # raw notes / markdown, unparsed. Week 2 classifies this.
+    body_url: str | None = None  # link to the release-notes page `body` came from
     severity: Severity = Severity.UNKNOWN
     spec_changes: list[SpecChange] = field(default_factory=list)
     detected_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))

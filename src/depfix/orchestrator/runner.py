@@ -1,4 +1,4 @@
-"""The Week 6 fleet orchestrator: unattended scan -> fix -> verify -> PR
+"""The Week 6/7 fleet orchestrator: unattended scan -> fix -> verify -> PR
 across many repos, gated by each repo's own opt-in ``.depfix.yml`` and an
 idempotency ledger so cron-driven reruns never reopen a PR or reprocess a
 terminal outcome.
@@ -10,45 +10,78 @@ its own try/except, producing a failure outcome rather than propagating.
 All the actual go/no-go logic lives in the pure :mod:`depfix.orchestrator.policy`;
 this module is the thin, mockable shell that gathers the inputs that
 ``decide()`` needs and acts on its verdict.
+
+Week 7 hardening on top of the Week 6 shape:
+
+- Disabled providers (``ProviderSpec.enabled=False``) are filtered out of
+  the known-provider set at construction time, not just skipped later --
+  a disabled provider must behave as fully unknown to the orchestrator.
+- Each ``(repo, change)`` pair gets its own DB transaction (one
+  ``session_scope()`` per change), not one long-lived session for the
+  whole repo -- a failure on change 5 can no longer leave change 6's
+  session in a half-committed state, and a slow clone/fix/verify/PR round
+  trip for one change no longer holds a transaction open for every other
+  change behind it.
+- A repo's ``.depfix.yml`` ``paths`` filter is applied to the scan result
+  *before* the fix pipeline runs, not just to the already-fixed edits
+  right before opening a PR -- an out-of-scope file no longer costs an
+  LLM call just to have its result discarded.
+- A single Postgres advisory lock (see :mod:`depfix.storage.lock`) and an
+  optional wall-clock budget (see :mod:`depfix.orchestrator.budget`) keep
+  two overlapping cron ticks from racing each other and keep one run from
+  running past its window. That same budget also tracks cumulative LLM
+  spend (``Settings.pipeline_max_cost_usd_per_run``), so a run can stop
+  early on either ceiling, not just the clock.
+- A ``no_pr`` override forces every repo's *effective* open-PR decision to
+  ``False`` for one run, independent of ``dry_run`` and of what that
+  repo's own ``.depfix.yml`` says -- the middle rung of the onboarding
+  rehearsal ladder (``--dry-run`` -> ``--no-pr`` -> ``draft_pr: true`` ->
+  live).
 """
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import logging
 from collections.abc import Callable
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from depfix.apply.models import FileEdit
-from depfix.apply.workspace import WorkspaceEditor
 from depfix.clone import Checkout, CloneService
 from depfix.config import Settings
+from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import BreakingChange
-from depfix.core.pipeline import FixPipeline, FixPipelineResult
+from depfix.core.pipeline import FixPipelineResult
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh import (
+    BRANCH_PREFIX,
     BranchWriter,
     GitHubAppAuth,
     GitHubAppError,
     PullRequest,
     branch_name_for,
     build_pr_body,
-    committable_edits,
     open_pull_request,
     pr_title_for,
 )
+from depfix.obs.logging import log_context
+from depfix.orchestrator.budget import RunBudget
 from depfix.orchestrator.models import ChangeOutcome, OrchestratorOutcome, RepoOutcome
 from depfix.orchestrator.policy import SkipReason, decide
 from depfix.providers.models import ProviderSpec
 from depfix.repoconfig.loader import RepoConfigError, parse_repo_config
 from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
-from depfix.retry.loop import RetryLoop
 from depfix.scanners import CallSiteScanner, build_scan_target, scan_checkout, upsert_repo
 from depfix.scanners.models import RepoScanResult
 from depfix.storage import (
     AttemptStatus,
-    get_change_attempt,
+    ChangeAttemptRow,
+    attempts_for_repo,
+    get_engine,
     init_schema,
     record_change_attempt,
     record_fix_run,
@@ -56,8 +89,7 @@ from depfix.storage import (
     session_scope,
     touch_no_call_sites,
 )
-from depfix.validators.javascript import FixValidator
-from depfix.verify import Verifier
+from depfix.storage.lock import advisory_lock
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +113,28 @@ class Orchestrator:
         providers: list[ProviderSpec],
         fixer_factory: Callable[[], FixGenerator | OllamaFixGenerator],
         force: bool = False,
+        dry_run: bool = False,
+        no_pr: bool = False,
+        use_lock: bool = True,
+        max_duration_seconds: float | None = None,
+        max_cost_usd: float | None = None,
     ) -> None:
         self._settings = settings
         self._gh_auth = gh_auth
         self._clone_service = clone_service
-        self._providers = {p.id: p for p in providers}
+        # Disabled providers are dropped here, not just skipped later --
+        # `known_provider_ids` (what `decide()` treats as "capable of
+        # acting on") must never include them.
+        self._providers = {p.id: p for p in providers if p.enabled}
         self._known_provider_ids = frozenset(self._providers)
         self._fixer_factory = fixer_factory
         self._force = force
+        self._dry_run = dry_run
+        self._no_pr = no_pr
+        self._use_lock = use_lock
+        self._max_duration_seconds = max_duration_seconds
+        self._max_cost_usd = max_cost_usd
+        self._budget = RunBudget(None)  # replaced at the top of every run()
 
     def run(
         self, repo_full_names: list[str], changes: list[BreakingChange]
@@ -102,16 +148,40 @@ class Orchestrator:
         ``error``.
         """
         init_schema()
-        outcome = OrchestratorOutcome()
-        for repo_full_name in repo_full_names:
-            try:
-                outcome.repos.append(self._run_repo(repo_full_name, changes))
-            except Exception as exc:
-                logger.exception("repo %s failed", repo_full_name)
-                outcome.repos.append(RepoOutcome(repo_full_name=repo_full_name, error=str(exc)))
+        outcome = OrchestratorOutcome(run_id=uuid4().hex)
+        engine = get_engine()
+        lock_ctx = advisory_lock(engine) if self._use_lock else contextlib.nullcontext(True)
+
+        with log_context(run_id=outcome.run_id), lock_ctx as acquired:
+            if not acquired:
+                outcome.locked = False
+                return outcome
+
+            self._budget = RunBudget(
+                self._max_duration_seconds,
+                (
+                    self._settings.pipeline_max_cost_usd_per_run
+                    if self._max_cost_usd is None
+                    else self._max_cost_usd
+                ),
+            )
+            for repo_full_name in repo_full_names:
+                if self._budget.expired:
+                    logger.warning("max-duration budget exhausted; stopping run early")
+                    outcome.stopped_early = True
+                    break
+                try:
+                    outcome.repos.append(self._run_repo(repo_full_name, changes))
+                except Exception as exc:
+                    logger.exception("repo %s failed", repo_full_name)
+                    outcome.repos.append(RepoOutcome(repo_full_name=repo_full_name, error=str(exc)))
         return outcome
 
     def _run_repo(self, repo_full_name: str, changes: list[BreakingChange]) -> RepoOutcome:
+        with log_context(repo=repo_full_name):
+            return self._run_repo_body(repo_full_name, changes)
+
+    def _run_repo_body(self, repo_full_name: str, changes: list[BreakingChange]) -> RepoOutcome:
         owner, _, name = repo_full_name.partition("/")
         if not name:
             return RepoOutcome(
@@ -153,10 +223,8 @@ class Orchestrator:
             open_prs = self._gh_auth.list_open_pull_requests(owner, name, base=base_branch)
         except GitHubAppError as exc:
             return RepoOutcome(repo_full_name=repo_full_name, error=str(exc))
-        open_pr_count = sum(1 for pr in open_prs if pr.head_branch.startswith("depfix/"))
+        open_pr_count = sum(1 for pr in open_prs if pr.head_branch.startswith(BRANCH_PREFIX))
 
-        change_outcomes: list[ChangeOutcome] = []
-        changes_processed = 0
         with session_scope() as session:
             upsert_repo(
                 session,
@@ -166,34 +234,46 @@ class Orchestrator:
                 installation_id=installation.id,
                 default_branch=base_branch,
             )
+            attempts = attempts_for_repo(session, repo_id=repo_full_name)
 
-            for change in changes:
-                attempt = get_change_attempt(
-                    session, repo_id=repo_full_name, dedupe_key=change.dedupe_key
-                )
-                skip_reason = decide(
-                    repo_config=repo_config,
-                    change=change,
-                    known_provider_ids=self._known_provider_ids,
-                    attempt=attempt,
-                    current_ref_sha=current_ref_sha,
-                    open_pr_count=open_pr_count,
-                    changes_processed_this_run=changes_processed,
-                    settings=self._settings,
-                    force=self._force,
-                )
-                if skip_reason is not None:
-                    change_outcomes.append(
-                        ChangeOutcome(
-                            dedupe_key=change.dedupe_key,
-                            package=change.package,
-                            old_api=change.old_api,
-                            skip_reason=skip_reason,
-                        )
+        change_outcomes: list[ChangeOutcome] = []
+        changes_processed = 0
+        stopped_early = False
+
+        for change in changes:
+            if self._budget.expired:
+                stopped_early = True
+                break
+
+            attempt = attempts.get(change.dedupe_key)
+            skip_reason = decide(
+                repo_config=repo_config,
+                change=change,
+                known_provider_ids=self._known_provider_ids,
+                attempt=attempt,
+                current_ref_sha=current_ref_sha,
+                open_pr_count=open_pr_count,
+                changes_processed_this_run=changes_processed,
+                settings=self._settings,
+                force=self._force,
+            )
+            if skip_reason is not None:
+                change_outcomes.append(
+                    ChangeOutcome(
+                        dedupe_key=change.dedupe_key,
+                        package=change.package,
+                        old_api=change.old_api,
+                        skip_reason=skip_reason,
                     )
-                    continue
+                )
+                continue
 
-                changes_processed += 1
+            changes_processed += 1
+            # One transaction per change -- a failure (or crash) while
+            # processing this change commits or rolls back only this
+            # change's own ledger write, never a prior change's already
+            # -committed work in the same repo.
+            with session_scope() as session:
                 change_outcome = self._process_change(
                     session,
                     owner=owner,
@@ -204,13 +284,24 @@ class Orchestrator:
                     repo_config=repo_config,
                     base_branch=base_branch,
                     current_ref_sha=current_ref_sha,
+                    attempt=attempt,
                 )
-                change_outcomes.append(change_outcome)
-                if change_outcome.attempt_status == AttemptStatus.PR_OPENED:
-                    open_pr_count += 1
-                session.commit()
+            change_outcomes.append(change_outcome)
+            self._budget.record_cost(change_outcome.cost_usd)
+            if change_outcome.attempt_status == AttemptStatus.PR_OPENED:
+                open_pr_count += 1
 
-        return RepoOutcome(repo_full_name=repo_full_name, changes=change_outcomes)
+        if stopped_early:
+            logger.warning(
+                "max-duration budget exhausted mid-repo for %s; %d/%d changes considered",
+                repo_full_name,
+                changes_processed,
+                len(changes),
+            )
+
+        return RepoOutcome(
+            repo_full_name=repo_full_name, changes=change_outcomes, open_pr_count=open_pr_count
+        )
 
     def _process_change(
         self,
@@ -224,11 +315,48 @@ class Orchestrator:
         repo_config: RepoConfig,
         base_branch: str,
         current_ref_sha: str,
+        attempt: ChangeAttemptRow | None,
     ) -> ChangeOutcome:
         """Scan, fix, verify, and (if configured) open a PR for one
         ``(repo, change)`` pair -- isolated so one change's bug can't cost
         the rest of this repo's run its results (see :meth:`_run_repo`).
+
+        Under ``dry_run``, every branch below still runs the real
+        scan/fix/verify pipeline (so the reported outcome reflects what
+        would really happen) but skips every DB write, branch commit, and
+        PR creation -- ``planned=True`` on the returned outcome marks it as
+        a prediction, not a completed action.
         """
+        # `attempt.attempts_used` counts attempts already recorded for this
+        # change; +1 names *this* attempt, so log lines read "attempt 1" on
+        # a change's first try, not "attempt 0".
+        attempt_number = (attempt.attempts_used if attempt else 0) + 1
+        with log_context(dedupe_key=change.dedupe_key, attempt=attempt_number):
+            return self._process_change_body(
+                session,
+                owner=owner,
+                name=name,
+                repo_full_name=repo_full_name,
+                installation_id=installation_id,
+                change=change,
+                repo_config=repo_config,
+                base_branch=base_branch,
+                current_ref_sha=current_ref_sha,
+            )
+
+    def _process_change_body(
+        self,
+        session: Session,
+        *,
+        owner: str,
+        name: str,
+        repo_full_name: str,
+        installation_id: int,
+        change: BreakingChange,
+        repo_config: RepoConfig,
+        base_branch: str,
+        current_ref_sha: str,
+    ) -> ChangeOutcome:
         outcome = ChangeOutcome(
             dedupe_key=change.dedupe_key, package=change.package, old_api=change.old_api
         )
@@ -247,37 +375,65 @@ class Orchestrator:
                 checkout, target, repo_full_name=repo_full_name, scanner=scanner
             )
 
+            # Repo-scoped path filter applies *before* any fix is
+            # generated -- an out-of-scope file shouldn't cost an LLM call
+            # just to have its edit discarded later.
+            before_actionable = len(scan_result.actionable_sites)
+            scan_result = dataclasses.replace(
+                scan_result,
+                call_sites=[
+                    site for site in scan_result.call_sites if repo_config.paths.allows(site.filepath)
+                ],
+            )
+            suppressed_call_sites = before_actionable - len(scan_result.actionable_sites)
+
             if not scan_result.actionable_sites:
-                touch_no_call_sites(
-                    session,
-                    repo_id=repo_full_name,
-                    dedupe_key=change.dedupe_key,
-                    ref_sha=current_ref_sha,
-                )
-                outcome.attempt_status = AttemptStatus.NO_CALL_SITES
-                outcome.detail = "no actionable call sites"
-                return outcome
-
-            fix_result = self._run_fix_pipeline(checkout, scan_result, change, repo_config)
-
-            if repo_config.open_pr:
-                committable = [
-                    edit
-                    for edit in committable_edits(
-                        fix_result, allow_unverified=not repo_config.verify
-                    )
-                    if repo_config.paths.allows(edit.relpath)
-                ]
-                if not committable:
-                    record_change_attempt(
+                if not self._dry_run:
+                    touch_no_call_sites(
                         session,
                         repo_id=repo_full_name,
                         dedupe_key=change.dedupe_key,
-                        status=AttemptStatus.NO_KEPT_EDITS,
                         ref_sha=current_ref_sha,
                     )
+                outcome.attempt_status = AttemptStatus.NO_CALL_SITES
+                outcome.suppressed_call_sites = suppressed_call_sites
+                outcome.detail = (
+                    "no actionable call sites"
+                    if not suppressed_call_sites
+                    else f"no actionable call sites after paths filter ({suppressed_call_sites} suppressed)"
+                )
+                outcome.planned = self._dry_run
+                return outcome
+
+            fix_service_result = self._run_fix_pipeline(checkout, scan_result, change, repo_config)
+            fix_result = fix_service_result.pipeline_result
+            outcome.cost_usd = fix_result.total_cost
+            outcome.suppressed_call_sites = suppressed_call_sites
+
+            # --no-pr forces this decision to False for the whole run,
+            # regardless of what this repo's own .depfix.yml says -- see
+            # `self._no_pr`.
+            effective_open_pr = repo_config.open_pr and not self._no_pr
+            if effective_open_pr:
+                committable = fix_service_result.committable
+                if not committable:
+                    if not self._dry_run:
+                        record_change_attempt(
+                            session,
+                            repo_id=repo_full_name,
+                            dedupe_key=change.dedupe_key,
+                            status=AttemptStatus.NO_KEPT_EDITS,
+                            ref_sha=current_ref_sha,
+                        )
                     outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
                     outcome.detail = "no kept/committable edits"
+                    outcome.planned = self._dry_run
+                    return outcome
+
+                if self._dry_run:
+                    outcome.attempt_status = AttemptStatus.PR_OPENED
+                    outcome.detail = f"[dry-run] would open a PR touching {len(committable)} file(s)"
+                    outcome.planned = True
                     return outcome
 
                 pr = self._open_pr(
@@ -290,27 +446,36 @@ class Orchestrator:
                     edits=committable,
                     draft=repo_config.draft_pr,
                 )
-                run_row = record_fix_run(
-                    session,
-                    repo_full_name=repo_full_name,
-                    owner=owner,
-                    name=name,
-                    result=fix_result,
-                    installation_id=installation_id,
-                    default_branch=base_branch,
-                )
-                record_pull_request(session, run_row, pr)
-                session.flush()  # assign run_row.id before it's read below
-                record_change_attempt(
-                    session,
-                    repo_id=repo_full_name,
-                    dedupe_key=change.dedupe_key,
-                    status=AttemptStatus.PR_OPENED,
-                    fix_run_id=run_row.id,
-                    ref_sha=current_ref_sha,
-                )
+                # Bound for the rest of this change's log lines -- e.g. the
+                # ledger writes below -- now that a PR actually exists to
+                # point at.
+                with log_context(pr_url=pr.html_url):
+                    run_row = record_fix_run(
+                        session,
+                        repo_full_name=repo_full_name,
+                        owner=owner,
+                        name=name,
+                        result=fix_result,
+                        installation_id=installation_id,
+                        default_branch=base_branch,
+                    )
+                    record_pull_request(session, run_row, pr)
+                    session.flush()  # assign run_row.id before it's read below
+                    record_change_attempt(
+                        session,
+                        repo_id=repo_full_name,
+                        dedupe_key=change.dedupe_key,
+                        status=AttemptStatus.PR_OPENED,
+                        fix_run_id=run_row.id,
+                        ref_sha=current_ref_sha,
+                    )
                 outcome.attempt_status = AttemptStatus.PR_OPENED
                 outcome.pr_url = pr.html_url
+                return outcome
+
+            if self._dry_run:
+                outcome.attempt_status = AttemptStatus.FIXED_NO_PR
+                outcome.planned = True
                 return outcome
 
             run_row = record_fix_run(
@@ -335,16 +500,18 @@ class Orchestrator:
             return outcome
         except Exception as exc:
             logger.exception("processing %s for %s failed", change.dedupe_key, repo_full_name)
-            record_change_attempt(
-                session,
-                repo_id=repo_full_name,
-                dedupe_key=change.dedupe_key,
-                status=AttemptStatus.FAILED,
-                last_error=str(exc),
-                ref_sha=current_ref_sha,
-            )
+            if not self._dry_run:
+                record_change_attempt(
+                    session,
+                    repo_id=repo_full_name,
+                    dedupe_key=change.dedupe_key,
+                    status=AttemptStatus.FAILED,
+                    last_error=str(exc),
+                    ref_sha=current_ref_sha,
+                )
             outcome.attempt_status = AttemptStatus.FAILED
             outcome.detail = str(exc)
+            outcome.planned = self._dry_run
             return outcome
         finally:
             if checkout is not None:
@@ -356,36 +523,16 @@ class Orchestrator:
         scan_result: RepoScanResult,
         change: BreakingChange,
         repo_config: RepoConfig,
-    ) -> FixPipelineResult:
-        editor = WorkspaceEditor(checkout)
+    ) -> FixServiceResult:
         fixer = self._fixer_factory()
-
-        verifier: Verifier | None = None
-        if repo_config.verify and self._settings.verify_enabled:
-            verifier = Verifier(
-                editor,
-                install_timeout=self._settings.verify_install_timeout,
-                test_timeout=self._settings.verify_test_timeout,
-                ignore_scripts=self._settings.verify_ignore_scripts,
-                max_output_bytes=self._settings.verify_max_output_bytes,
-            )
-
-        retry_loop: RetryLoop | None = None
-        if verifier is not None and self._settings.retry_max_rounds > 0:
-            retry_loop = RetryLoop(
-                fixer,
-                FixValidator(use_ast_validation=self._settings.fix_validate_syntax),
-                verifier,
-                max_rounds=self._settings.retry_max_rounds,
-            )
-
-        pipeline = FixPipeline(
-            fixer,
-            validator=FixValidator(use_ast_validation=self._settings.fix_validate_syntax),
-            verifier=verifier,
-            retry_loop=retry_loop,
+        return run_fix_for_change(
+            checkout=checkout,
+            scan_result=scan_result,
+            change=change,
+            settings=self._settings,
+            repo_config=repo_config,
+            fixer=fixer,
         )
-        return pipeline.run(scan_result, change, editor)
 
     def _open_pr(
         self,
@@ -405,7 +552,9 @@ class Orchestrator:
             permissions={"contents": "write", "pull_requests": "write"},
         )
         head_branch = branch_name_for(change)
-        with BranchWriter(write_token.token, owner, name) as writer:
+        with BranchWriter(
+            write_token.token, owner, name, api_url=self._settings.github_api_url
+        ) as writer:
             writer.commit_edits(
                 branch=head_branch,
                 base_branch=base_branch,
@@ -419,6 +568,7 @@ class Orchestrator:
             head_branch=head_branch,
             base_branch=base_branch,
             title=pr_title_for(change),
-            body=build_pr_body(change, fix_result),
+            body=build_pr_body(change, fix_result, edits=edits),
             draft=draft,
+            api_url=self._settings.github_api_url,
         )

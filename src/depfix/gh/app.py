@@ -68,6 +68,13 @@ class GitHubAppAuth:
         self._token_cache: dict[
             tuple[int, tuple[str, ...], tuple[tuple[str, str], ...]], InstallationToken
         ] = {}
+        # (owner, repo) -> Installation. Unlike tokens, an installation
+        # binding doesn't expire -- every pre-flight read in the fleet
+        # orchestrator's per-repo path (get_file_contents, ref_sha,
+        # list_open_pull_requests) independently re-resolved this before
+        # caching landed, so one repo cost 3-4 GET /repos/{o}/{r}/installation
+        # round trips before a single change was even considered.
+        self._installation_cache: dict[tuple[str, str], Installation] = {}
 
     def close(self) -> None:
         if self._owns_client:
@@ -149,6 +156,18 @@ class GitHubAppAuth:
         return [_installation_from_dict(item) for item in raw]
 
     def resolve_installation_for_repo(self, owner: str, repo: str) -> Installation:
+        """Return this App's installation for ``owner/repo``, caching by
+        ``(owner, repo)`` for this ``GitHubAppAuth``'s lifetime -- an
+        installation binding doesn't change mid-run, so every other method
+        on this class that needs it (``get_file_contents``, ``ref_sha``,
+        ``list_open_pull_requests``, ...) shares one lookup per repo instead
+        of re-resolving it on every call.
+        """
+        cache_key = (owner, repo)
+        cached = self._installation_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         resp = self._client.get(
             f"{self._api_url}/repos/{owner}/{repo}/installation", headers=self._app_headers()
         )
@@ -158,7 +177,9 @@ class GitHubAppAuth:
                 "App on this repository (or its owning org) first."
             )
         self._raise_for_status(resp)
-        return _installation_from_dict(resp.json())
+        installation = _installation_from_dict(resp.json())
+        self._installation_cache[cache_key] = installation
+        return installation
 
     # -- Installation tokens --------------------------------------------------
 

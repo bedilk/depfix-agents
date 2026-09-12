@@ -736,3 +736,18 @@ the registry return at time T" for something other than debugging.
   Week 5, out of scope to introduce now; the new `REPO_CONFIG_FILENAME`/
   `PIPELINE_*` variables are documented in the README's configuration
   table instead.
+# Week 7 Decisions — beta hardening
+
+- **Advisory lock, not a lock table.** A Postgres session-scoped lock releases
+  automatically after a crashed process. SQLite remains a single-process
+  development mode where the lock is a no-op.
+- **Bounded newest-first fleet work.** Cron runs consider a capped number of
+  recent changes by default, rather than repeatedly walking the full backlog.
+- **One fix service.** The CLI and fleet orchestrator share the same pipeline
+  assembly and commit rule: unverified edits are committable only when
+  verification was explicitly not required for that run.
+- **Rehearsal-first onboarding.** The supported path is `--dry-run`, then
+  `--no-pr`, then draft PRs, then live PRs.
+- **Locked containers.** Docker and CI install fully pinned, hashed runtime
+  dependencies from `requirements.lock`; `pyproject.toml` retains readable
+  minimum versions for library users.

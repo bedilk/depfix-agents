@@ -59,6 +59,7 @@ class EvalRunner:
         completer: LLMCompleter | None = None,
         fixer: FixGeneratorLike | None = None,
         fixtures_dir: Path | None = None,
+        default_min_recall: float | None = None,
     ) -> None:
         self._completer = completer
         self._classifier = Classifier(completer)
@@ -69,6 +70,11 @@ class EvalRunner:
         self._scanner = CodebaseScanner(context_lines=5)
         self._call_site_scanner = CallSiteScanner()
         self._validator = FixValidator()
+        # Corpus-wide floor for `call_sites` cases that don't set their own
+        # `min_recall` -- callers pass `Settings.scan_min_recall` here so the
+        # eval harness's floor and the production config it's gating stay
+        # one value, not two to keep in sync by hand.
+        self._default_min_recall = default_min_recall
 
     def run(self, cases: list[EvalCase], *, use_llm: bool) -> EvalReport:
         report = EvalReport()
@@ -224,7 +230,7 @@ class EvalRunner:
             case.expected_call_sites,
             case.forbidden_files,
             result.call_sites,
-            min_recall=case.min_recall,
+            min_recall=case.min_recall if case.min_recall is not None else self._default_min_recall,
         )
         return CaseResult(case.id, case.category, passed, case.verified, detail)
 
