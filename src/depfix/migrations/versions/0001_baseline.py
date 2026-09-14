@@ -6,12 +6,10 @@ Create Date: 2026-09-11
 
 Formalizes what ``Base.metadata.create_all`` has been creating ad hoc since
 Week 1 -- see ``docs/decisions.md``'s repeated "Alembic still deferred"
-notes. Fresh Postgres databases run this (then ``0002_change_attempt``) in
-order via ``alembic upgrade head``. Existing pre-Alembic Postgres
-deployments that already have these tables from ``create_all`` should run
-``alembic stamp head`` once instead of ``upgrade head``, to mark this
-history as already applied without trying to recreate tables that are
-already there.
+notes. Fresh Postgres databases run this (then later revisions) in order via
+``alembic upgrade head``. ``depfix.storage.db`` detects complete
+pre-Alembic schemas created by ``create_all`` and stamps their matching
+revision before upgrading, so existing deployments do not recreate tables.
 """
 
 from __future__ import annotations

@@ -220,7 +220,16 @@ class Orchestrator:
         try:
             base_branch = repo_config.base_branch or self._gh_auth.default_ref(owner, name)
             current_ref_sha = self._gh_auth.ref_sha(owner, name, base_branch)
-            open_prs = self._gh_auth.list_open_pull_requests(owner, name, base=base_branch)
+            # Dry runs and --no-pr runs never create a PR, so they must not
+            # require the GitHub App's Pull requests permission merely to
+            # inspect the open-PR cap. The same applies to a repository that
+            # explicitly opted out of PR creation in .depfix.yml.
+            should_inspect_prs = not self._dry_run and not self._no_pr and repo_config.open_pr
+            open_prs = (
+                self._gh_auth.list_open_pull_requests(owner, name, base=base_branch)
+                if should_inspect_prs
+                else []
+            )
         except GitHubAppError as exc:
             return RepoOutcome(repo_full_name=repo_full_name, error=str(exc))
         open_pr_count = sum(1 for pr in open_prs if pr.head_branch.startswith(BRANCH_PREFIX))
@@ -432,7 +441,10 @@ class Orchestrator:
 
                 if self._dry_run:
                     outcome.attempt_status = AttemptStatus.PR_OPENED
-                    outcome.detail = f"[dry-run] would open a PR touching {len(committable)} file(s)"
+                    paths = ", ".join(edit.relpath for edit in committable)
+                    outcome.detail = (
+                        f"[dry-run] would open a PR touching {len(committable)} file(s): {paths}"
+                    )
                     outcome.planned = True
                     return outcome
 

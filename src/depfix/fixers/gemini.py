@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 
 try:
-    import google.generativeai as genai
+    from google import genai
 except Exception:  # pragma: no cover - optional dependency
     genai = None  # type: ignore[assignment]
 
@@ -34,7 +34,7 @@ GEMINI_PRICING = {
 
 class FixGenerator:
     """
-    Generates code fixes using Google Gemini (via google-generativeai).
+    Generates code fixes using the supported Google GenAI SDK.
     """
 
     def __init__(
@@ -47,7 +47,7 @@ class FixGenerator:
     ):
         if genai is None:
             raise RuntimeError(
-                "google.generativeai not installed. Install 'google-generativeai' or set up the client."
+                "google-genai not installed. Install 'google-genai' or set up the client."
             )
 
         # Prefer explicit api_key, then env var
@@ -57,10 +57,7 @@ class FixGenerator:
         if not api_key:
             raise RuntimeError("Google API key not provided (GOOGLE_API_KEY or api_key param)")
 
-        # Configure client
-        genai.configure(api_key=api_key)
-
-        self.client = genai
+        self.client = genai.Client(api_key=api_key)
         self.model = model
         self.max_retries = max_retries
         self.temperature = temperature
@@ -86,11 +83,10 @@ class FixGenerator:
             try:
                 start_time = time.time()
 
-                # google-generativeai uses GenerativeModel().generate_content(...)
-                model = genai.GenerativeModel(self.model)
-                response = model.generate_content(
-                    prompt,
-                    generation_config={"temperature": self.temperature},
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config={"temperature": self.temperature},
                 )
 
                 duration_ms = int((time.time() - start_time) * 1000)

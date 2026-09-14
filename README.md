@@ -125,6 +125,10 @@ traces back to the SDK import.
 # Scan a local checkout for every OpenAI SDK symbol.
 depfix scan --path ./my-app --provider openai --no-save
 
+# This equivalent legacy-friendly form also works. --old-api narrows the
+# report to a particular old API namespace.
+depfix scan --repo ./my-app --package openai --old-api openai.Completion --no-save
+
 # Narrow the scan to the symbols touched by one classified breaking change.
 depfix scan --path ./my-app --provider openai --from-event 42
 
@@ -151,6 +155,22 @@ install it on the target repo(s)/org, and set:
 scan and shallow-clones (`--depth=1`) into a temp directory that's removed
 after the scan regardless of outcome.
 
+### Safe GitHub App test repositories
+
+Install the App only on repositories you own or administer. For public
+upstream projects, fork them into your own GitHub account or organization
+first; an App installation does not grant access to somebody else's
+repository. Start with `depfix scan --no-save` and use the pipeline only in a
+dedicated test fork containing an explicit `.depfix.yml`.
+
+The default provider set covers 20 active TypeScript/JavaScript SDKs. Useful
+upstream fork candidates are [OpenAI's Node SDK](https://github.com/openai/openai-node),
+[Anthropic's TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript),
+[Supabase JS](https://github.com/supabase/supabase-js), [Vercel AI SDK](https://github.com/vercel/ai),
+and [Sentry JavaScript](https://github.com/getsentry/sentry-javascript). These
+forks are useful for safe scan experiments; for end-to-end fix and PR tests,
+use a small repository you control with deliberately outdated SDK call sites.
+
 ## Fixing breaking changes
 
 `depfix fix` scans for call sites, generates a fix for each one, writes kept
@@ -175,6 +195,11 @@ depfix fix --path ./my-app --provider openai --change-file my_change.json --no-v
 # Use a local Ollama model instead of Gemini.
 depfix fix --path ./my-app --provider openai --change-file my_change.json \
     --llm-provider ollama --ollama-model qwen2.5-coder:7b
+
+# Use a larger local coding model (roughly a 19 GB download).
+ollama pull qwen3-coder:30b
+LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3-coder:30b depfix fix --path ./my-app \
+    --provider openai --change-file my_change.json
 
 # Retry SUSPECT/REVERTED edits up to 3 times, feeding each concrete
 # failure (syntax error or failing test) back to the LLM.
@@ -221,6 +246,34 @@ table.
 
 For the safe beta path—dry run, full verification without a PR, draft PRs,
 then live—see [repository onboarding](docs/onboarding.md).
+
+## Terraform-style workflow
+
+Use the following workflow for an explicit, reviewable run.  `init` is
+read-only: it validates the GitHub App can read the selected repository,
+validates its `.depfix.yml`, dry-polls provider feeds without saving events,
+and can scan a supplied known breaking change without calling an LLM.  `plan`
+runs the actual scan -> generate -> verify workflow in a disposable checkout,
+but writes no database state, branch, or PR.  `apply` runs that same guarded
+workflow live and opens a PR only for verified, committable edits.
+
+```bash
+# Check one opted-in repository and scan a known migration without changing state.
+depfix init acme/widgets --provider openai --change-file changes/openai-v3-to-v4.json
+
+# Review the verified change proposal. This cannot create a PR.
+depfix plan acme/widgets --change-file changes/openai-v3-to-v4.json \
+  --llm-provider ollama --ollama-model qwen3-coder:30b
+
+# Create the branch and PR after reviewing the plan.
+depfix apply acme/widgets --change-file changes/openai-v3-to-v4.json \
+  --llm-provider ollama --ollama-model qwen3-coder:30b
+```
+
+`apply` still honours the target repository's `.depfix.yml`: `enabled`,
+provider/path filters, verification policy, and `open_pr`/`draft_pr` settings
+remain safety gates.  `pipeline` remains available for unattended fleet/cron
+runs; `plan` and `apply` are its human-operated counterparts.
 
 `depfix pipeline` is the Week 6 unattended entrypoint: it runs the same
 scan -> fix -> verify -> PR pipeline as `depfix fix`, but across every repo

@@ -132,4 +132,26 @@ def test_repo_shipped_providers_file_is_valid() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     providers = load_providers_file(repo_root / "providers.yaml")
     ids = {p.id for p in providers}
-    assert {"openai", "stripe", "anthropic"} <= ids
+    assert {
+        "openai",
+        "stripe",
+        "anthropic",
+        "supabase",
+        "vercel-ai",
+        "sentry",
+        "prisma",
+        "clerk",
+        "langchain",
+        "aws-s3",
+        "firebase",
+        "twilio",
+        "sendgrid",
+        "octokit",
+        "slack",
+        "discord",
+        "mongodb",
+        "redis",
+        "posthog",
+        "algolia",
+    } <= ids
+    assert len([provider for provider in providers if provider.enabled]) == 20

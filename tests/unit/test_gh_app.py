@@ -163,6 +163,24 @@ def test_422_raises_permission_hint(respx_mock: respx.Router, private_key_pem: s
 
 
 @respx.mock(base_url=_BASE)
+def test_422_names_the_permissions_requested_for_a_write_token(
+    respx_mock: respx.Router, private_key_pem: str
+) -> None:
+    respx_mock.post("/app/installations/1/access_tokens").mock(
+        return_value=httpx.Response(422, text="Validation Failed")
+    )
+
+    with _auth(private_key_pem) as auth, pytest.raises(
+        GitHubAppError, match=r"contents=write, pull_requests=write"
+    ):
+        auth.installation_token(
+            1,
+            repositories=("widgets",),
+            permissions={"contents": "write", "pull_requests": "write"},
+        )
+
+
+@respx.mock(base_url=_BASE)
 def test_installation_token_requests_least_privilege_by_default(
     respx_mock: respx.Router, private_key_pem: str
 ) -> None:

@@ -63,15 +63,333 @@ providers:
 
   - id: anthropic
     name: Anthropic
-    enabled: false # flip on once OpenAI + Stripe are green
-    api_version_scheme: dated
+    api_version_scheme: semver
     api_base_urls:
       - https://api.anthropic.com
     sdk_packages:
       - name: "@anthropic-ai/sdk"
         ecosystem: npm
+    call_site_anchors:
+      - "new Anthropic("
+      - "anthropic.messages.create"
+      - "api.anthropic.com"
     feeds:
       - kind: npm_dist_tag
         package: "@anthropic-ai/sdk"
+        dist_tag: latest
+        github_repo: anthropics/anthropic-sdk-typescript
       - kind: github_release
         repo: anthropics/anthropic-sdk-typescript
+
+  - id: supabase
+    name: Supabase
+    api_version_scheme: semver
+    api_base_urls:
+      - https://api.supabase.com
+    sdk_packages:
+      - name: "@supabase/supabase-js"
+        ecosystem: npm
+    call_site_anchors:
+      - "createClient("
+      - "supabase.from("
+      - "supabase.auth"
+    feeds:
+      - kind: npm_dist_tag
+        package: "@supabase/supabase-js"
+        dist_tag: latest
+        github_repo: supabase/supabase-js
+      - kind: github_release
+        repo: supabase/supabase-js
+
+  - id: vercel-ai
+    name: Vercel AI SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: ai
+        ecosystem: npm
+    call_site_anchors:
+      - "generateText("
+      - "streamText("
+      - "useChat("
+    feeds:
+      - kind: npm_dist_tag
+        package: ai
+        dist_tag: latest
+        github_repo: vercel/ai
+      - kind: github_release
+        repo: vercel/ai
+
+  - id: sentry
+    name: Sentry
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@sentry/node"
+        ecosystem: npm
+    call_site_anchors:
+      - "Sentry.init("
+      - "Sentry.captureException("
+      - "Sentry.captureMessage("
+    feeds:
+      - kind: npm_dist_tag
+        package: "@sentry/node"
+        dist_tag: latest
+        github_repo: getsentry/sentry-javascript
+      - kind: github_release
+        repo: getsentry/sentry-javascript
+
+  - id: prisma
+    name: Prisma
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@prisma/client"
+        ecosystem: npm
+    call_site_anchors:
+      - "new PrismaClient("
+      - "prisma.$queryRaw"
+      - "prisma.$executeRaw"
+    feeds:
+      - kind: npm_dist_tag
+        package: "@prisma/client"
+        dist_tag: latest
+        github_repo: prisma/prisma
+      - kind: github_release
+        repo: prisma/prisma
+
+  - id: clerk
+    name: Clerk
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@clerk/nextjs"
+        ecosystem: npm
+    call_site_anchors:
+      - "auth("
+      - "currentUser("
+      - "clerkClient"
+    feeds:
+      - kind: npm_dist_tag
+        package: "@clerk/nextjs"
+        dist_tag: latest
+        github_repo: clerk/javascript
+      - kind: github_release
+        repo: clerk/javascript
+
+  - id: langchain
+    name: LangChain JS
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@langchain/openai"
+        ecosystem: npm
+    call_site_anchors:
+      - "new ChatOpenAI("
+      - "new OpenAIEmbeddings("
+      - "new OpenAI("
+    feeds:
+      - kind: npm_dist_tag
+        package: "@langchain/openai"
+        dist_tag: latest
+        github_repo: langchain-ai/langchainjs
+      - kind: github_release
+        repo: langchain-ai/langchainjs
+
+  # Broad, production-common SDK coverage for test installations. These use
+  # only registry/release feeds, which are stable and do not require us to
+  # maintain provider-specific OpenAPI documents.
+  - id: aws-s3
+    name: AWS SDK for JavaScript (S3)
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@aws-sdk/client-s3"
+        ecosystem: npm
+    call_site_anchors:
+      - "new S3Client("
+      - "new S3("
+      - "new PutObjectCommand("
+      - "new GetObjectCommand("
+    feeds:
+      - kind: npm_dist_tag
+        package: "@aws-sdk/client-s3"
+        dist_tag: latest
+        github_repo: aws/aws-sdk-js-v3
+      - kind: github_release
+        repo: aws/aws-sdk-js-v3
+
+  - id: firebase
+    name: Firebase JavaScript SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: firebase
+        ecosystem: npm
+    call_site_anchors:
+      - "initializeApp("
+      - "getAuth("
+      - "getFirestore("
+      - "getDatabase("
+    feeds:
+      - kind: npm_dist_tag
+        package: firebase
+        dist_tag: latest
+        github_repo: firebase/firebase-js-sdk
+      - kind: github_release
+        repo: firebase/firebase-js-sdk
+
+  - id: twilio
+    name: Twilio Node.js SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: twilio
+        ecosystem: npm
+    call_site_anchors:
+      - "require(\"twilio\")"
+      - "client.messages.create("
+      - "client.calls.create("
+    feeds:
+      - kind: npm_dist_tag
+        package: twilio
+        dist_tag: latest
+        github_repo: twilio/twilio-node
+      - kind: github_release
+        repo: twilio/twilio-node
+
+  - id: sendgrid
+    name: Twilio SendGrid Node.js SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@sendgrid/mail"
+        ecosystem: npm
+    call_site_anchors:
+      - "sgMail.setApiKey("
+      - "sgMail.send("
+    feeds:
+      - kind: npm_dist_tag
+        package: "@sendgrid/mail"
+        dist_tag: latest
+        github_repo: sendgrid/sendgrid-nodejs
+      - kind: github_release
+        repo: sendgrid/sendgrid-nodejs
+
+  - id: octokit
+    name: Octokit REST SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@octokit/rest"
+        ecosystem: npm
+    call_site_anchors:
+      - "new Octokit("
+      - "octokit.rest."
+      - "octokit.request("
+    feeds:
+      - kind: npm_dist_tag
+        package: "@octokit/rest"
+        dist_tag: latest
+        github_repo: octokit/rest.js
+      - kind: github_release
+        repo: octokit/rest.js
+
+  - id: slack
+    name: Slack Web API SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: "@slack/web-api"
+        ecosystem: npm
+    call_site_anchors:
+      - "new WebClient("
+      - "web.chat.postMessage("
+      - "web.conversations."
+    feeds:
+      - kind: npm_dist_tag
+        package: "@slack/web-api"
+        dist_tag: latest
+        github_repo: slackapi/node-slack-sdk
+      - kind: github_release
+        repo: slackapi/node-slack-sdk
+
+  - id: discord
+    name: discord.js
+    api_version_scheme: semver
+    sdk_packages:
+      - name: discord.js
+        ecosystem: npm
+    call_site_anchors:
+      - "new Client("
+      - "client.login("
+      - "client.on(\"interactionCreate\""
+    feeds:
+      - kind: npm_dist_tag
+        package: discord.js
+        dist_tag: latest
+        github_repo: discordjs/discord.js
+      - kind: github_release
+        repo: discordjs/discord.js
+
+  - id: mongodb
+    name: MongoDB Node.js Driver
+    api_version_scheme: semver
+    sdk_packages:
+      - name: mongodb
+        ecosystem: npm
+    call_site_anchors:
+      - "new MongoClient("
+      - "client.db("
+      - ".collection("
+    feeds:
+      - kind: npm_dist_tag
+        package: mongodb
+        dist_tag: latest
+        github_repo: mongodb/node-mongodb-native
+      - kind: github_release
+        repo: mongodb/node-mongodb-native
+
+  - id: redis
+    name: node-redis
+    api_version_scheme: semver
+    sdk_packages:
+      - name: redis
+        ecosystem: npm
+    call_site_anchors:
+      - "createClient("
+      - "client.connect("
+      - "client.get("
+      - "client.set("
+    feeds:
+      - kind: npm_dist_tag
+        package: redis
+        dist_tag: latest
+        github_repo: redis/node-redis
+      - kind: github_release
+        repo: redis/node-redis
+
+  - id: posthog
+    name: PostHog Node.js SDK
+    api_version_scheme: semver
+    sdk_packages:
+      - name: posthog-node
+        ecosystem: npm
+    call_site_anchors:
+      - "new PostHog("
+      - "posthog.capture("
+      - "posthog.identify("
+    feeds:
+      - kind: npm_dist_tag
+        package: posthog-node
+        dist_tag: latest
+        github_repo: PostHog/posthog-js
+      - kind: github_release
+        repo: PostHog/posthog-js
+
+  - id: algolia
+    name: Algolia JavaScript Client
+    api_version_scheme: semver
+    sdk_packages:
+      - name: algoliasearch
+        ecosystem: npm
+    call_site_anchors:
+      - "algoliasearch("
+      - "searchClient.search("
+      - "initIndex("
+    feeds:
+      - kind: npm_dist_tag
+        package: algoliasearch
+        dist_tag: latest
+        github_repo: algolia/algoliasearch-client-javascript
+      - kind: github_release
+        repo: algolia/algoliasearch-client-javascript

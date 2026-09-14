@@ -505,7 +505,9 @@ class CallSiteScanner:
         source = "\n".join(facts.masked_lines)
 
         def symbol_wanted(symbol: str) -> bool:
-            return not target.symbols or symbol in target.symbols
+            return not target.symbols or any(
+                symbol == wanted or symbol.startswith(f"{wanted}.") for wanted in target.symbols
+            )
 
         for match in _MEMBER_CALL_RE.finditer(source):
             base_name, chain = match.group(1), match.group(2)
