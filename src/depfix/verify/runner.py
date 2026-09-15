@@ -66,6 +66,11 @@ def _reporter_args(framework: TestFramework, out_path: Path) -> list[str]:
         return ["--watch=false", "--reporter=json", f"--outputFile={out_path}"]
     if framework == TestFramework.MOCHA:
         return ["--reporter", "json"]
+    if framework == TestFramework.NODE_TEST:
+        # Node's default reporter is version-dependent (recent Node releases
+        # emit a human-readable spec format). Request TAP explicitly because
+        # it gives the verifier stable per-test identities.
+        return ["--test-reporter=tap"]
     return []
 
 

@@ -49,7 +49,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from depfix.apply.models import FileEdit
+from depfix.apply.models import EditVerdict, FileEdit
+from depfix.apply.workspace import WorkspaceEditor
 from depfix.clone import Checkout, CloneService
 from depfix.config import Settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
@@ -71,6 +72,7 @@ from depfix.gh import (
 from depfix.obs.logging import log_context
 from depfix.orchestrator.budget import RunBudget
 from depfix.orchestrator.models import ChangeOutcome, OrchestratorOutcome, RepoOutcome
+from depfix.orchestrator.plan import PlanArtifact
 from depfix.orchestrator.policy import SkipReason, decide
 from depfix.providers.models import ProviderSpec
 from depfix.repoconfig.loader import RepoConfigError, parse_repo_config
@@ -118,6 +120,7 @@ class Orchestrator:
         use_lock: bool = True,
         max_duration_seconds: float | None = None,
         max_cost_usd: float | None = None,
+        plan_artifacts: dict[tuple[str, str], PlanArtifact] | None = None,
     ) -> None:
         self._settings = settings
         self._gh_auth = gh_auth
@@ -134,6 +137,7 @@ class Orchestrator:
         self._use_lock = use_lock
         self._max_duration_seconds = max_duration_seconds
         self._max_cost_usd = max_cost_usd
+        self._plan_artifacts = plan_artifacts or {}
         self._budget = RunBudget(None)  # replaced at the top of every run()
 
     def run(
@@ -414,17 +418,42 @@ class Orchestrator:
                 outcome.planned = self._dry_run
                 return outcome
 
-            fix_service_result = self._run_fix_pipeline(checkout, scan_result, change, repo_config)
+            artifact = self._plan_artifacts.get((repo_full_name, change.dedupe_key))
+            if artifact is not None:
+                if artifact.base_sha != current_ref_sha:
+                    raise ValueError(
+                        "plan artifact is stale: repository HEAD changed since plan; run plan again"
+                    )
+                fix_service_result = self._apply_plan_artifact(checkout, scan_result, change, artifact)
+            else:
+                fix_service_result = self._run_fix_pipeline(checkout, scan_result, change, repo_config)
             fix_result = fix_service_result.pipeline_result
             outcome.cost_usd = fix_result.total_cost
             outcome.suppressed_call_sites = suppressed_call_sites
+
+            committable = fix_service_result.committable
+            if self._dry_run:
+                if not committable:
+                    outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
+                    outcome.detail = self._discarded_edit_detail(fix_result)
+                    outcome.planned = True
+                    return outcome
+                outcome.attempt_status = (
+                    AttemptStatus.PR_OPENED if repo_config.open_pr else AttemptStatus.FIXED_NO_PR
+                )
+                outcome.plan_artifact = PlanArtifact.from_result(
+                    repo_full_name, current_ref_sha, fix_result
+                )
+                paths = ", ".join(edit.relpath for edit in committable)
+                outcome.detail = f"[dry-run] verified {len(committable)} file(s): {paths}"
+                outcome.planned = True
+                return outcome
 
             # --no-pr forces this decision to False for the whole run,
             # regardless of what this repo's own .depfix.yml says -- see
             # `self._no_pr`.
             effective_open_pr = repo_config.open_pr and not self._no_pr
             if effective_open_pr:
-                committable = fix_service_result.committable
                 if not committable:
                     if not self._dry_run:
                         record_change_attempt(
@@ -437,15 +466,6 @@ class Orchestrator:
                     outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
                     outcome.detail = "no kept/committable edits"
                     outcome.planned = self._dry_run
-                    return outcome
-
-                if self._dry_run:
-                    outcome.attempt_status = AttemptStatus.PR_OPENED
-                    paths = ", ".join(edit.relpath for edit in committable)
-                    outcome.detail = (
-                        f"[dry-run] would open a PR touching {len(committable)} file(s): {paths}"
-                    )
-                    outcome.planned = True
                     return outcome
 
                 pr = self._open_pr(
@@ -483,11 +503,6 @@ class Orchestrator:
                     )
                 outcome.attempt_status = AttemptStatus.PR_OPENED
                 outcome.pr_url = pr.html_url
-                return outcome
-
-            if self._dry_run:
-                outcome.attempt_status = AttemptStatus.FIXED_NO_PR
-                outcome.planned = True
                 return outcome
 
             run_row = record_fix_run(
@@ -528,6 +543,39 @@ class Orchestrator:
         finally:
             if checkout is not None:
                 self._clone_service.cleanup(checkout)
+
+    @staticmethod
+    def _discarded_edit_detail(result: FixPipelineResult) -> str:
+        details = [
+            f"{edit.relpath}: {edit.verdict.value}"
+            + (f" ({edit.error_message})" if edit.error_message else "")
+            for edit in result.edits
+            if edit.verdict not in {EditVerdict.KEPT, EditVerdict.APPLIED}
+        ]
+        return "no kept/committable edits" + ("; " + "; ".join(details) if details else "")
+
+    def _apply_plan_artifact(
+        self, checkout: Checkout, scan_result: RepoScanResult, change: BreakingChange, artifact: PlanArtifact
+    ) -> FixServiceResult:
+        editor = WorkspaceEditor(checkout)
+        edits: list[FileEdit] = []
+        for planned in artifact.edits:
+            path = checkout.path / planned.relpath
+            actual = path.read_text(encoding="utf-8")
+            if actual != planned.original_content:
+                raise ValueError(f"plan artifact is stale: {planned.relpath} no longer matches its planned base")
+            edit = editor.write_fix(
+                planned.relpath, planned.fixed_content,
+                confidence=planned.confidence, usages_fixed=planned.usages_fixed,
+            )
+            edits.append(dataclasses.replace(edit, verdict=EditVerdict.KEPT, diff=planned.diff))
+        result = FixPipelineResult(
+            repo_full_name=scan_result.repo_full_name, breaking_change=change,
+            files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),
+            total_usages_fixed=sum(e.usages_fixed for e in edits), total_cost=0.0, total_tokens=0,
+            duration_ms=0, verification=None,
+        )
+        return FixServiceResult(pipeline_result=result, committable=edits, verify_required=True)
 
     def _run_fix_pipeline(
         self,

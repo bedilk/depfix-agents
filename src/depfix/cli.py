@@ -91,7 +91,7 @@ from depfix.gh import (
     pr_title_for,
 )
 from depfix.obs.logging import configure_logging, configure_sentry
-from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome
+from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome, PlanArtifact
 from depfix.providers.loader import ProviderConfigError, load_providers_file
 from depfix.providers.models import ProviderSpec
 from depfix.repoconfig import RepoConfigError, parse_repo_config
@@ -493,7 +493,17 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
             continue
         console.print(f"  {repo.repo_full_name} ({repo.open_pr_count} open depfix PR(s)):")
         for change in acted:
-            verb = "would process" if change.planned else _outcome_text(change)
+            # A dry-run predicts the *actual* terminal outcome. Do not hide
+            # "no kept edits" or "no call sites" behind a vague success-like
+            # message merely because no state was written.
+            verb = (
+                "would process"
+                if change.planned and change.attempt_status in {
+                    AttemptStatus.PR_OPENED,
+                    AttemptStatus.FIXED_NO_PR,
+                }
+                else _outcome_text(change)
+            )
             suffix = change.pr_url or (f" -- {change.detail}" if change.detail else "")
             suppressed = (
                 f" [{change.suppressed_call_sites} path-suppressed]"
@@ -585,6 +595,37 @@ def _cmd_classify(args: argparse.Namespace) -> int:
         f"[dim]unclassifiable:[/dim] {summary.unclassifiable}  "
         f"[dim]errors:[/dim] {len(summary.errors)}\n"
     )
+    if summary.created_rows:
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for row in summary.created_rows:
+            change = breaking_change_from_row(row)
+            path = output_dir / f"{row.id}.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": row.id,
+                        "package": change.package,
+                        "old_version": change.old_version,
+                        "new_version": change.new_version,
+                        "old_api": change.old_api,
+                        "new_api": change.new_api,
+                        "description": change.description,
+                        "migration_guide": change.migration_guide,
+                        "kind": change.kind.value,
+                        "source": change.source.value,
+                        "provider_id": change.provider_id,
+                        "source_url": change.source_url,
+                        "evidence": change.evidence,
+                        "confidence": change.confidence,
+                        "call_site_hints": change.call_site_hints,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            console.print(f"  [green]breaking change {row.id}:[/green] {path}")
     for err in summary.errors:
         console.print(f"  [yellow]{err}[/yellow]")
     return 0
@@ -1229,6 +1270,28 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         console.print("[yellow]No breaking changes to process.[/yellow]")
         gh_auth.close()
         return 0
+    plan_artifacts: dict[tuple[str, str], PlanArtifact] = {}
+    if args.plan_file:
+        try:
+            artifact = PlanArtifact.read(args.plan_file)
+        except (OSError, ValueError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            console.print(f"[red]Error loading plan artifact: {exc}[/red]")
+            gh_auth.close()
+            return 2
+        if args.command != "apply":
+            console.print("[red]Error: --plan-file is only valid with `depfix apply`.[/red]")
+            gh_auth.close()
+            return 2
+        matching = [c for c in changes if c.dedupe_key == artifact.change_dedupe_key]
+        if len(matching) != 1:
+            console.print("[red]Error: --from-event must identify the change stored in --plan-file.[/red]")
+            gh_auth.close()
+            return 2
+        if artifact.repo_full_name not in repo_full_names:
+            console.print("[red]Error: plan artifact repo is not included in this apply command.[/red]")
+            gh_auth.close()
+            return 2
+        plan_artifacts[(artifact.repo_full_name, artifact.change_dedupe_key)] = artifact
 
     def fixer_factory() -> FixGenerator | OllamaFixGenerator:
         if llm_provider == "gemini":
@@ -1269,6 +1332,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
             else None
         ),
         max_cost_usd=args.max_cost,
+        plan_artifacts=plan_artifacts,
     )
 
     try:
@@ -1281,6 +1345,15 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         gh_auth.close()
 
     _print_orchestrator_outcome(outcome, show_skips=args.show_skips)
+    if args.command == "plan":
+        output_dir = Path(args.plan_output_dir)
+        for repo in outcome.repos:
+            for change in repo.changes:
+                if change.plan_artifact is None:
+                    continue
+                path = output_dir / f"{outcome.run_id}-{change.plan_artifact.change_dedupe_key[:12]}.json"
+                change.plan_artifact.write(path)
+                console.print(f"[green]Plan artifact:[/green] {path}")
 
     if outcome.stopped_early:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
@@ -1495,6 +1568,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     classify_p.add_argument(
         "--limit", type=int, default=None, help="Classify at most this many events"
+    )
+    classify_p.add_argument(
+        "--output-dir", default="output/changes",
+        help="Write one generated JSON artifact per created breaking change",
     )
     classify_p.add_argument(
         "--no-llm",
@@ -1768,6 +1845,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="ID",
         help="breaking_change row id to include (repeatable)",
+    )
+    pipeline_p.add_argument(
+        "--plan-file", default=None, metavar="PATH",
+        help="For apply: consume this immutable plan artifact instead of calling the LLM again.",
+    )
+    pipeline_p.add_argument(
+        "--plan-output-dir", default="output/plans",
+        help="For plan: directory for verified immutable plan artifacts.",
     )
     pipeline_p.add_argument(
         "--limit",

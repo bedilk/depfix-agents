@@ -89,7 +89,18 @@ anti-hallucination check; a proposed change is dropped outright if its
 depfix classify                 # classify pending events (LLM if configured)
 depfix classify --no-llm        # only the deterministic spec-diff path
 depfix classify --limit 50      # process at most 50 events this run
+depfix classify --output-dir output/changes  # export each newly created row as <ID>.json
 ```
+
+The database row is the source of truth. The JSON export is an audit/replay
+artifact, not a file that must be placed in the repository being fixed. Use
+the printed ID with `--from-event <ID>` for normal plan/apply runs.
+
+For deterministic end-to-end testing without waiting for a real upstream
+release, [examples/seed-providers.yaml](examples/seed-providers.yaml) declares
+explicit `fixture_change` feeds. They are test-only inputs to `watch`, kept in
+Depfix rather than in the target repository; do not add them to production
+`providers.yaml`.
 
 `depfix run` can then consume a classified row directly:
 
@@ -252,23 +263,31 @@ then live—see [repository onboarding](docs/onboarding.md).
 Use the following workflow for an explicit, reviewable run.  `init` is
 read-only: it validates the GitHub App can read the selected repository,
 validates its `.depfix.yml`, dry-polls provider feeds without saving events,
-and can scan a supplied known breaking change without calling an LLM.  `plan`
+and can scan a supplied known breaking change without calling an LLM. `plan`
 runs the actual scan -> generate -> verify workflow in a disposable checkout,
-but writes no database state, branch, or PR.  `apply` runs that same guarded
-workflow live and opens a PR only for verified, committable edits.
+but writes no database state, branch, or PR. When it has verified committable
+edits, it writes an immutable plan artifact containing the exact diffs and base
+commit SHA. `apply --plan-file` consumes that exact artifact: it does not call
+the LLM again and refuses a stale repository/file base.
 
 ```bash
 # Check one opted-in repository and scan a known migration without changing state.
 depfix init acme/widgets --provider openai --change-file changes/openai-v3-to-v4.json
 
-# Review the verified change proposal. This cannot create a PR.
-depfix plan acme/widgets --change-file changes/openai-v3-to-v4.json \
-  --llm-provider ollama --ollama-model qwen3-coder:30b
+# Review the verified proposal. This cannot create a PR. It prints a path
+# such as output/plans/<run-id>-<change>.json.
+depfix plan acme/widgets --from-event 42 \
+  --llm-provider ollama --ollama-model qwen2.5-coder:7b
 
-# Create the branch and PR after reviewing the plan.
-depfix apply acme/widgets --change-file changes/openai-v3-to-v4.json \
-  --llm-provider ollama --ollama-model qwen3-coder:30b
+# Create a PR from precisely that reviewed artifact. No LLM call occurs.
+depfix apply acme/widgets --from-event 42 \
+  --plan-file output/plans/<run-id>-<change>.json
 ```
+
+Use `--force` only for intentional controlled retries (for example a seed
+fixture that is in retry cooldown). A plan with no artifact reports the
+per-file terminal verdict, such as `reverted`, `suspect`, or `skipped`, and
+must be corrected/replanned before it can be applied.
 
 `apply` still honours the target repository's `.depfix.yml`: `enabled`,
 provider/path filters, verification policy, and `open_pr`/`draft_pr` settings

@@ -30,6 +30,8 @@ class SourceKind(StrEnum):
     NPM_DIST_TAG = "npm_dist_tag"
     GITHUB_RELEASE = "github_release"
     OPENAPI_SPEC = "openapi_spec"
+    # Explicit opt-in local feed for deterministic end-to-end tests.
+    FIXTURE_CHANGE = "fixture_change"
     CHANGELOG_FILE = "changelog_file"  # Week 2
     CHANGELOG_HTML = "changelog_html"  # Week 2
     RSS = "rss"  # Week 2

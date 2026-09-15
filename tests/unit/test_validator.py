@@ -27,6 +27,18 @@ def test_valid_change_when_node_missing_still_reports_valid() -> None:
     assert result.status != ValidationStatus.NO_CHANGES
 
 
+def test_allows_focused_change_in_tiny_file() -> None:
+    validator = FixValidator(use_ast_validation=False)
+
+    result = validator.validate(
+        "const value = sdk.oldMethod();\n",
+        "const value = sdk.newMethod();\n",
+        "example.js",
+    )
+
+    assert result.is_valid is True
+
+
 def test_unified_diff_has_proper_headers() -> None:
     original = "a\nb\nc\n"
     fixed = "a\nB\nc\n"

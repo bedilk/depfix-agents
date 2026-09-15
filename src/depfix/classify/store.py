@@ -142,6 +142,7 @@ class ClassifyRunSummary:
     changes_created: int = 0
     unclassifiable: int = 0
     errors: list[str] = field(default_factory=list)
+    created_rows: list[BreakingChangeRow] = field(default_factory=list)
 
 
 def classify_pending(
@@ -167,5 +168,7 @@ def classify_pending(
         if outcome.unclassifiable:
             summary.unclassifiable += 1
         created = persist_classification(session, row, outcome)
+        session.flush()  # assign IDs before the CLI writes export artifacts
         summary.changes_created += len(created)
+        summary.created_rows.extend(created)
     return summary
