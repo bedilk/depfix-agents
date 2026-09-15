@@ -1,0 +1,11 @@
+--- a/src/embed.js
++++ b/src/embed.js
+@@ -5,7 +5,7 @@
+ 
+ // Intentional legacy call site for the embeddings migration fixture.
+ async function embed(input) {
+-  const response = await openai.createEmbedding({ input, model: "text-embedding-3-small" });
++  const response = await openai.embeddings.create({ input, model: "text-embedding-3-small" });
+   return response.data[0].embedding;
+ }
+ 

@@ -7,6 +7,7 @@ trunk.
 
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
 from depfix.sources.factory import SourceDeps, build_source
+from depfix.sources.fixture_change import FixtureChangeSource
 from depfix.sources.github_release import GitHubReleaseSource
 from depfix.sources.models import (
     ChangeEvent,
@@ -27,6 +28,7 @@ __all__ = [
     "ChangeSource",
     "FeedPoll",
     "FeedStateSnapshot",
+    "FixtureChangeSource",
     "GitHubReleaseSource",
     "NpmDistTagSource",
     "OpenApiSpecSource",

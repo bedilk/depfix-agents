@@ -123,8 +123,10 @@ def test_reporter_args_mocha_uses_json_reporter(tmp_path: Path) -> None:
     assert args == ["--reporter", "json"]
 
 
-def test_reporter_args_node_test_has_no_extra_flags(tmp_path: Path) -> None:
-    assert _reporter_args(TestFramework.NODE_TEST, tmp_path / "results.json") == []
+def test_reporter_args_node_test_requests_tap(tmp_path: Path) -> None:
+    assert _reporter_args(TestFramework.NODE_TEST, tmp_path / "results.json") == [
+        "--test-reporter=tap"
+    ]
 
 
 def test_test_argv_shape(tmp_path: Path) -> None:

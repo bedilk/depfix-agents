@@ -71,6 +71,7 @@ class _FakeGhAuth:
         self._ref_sha = ref_sha
         self._open_prs = open_prs or []
         self._no_installation = no_installation
+        self.open_pr_list_calls = 0
 
     def resolve_installation_for_repo(self, owner: str, name: str) -> Installation:
         if self._no_installation:
@@ -96,6 +97,7 @@ class _FakeGhAuth:
     def list_open_pull_requests(
         self, owner: str, name: str, *, head: str | None = None, base: str | None = None
     ) -> list[Any]:
+        self.open_pr_list_calls += 1
         return self._open_prs
 
     def installation_token(
@@ -481,6 +483,7 @@ def test_dry_run_makes_no_db_writes_or_pr(respx_mock: respx.Router, in_memory_db
     (change_outcome,) = repo.changes
     assert change_outcome.attempt_status == AttemptStatus.PR_OPENED
     assert change_outcome.planned is True
+    assert gh_auth.open_pr_list_calls == 0
 
     with db_module.session_scope() as session:
         row = session.scalar(
@@ -579,6 +582,7 @@ def test_no_pr_forces_fixed_no_pr_regardless_of_repo_config(
     (change_outcome,) = repo.changes
     assert change_outcome.attempt_status == AttemptStatus.FIXED_NO_PR
     assert change_outcome.pr_url == ""
+    assert gh_auth.open_pr_list_calls == 0
 
     with db_module.session_scope() as session:
         row = session.scalar(

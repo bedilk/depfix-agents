@@ -112,7 +112,9 @@ class GitHubAppAuth:
 
     # -- HTTP plumbing ------------------------------------------------------------
 
-    def _raise_for_status(self, resp: httpx.Response) -> None:
+    def _raise_for_status(
+        self, resp: httpx.Response, *, requested_permissions: dict[str, str] | None = None
+    ) -> None:
         if resp.status_code == 401:
             raise GitHubAppError(
                 "GitHub rejected the App JWT (401 Unauthorized). Most likely cause: "
@@ -126,11 +128,16 @@ class GitHubAppAuth:
                 "be installed on the target account/repository."
             )
         if resp.status_code == 422:
+            permission_detail = (
+                ", ".join(f"{name}={level}" for name, level in sorted(requested_permissions.items()))
+                if requested_permissions
+                else "the required permission"
+            )
             raise GitHubAppError(
                 f"GitHub rejected the request as unprocessable (422): {resp.text[:300]}. "
-                "Most likely cause: requesting a permission the installation was not "
-                "granted (this integration only needs Contents: Read-only), or a repo "
-                "not covered by the installation's repository selection."
+                f"The token request asked for: {permission_detail}. Grant those permissions "
+                "to the GitHub App and approve the updated installation, or confirm the repo "
+                "is covered by the installation's repository selection."
             )
         if resp.status_code >= 400:
             raise GitHubAppError(f"GitHub API error {resp.status_code}: {resp.text[:300]}")
@@ -211,7 +218,7 @@ class GitHubAppAuth:
             headers=self._app_headers(),
             json=payload,
         )
-        self._raise_for_status(resp)
+        self._raise_for_status(resp, requested_permissions=effective_permissions)
         data = resp.json()
         token = InstallationToken(
             token=data["token"],

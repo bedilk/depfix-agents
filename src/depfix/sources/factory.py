@@ -11,6 +11,7 @@ import httpx
 from depfix.config import get_settings
 from depfix.registry.client import NpmRegistryClient
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
+from depfix.sources.fixture_change import FixtureChangeSource
 from depfix.sources.github_release import GitHubReleaseSource
 from depfix.sources.http import build_http_client
 from depfix.sources.models import SourceKind
@@ -85,6 +86,8 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
             deps.spec_cache_dir,
             deps.max_spec_bytes,
         )
+    if feed.kind is SourceKind.FIXTURE_CHANGE:
+        return FixtureChangeSource(provider_id, feed.config)
     raise UnsupportedSourceKind(
         f"feed kind '{feed.kind.value}' is declared but not implemented (Week 2)"
     )

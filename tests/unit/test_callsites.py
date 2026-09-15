@@ -83,6 +83,20 @@ def test_destructured_bare_function_is_bare_symbol_kind(tmp_path: Path) -> None:
     assert bare_sites[0].confidence == MatchConfidence.HIGH
 
 
+def test_symbol_prefix_narrows_to_methods_below_an_old_api_namespace(tmp_path: Path) -> None:
+    (tmp_path / "index.js").write_text(
+        'const OpenAI = require("openai");\n'
+        "const client = new OpenAI();\n"
+        "client.Completion.create({});\n"
+        "client.chat.completions.create({});\n",
+        encoding="utf-8",
+    )
+
+    result = CallSiteScanner().scan(tmp_path, _target(symbols=("openai.Completion",)))
+
+    assert [site.symbol for site in result.call_sites] == ["openai.Completion.create"]
+
+
 # -- wrapper propagation across hops -------------------------------------------
 
 

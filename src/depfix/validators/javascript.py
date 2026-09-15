@@ -13,6 +13,10 @@ from depfix.core.models import ValidationResult, ValidationStatus
 
 logger = logging.getLogger(__name__)
 
+# A one-to-five-line snippet has no meaningful line-based change ratio: one
+# focused call replacement can necessarily replace its only executable line.
+_MIN_LINES_FOR_CHANGE_RATIO = 8
+
 
 class FixValidator:
     """
@@ -59,7 +63,8 @@ class FixValidator:
 
         # Check for unexpected large changes
         change_ratio = self._calculate_change_ratio(original_code, fixed_code)
-        if change_ratio > 0.5:  # More than 50% of lines changed
+        line_count = max(len(original_code.splitlines()), len(fixed_code.splitlines()))
+        if line_count >= _MIN_LINES_FOR_CHANGE_RATIO and change_ratio > 0.5:
             logger.warning(f"Large change ratio detected: {change_ratio:.2%}")
             return ValidationResult(
                 status=ValidationStatus.UNEXPECTED_CHANGES,
@@ -67,6 +72,12 @@ class FixValidator:
                 syntax_valid=True,
                 changes_detected=True,
                 error_message=f"Too many changes detected ({change_ratio:.0%} of lines changed)",
+            )
+        if line_count < _MIN_LINES_FOR_CHANGE_RATIO and change_ratio > 0.5:
+            logger.warning(
+                "Large change ratio detected in a %d-line file; accepting it because "
+                "line-ratio validation is not meaningful for tiny files",
+                line_count,
             )
 
         return ValidationResult.valid()

@@ -22,7 +22,7 @@ import httpx
 from depfix.fixers.gemini import GEMINI_PRICING
 
 try:
-    import google.generativeai as genai
+    from google import genai
 except Exception:  # pragma: no cover - optional dependency
     genai = None  # type: ignore[assignment]
 
@@ -53,18 +53,21 @@ class GeminiCompleter:
 
     def __init__(self, api_key: str | None = None, model: str = "gemini-2.5-flash") -> None:
         if genai is None:
-            raise RuntimeError("google.generativeai not installed. Install 'google-generativeai'.")
+            raise RuntimeError("google-genai not installed. Install 'google-genai'.")
         if not api_key:
             api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise RuntimeError("Google API key not provided (GOOGLE_API_KEY or api_key param)")
-        genai.configure(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
         self.model = model
 
     def complete(self, prompt: str, *, temperature: float = 0.0) -> LLMResponse:
         start = time.time()
-        client = genai.GenerativeModel(self.model)
-        response = client.generate_content(prompt, generation_config={"temperature": temperature})
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config={"temperature": temperature},
+        )
         duration_ms = int((time.time() - start) * 1000)
 
         try:

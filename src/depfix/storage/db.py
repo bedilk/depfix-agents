@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
 
 from depfix.config import get_settings
@@ -24,6 +24,26 @@ logger = logging.getLogger(__name__)
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
+
+# Tables created by ``0001_baseline``.  depfix created these directly with
+# ``Base.metadata.create_all`` before it adopted Alembic, so a running
+# pre-Alembic deployment has tables but no ``alembic_version`` record.
+_BASELINE_TABLES = frozenset(
+    {
+        "provider",
+        "feed_state",
+        "change_event",
+        "spec_change",
+        "breaking_change",
+        "repo",
+        "repo_scan",
+        "call_site",
+        "fix_run",
+        "file_fix",
+        "test_run",
+        "pull_request",
+    }
+)
 
 
 def get_engine() -> Engine:
@@ -80,8 +100,47 @@ def _upgrade_to_head(engine: Engine) -> None:
     migrations_dir = Path(__file__).resolve().parent.parent / "migrations"
     cfg = Config()
     cfg.set_main_option("script_location", str(migrations_dir))
+    legacy_revision = _legacy_schema_revision(engine)
+    if legacy_revision is not None:
+        logger.warning(
+            "detected pre-Alembic depfix schema; stamping revision %s before upgrade",
+            legacy_revision,
+        )
+        command.stamp(cfg, legacy_revision)
     logger.info("running Alembic migrations to head against %s", engine.url.render_as_string())
     command.upgrade(cfg, "head")
+
+
+def _legacy_schema_revision(engine: Engine) -> str | None:
+    """Return the revision represented by a complete pre-Alembic schema.
+
+    ``None`` means either a fresh database (which Alembic should migrate from
+    scratch) or one which is already versioned.  A partially-created legacy
+    schema is unsafe to stamp: it requires operator review rather than risking
+    data loss or claiming migrations that were never applied.
+    """
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "alembic_version" in tables:
+        return None
+
+    present_baseline_tables = tables & _BASELINE_TABLES
+    if not present_baseline_tables:
+        return None
+
+    missing_baseline_tables = _BASELINE_TABLES - tables
+    if missing_baseline_tables:
+        missing = ", ".join(sorted(missing_baseline_tables))
+        raise RuntimeError(
+            "Detected a partial pre-Alembic depfix schema. Refusing to stamp it; "
+            f"missing baseline tables: {missing}. Restore the schema or migrate it manually."
+        )
+
+    if "change_attempt" not in tables:
+        return "0001"
+
+    change_event_columns = {column["name"] for column in inspector.get_columns("change_event")}
+    return "0003" if "body_url" in change_event_columns else "0002"
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:

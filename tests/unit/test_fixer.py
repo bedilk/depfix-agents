@@ -42,7 +42,7 @@ def test_prompt_includes_breaking_change_metadata(
     file_usage: FileUsage, openai_chat_completion_change: BreakingChange
 ) -> None:
     with patch("depfix.fixers.gemini.genai") as mock_genai:
-        mock_genai.GenerativeModel.return_value.generate_content.return_value = _fake_response(
+        mock_genai.Client.return_value.models.generate_content.return_value = _fake_response(
             "const response = await openai.chat.completions.create({ model, messages });\n"
         )
 
@@ -69,9 +69,9 @@ def test_generate_fix_records_llm_call(
     fixed_src = "const response = await openai.chat.completions.create({ model, messages });\n"
 
     with patch("depfix.fixers.gemini.genai") as mock_genai:
-        model_instance = MagicMock()
-        model_instance.generate_content.return_value = _fake_response(fixed_src, 120, 40)
-        mock_genai.GenerativeModel.return_value = model_instance
+        client = MagicMock()
+        client.models.generate_content.return_value = _fake_response(fixed_src, 120, 40)
+        mock_genai.Client.return_value = client
 
         gen = FixGenerator(api_key="fake", model="gemini-2.5-flash", max_retries=1)
         fixed_code, confidence, call = gen.generate_fix(file_usage, openai_chat_completion_change)

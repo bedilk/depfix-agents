@@ -28,7 +28,7 @@ classifiers = [
 
 # Runtime dependencies. Keep in sync with requirements.txt.
 dependencies = [
-    "google-generativeai>=0.8.0",
+    "google-genai>=1.0.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
@@ -118,7 +118,7 @@ strict_optional = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 check_untyped_defs = true
-ignore_missing_imports = true    # third-party stubs are patchy for google-generativeai
+ignore_missing_imports = true    # third-party LLM SDK stubs are patchy
 exclude = ["tests/fixtures/", "build/", "dist/"]
 
 # ============================================================================

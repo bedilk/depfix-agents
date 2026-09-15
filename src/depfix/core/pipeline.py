@@ -16,6 +16,8 @@ import logging
 import time
 from dataclasses import dataclass
 
+from depfix.agent.fix_agent import FixAgent
+from depfix.agent.tools import FixToolset
 from depfix.apply.models import EditVerdict, FileEdit
 from depfix.apply.workspace import WorkspaceEditor
 from depfix.core.models import BreakingChange, FileUsage
@@ -71,16 +73,18 @@ class FixPipeline:
 
     def __init__(
         self,
-        fixer: FixGenerator | OllamaFixGenerator,
+        fixer: FixGenerator | OllamaFixGenerator | FixAgent,
         *,
         validator: FixValidator | None = None,
         verifier: Verifier | None = None,
         retry_loop: RetryLoop | None = None,
+        toolset: FixToolset | None = None,
     ) -> None:
         self._fixer = fixer
         self._validator = validator or FixValidator()
         self._verifier = verifier
         self._retry_loop = retry_loop
+        self._toolset = toolset
 
     def run(
         self,
@@ -106,7 +110,12 @@ class FixPipeline:
             if self._retry_loop is not None:
                 file_usages_by_relpath = {fu.filepath: fu for fu in file_usages}
                 edits, verification, rounds_used = self._retry_loop.run(
-                    edits, verification, file_usages_by_relpath, breaking_change, editor
+                    edits,
+                    verification,
+                    file_usages_by_relpath,
+                    breaking_change,
+                    editor,
+                    toolset=self._toolset,
                 )
                 if rounds_used:
                     logger.info(
@@ -141,10 +150,11 @@ class FixPipeline:
         unconfirmed fix is kept and flagged rather than silently dropped.
         """
         try:
+            kwargs = {"toolset": self._toolset} if isinstance(self._fixer, FixAgent) else {}
             fixed_code, confidence, _llm_call = self._fixer.generate_fix(
-                file_usage, breaking_change
+                file_usage, breaking_change, **kwargs
             )
-        except Exception as exc:  # noqa: BLE001 - a third-party LLM client's failure modes aren't ours to enumerate
+        except Exception as exc:
             logger.error("fix generation failed for %s: %s", file_usage.filepath, exc)
             return FileEdit(
                 relpath=file_usage.filepath,

@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-2.5-flash", description="Gemini model id")
     llm_max_retries: int = Field(default=3, ge=1, le=10)
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    fix_strategy: Literal["single_shot", "agent"] = Field(
+        default="single_shot",
+        description="Fix-generation strategy. The tool-assisted agent is opt-in.",
+    )
+    fix_agent_max_steps: int = Field(
+        default=6,
+        ge=1,
+        le=10,
+        description="Maximum read-only tool rounds for one agent-generated file edit.",
+    )
 
     # --- Ollama (local LLM) ---------------------------------------------------
     ollama_base_url: str = Field(default="http://localhost:11434")

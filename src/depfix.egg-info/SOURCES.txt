@@ -9,6 +9,9 @@ src/depfix.egg-info/dependency_links.txt
 src/depfix.egg-info/entry_points.txt
 src/depfix.egg-info/requires.txt
 src/depfix.egg-info/top_level.txt
+src/depfix/agent/__init__.py
+src/depfix/agent/fix_agent.py
+src/depfix/agent/tools.py
 src/depfix/api/__init__.py
 src/depfix/apply/__init__.py
 src/depfix/apply/models.py

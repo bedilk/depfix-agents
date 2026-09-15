@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from depfix.agent import FixAgent, make_fix_strategy
+from depfix.agent.tools import FixToolset
 from depfix.apply.models import FileEdit
 from depfix.apply.workspace import WorkspaceEditor
 from depfix.clone import Checkout
@@ -20,6 +22,7 @@ from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh.pr import committable_edits
 from depfix.repoconfig.models import RepoConfig
 from depfix.retry.loop import RetryLoop
+from depfix.scanners import CallSiteScanner
 from depfix.scanners.models import RepoScanResult
 from depfix.validators.javascript import FixValidator
 from depfix.verify import Verifier
@@ -38,9 +41,10 @@ def build_fix_pipeline(
     *,
     settings: Settings,
     repo_config: RepoConfig,
-    fixer: FixGenerator | OllamaFixGenerator,
+    fixer: FixGenerator | OllamaFixGenerator | FixAgent,
     editor: WorkspaceEditor,
     max_retries: int | None = None,
+    toolset: FixToolset | None = None,
 ) -> FixPipeline:
     """Build one fix pipeline under the common verification policy."""
     verify_required = repo_config.verify and settings.verify_enabled
@@ -62,7 +66,9 @@ def build_fix_pipeline(
         if verifier is not None and retries > 0
         else None
     )
-    return FixPipeline(fixer, validator=validator, verifier=verifier, retry_loop=retry_loop)
+    return FixPipeline(
+        fixer, validator=validator, verifier=verifier, retry_loop=retry_loop, toolset=toolset
+    )
 
 
 def run_fix_for_change(
@@ -81,13 +87,26 @@ def run_fix_for_change(
     required for this run (``--no-verify`` or ``verify: false``).
     """
     editor = WorkspaceEditor(checkout)
+    strategy = make_fix_strategy(settings, fixer)
+    toolset = (
+        FixToolset(
+            checkout,
+            scanner=CallSiteScanner(
+                max_file_bytes=settings.scan_max_file_bytes, max_files=settings.scan_max_files
+            ),
+            max_file_bytes=settings.scan_max_file_bytes,
+        )
+        if isinstance(strategy, FixAgent)
+        else None
+    )
     verify_required = repo_config.verify and settings.verify_enabled
     pipeline = build_fix_pipeline(
         settings=settings,
         repo_config=repo_config,
-        fixer=fixer,
+        fixer=strategy,
         editor=editor,
         max_retries=max_retries,
+        toolset=toolset,
     )
     result = pipeline.run(scan_result, change, editor)
     return FixServiceResult(

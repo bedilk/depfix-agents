@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 from typing import Protocol
 
+from depfix.agent.fix_agent import FixAgent
+from depfix.agent.tools import FixToolset
 from depfix.apply.models import EditVerdict, FileEdit
 from depfix.apply.workspace import WorkspaceEditor
 from depfix.core.models import BreakingChange, FileUsage, LLMCall
@@ -65,6 +67,8 @@ class RetryLoop:
         file_usages_by_relpath: dict[str, FileUsage],
         breaking_change: BreakingChange,
         editor: WorkspaceEditor,
+        *,
+        toolset: FixToolset | None = None,
     ) -> tuple[list[FileEdit], VerificationReport, int]:
         """Retry retryable edits, re-verifying the full batch after each
         round. Returns the final edits, the final verification report, and
@@ -91,8 +95,9 @@ class RetryLoop:
                     continue
 
                 try:
+                    kwargs = {"toolset": toolset} if isinstance(self._fixer, FixAgent) else {}
                     fixed_code, confidence, _llm_call = self._fixer.generate_fix(
-                        file_usage, breaking_change, feedback=feedback
+                        file_usage, breaking_change, feedback=feedback, **kwargs
                     )
                 except Exception as exc:  # a third-party LLM client's failure modes aren't ours to enumerate
                     logger.error("retry fix generation failed for %s: %s", edit.relpath, exc)

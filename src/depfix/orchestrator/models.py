@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from depfix.orchestrator.plan import PlanArtifact
 from depfix.orchestrator.policy import SkipReason
 from depfix.storage.schema import AttemptStatus
 
@@ -41,6 +42,7 @@ class ChangeOutcome:
     #: "zero call sites found at all" so a report can tell "nothing to fix"
     #: apart from "found things, but they're out of scope for this repo".
     suppressed_call_sites: int = 0
+    plan_artifact: PlanArtifact | None = None
 
     @property
     def skipped(self) -> bool:
