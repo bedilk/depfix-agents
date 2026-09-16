@@ -10,7 +10,7 @@ import logging
 
 import httpx
 
-from depfix.apply.models import EditVerdict, FileEdit
+from depfix.apply.models import EditOrigin, EditVerdict, FileEdit
 from depfix.core.models import BreakingChange
 from depfix.core.pipeline import FixPipelineResult
 from depfix.gh.app import GitHubAppError
@@ -29,7 +29,8 @@ def pr_title_for(change: BreakingChange) -> str:
 
 
 def build_pr_body(
-    change: BreakingChange, result: FixPipelineResult, *, edits: list[FileEdit] | None = None
+    change: BreakingChange, result: FixPipelineResult, *, edits: list[FileEdit] | None = None,
+    escalated: bool = False, plan_digest: str = "",
 ) -> str:
     """Markdown PR body: change summary, migration guide, source evidence
     (when present), a per-file table of edits, and the verification
@@ -50,6 +51,7 @@ def build_pr_body(
         "",
         f"- **Package:** {change.package} ({change.old_version} -> {change.new_version})",
         f"- **Kind:** {change.kind.value}",
+        f"- **Confidence:** `{result.confidence.value}`",
         f"- **Description:** {change.description}",
     ]
     if change.migration_guide:
@@ -59,9 +61,13 @@ def build_pr_body(
     if change.source_url:
         lines += ["", f"Source: {change.source_url}"]
 
-    lines += ["", "### Files changed", "", "| File | Verdict | Usages fixed |", "| --- | --- | --- |"]
+    lines += ["", "### Files changed", "", "| File | Verdict | Author | Usages fixed |", "| --- | --- | --- | --- |"]
     for edit in edits:
-        lines.append(f"| `{edit.relpath}` | {edit.verdict.value} | {edit.usages_fixed} |")
+        lines.append(f"| `{edit.relpath}` | {edit.verdict.value} | {_author_label(edit)} | {edit.usages_fixed} |")
+
+    lines += ["", "### Confidence", "", result.confidence.summary]
+    if result.confidence_reason:
+        lines.append(f"_{result.confidence_reason}._")
 
     verification = result.verification
     lines += ["", "### Verification"]
@@ -70,10 +76,48 @@ def build_pr_body(
         lines.append(f"Test-suite verification did not run ({reason}).")
     else:
         lines.append(f"New test failures introduced: {verification.new_failure_count}.")
+    if verification is not None and verification.typechecked:
+        lines.append(f"`tsc --noEmit` introduced {len(verification.new_diagnostics)} new diagnostic(s).")
 
     lines.append("")
+    if result.codemod_notes:
+        lines += ["", "### Codemod notes", *[f"- {note}" for note in result.codemod_notes[:20]]]
+    lines.append("")
     lines.append("_Opened automatically by [depfix](https://github.com/)._")
+    if escalated:
+        lines.append("_A fallback model was used after the primary produced no committable edits._")
+    if plan_digest:
+        lines.append(f"_Applied from plan artifact `{plan_digest}`._")
+    lines += ["", _pr_state_trailer(change=change, result=result, plan_digest=plan_digest)]
     return "\n".join(lines)
+
+
+def _author_label(edit: FileEdit) -> str:
+    if edit.origin is EditOrigin.CODEMOD:
+        return f"codemod `{edit.codemod_id}`" if edit.codemod_id else "codemod"
+    if edit.origin is EditOrigin.PLAN:
+        return "plan replay"
+    return "model"
+
+
+_PR_TRAILER_PREFIX = "<!-- depfix:v1"
+
+
+def _pr_state_trailer(*, change: BreakingChange, result: FixPipelineResult, plan_digest: str) -> str:
+    parts = [_PR_TRAILER_PREFIX, f"change={change.dedupe_key[:16]}", f"provider={change.provider_id}", f"confidence={result.confidence.value}"]
+    if plan_digest:
+        parts.append(f"plan={plan_digest}")
+    return " ".join([*parts, "-->"])
+
+
+def parse_pr_state_trailer(body: str) -> dict[str, str] | None:
+    for line in reversed(body.splitlines()):
+        line = line.strip()
+        if line.startswith(_PR_TRAILER_PREFIX):
+            fields = line[len(_PR_TRAILER_PREFIX):].removesuffix("-->").strip().split()
+            parsed = {key: value for token in fields if "=" in token for key, _, value in [token.partition("=")]}
+            return parsed or None
+    return None
 
 
 def kept_edits(result: FixPipelineResult) -> list[FileEdit]:
@@ -166,6 +210,44 @@ def _pull_request_from_dict(item: dict, *, already_existed: bool) -> PullRequest
         base_branch=item["base"]["ref"],
         already_existed=already_existed,
     )
+
+
+def apply_pr_labels(
+    *,
+    owner: str,
+    repo: str,
+    pr_number: int,
+    labels: list[str],
+    token: str,
+    api_url: str = DEFAULT_GITHUB_API_URL,
+    http_timeout: float = 20.0,
+    client: httpx.Client | None = None,
+) -> None:
+    """Best-effort, idempotent label attachment for an existing PR."""
+    if not labels:
+        return
+    owned_client = client is None
+    http_client = client or httpx.Client(timeout=http_timeout)
+    try:
+        response = http_client.post(
+            f"{api_url.rstrip('/')}/repos/{owner}/{repo}/issues/{pr_number}/labels",
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json={"labels": labels},
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "failed to apply labels %s to %s/%s#%d: %d %s",
+                labels, owner, repo, pr_number, response.status_code, response.text[:200],
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("label call to %s/%s#%d failed: %s", owner, repo, pr_number, exc)
+    finally:
+        if owned_client:
+            http_client.close()
 
 
 def _raise_for_status(resp: httpx.Response) -> None:

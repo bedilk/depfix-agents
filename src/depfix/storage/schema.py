@@ -372,6 +372,9 @@ class FixRunRow(Base):
     # `verification_skipped_reason` for why, when this is False.
     verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     verification_skipped_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confidence_tier: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    typechecked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -396,7 +399,10 @@ class FileFixRow(Base):
     :class:`depfix.apply.models.FileEdit`."""
 
     __tablename__ = "file_fix"
-    __table_args__ = (Index("ix_file_fix_run_verdict", "fix_run_id", "verdict"),)
+    __table_args__ = (
+        Index("ix_file_fix_run_verdict", "fix_run_id", "verdict"),
+        Index("ix_file_fix_origin", "origin"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fix_run_id: Mapped[int] = mapped_column(
@@ -408,6 +414,8 @@ class FileFixRow(Base):
     usages_fixed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     diff: Mapped[str] = mapped_column(Text, nullable=False, default="")
     error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="llm")
+    codemod_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
 
     fix_run: Mapped[FixRunRow] = relationship(back_populates="file_fixes")
 

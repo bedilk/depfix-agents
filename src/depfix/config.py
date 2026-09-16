@@ -168,6 +168,16 @@ class Settings(BaseSettings):
         le=1800.0,
         description="Wall-clock cap for one baseline or after-fix test run.",
     )
+    verify_typecheck_enabled: bool = Field(default=True)
+    verify_typecheck_timeout: float = Field(default=300.0, ge=1.0, le=1800.0)
+    plan_dir: str = Field(default=".depfix/plans")
+    apply_min_confidence: Literal["high", "medium", "low", "none"] = Field(default="low")
+    draft_below_confidence: Literal["high", "medium", "low", "none"] = Field(default="high")
+    codemods_enabled: bool = Field(default=True)
+    verify_characterize_enabled: bool = Field(default=False)
+    verify_characterize_timeout: int = Field(default=120, ge=1, le=1800)
+    llm_fallback_provider: str = Field(default="")
+    llm_fallback_model: str = Field(default="")
     verify_ignore_scripts: bool = Field(
         default=True,
         description="Pass --ignore-scripts to the install command so a hostile repo's "

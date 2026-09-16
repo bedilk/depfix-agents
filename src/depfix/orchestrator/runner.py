@@ -56,6 +56,7 @@ from depfix.config import Settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import BreakingChange
 from depfix.core.pipeline import FixPipelineResult
+from depfix.verify.confidence import ConfidenceTier
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh import (
@@ -419,11 +420,13 @@ class Orchestrator:
                 return outcome
 
             artifact = self._plan_artifacts.get((repo_full_name, change.dedupe_key))
+            plan_digest = ""
             if artifact is not None:
                 if artifact.base_sha != current_ref_sha:
                     raise ValueError(
                         "plan artifact is stale: repository HEAD changed since plan; run plan again"
                     )
+                plan_digest = artifact.digest
                 fix_service_result = self._apply_plan_artifact(checkout, scan_result, change, artifact)
             else:
                 fix_service_result = self._run_fix_pipeline(checkout, scan_result, change, repo_config)
@@ -434,8 +437,10 @@ class Orchestrator:
             committable = fix_service_result.committable
             if self._dry_run:
                 if not committable:
+                    from depfix.core.explain import format_rejections
+
                     outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
-                    outcome.detail = self._discarded_edit_detail(fix_result)
+                    outcome.detail = format_rejections(fix_result)
                     outcome.planned = True
                     return outcome
                 outcome.attempt_status = (
@@ -455,17 +460,19 @@ class Orchestrator:
             effective_open_pr = repo_config.open_pr and not self._no_pr
             if effective_open_pr:
                 if not committable:
-                    if not self._dry_run:
-                        record_change_attempt(
-                            session,
-                            repo_id=repo_full_name,
-                            dedupe_key=change.dedupe_key,
-                            status=AttemptStatus.NO_KEPT_EDITS,
-                            ref_sha=current_ref_sha,
-                        )
+                    from depfix.core.explain import format_rejections
+
+                    detail = format_rejections(fix_result)
+                    record_change_attempt(
+                        session,
+                        repo_id=repo_full_name,
+                        dedupe_key=change.dedupe_key,
+                        status=AttemptStatus.NO_KEPT_EDITS,
+                        last_error=detail,
+                        ref_sha=current_ref_sha,
+                    )
                     outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
-                    outcome.detail = "no kept/committable edits"
-                    outcome.planned = self._dry_run
+                    outcome.detail = detail
                     return outcome
 
                 pr = self._open_pr(
@@ -477,6 +484,8 @@ class Orchestrator:
                     fix_result=fix_result,
                     edits=committable,
                     draft=repo_config.draft_pr,
+                    escalated=fix_service_result.escalated,
+                    plan_digest=plan_digest,
                 )
                 # Bound for the rest of this change's log lines -- e.g. the
                 # ledger writes below -- now that a PR actually exists to
@@ -490,6 +499,7 @@ class Orchestrator:
                         result=fix_result,
                         installation_id=installation_id,
                         default_branch=base_branch,
+                        escalated=fix_service_result.escalated,
                     )
                     record_pull_request(session, run_row, pr)
                     session.flush()  # assign run_row.id before it's read below
@@ -513,6 +523,7 @@ class Orchestrator:
                 result=fix_result,
                 installation_id=installation_id,
                 default_branch=base_branch,
+                escalated=fix_service_result.escalated,
             )
             session.flush()  # assign run_row.id before it's read below
             record_change_attempt(
@@ -543,16 +554,6 @@ class Orchestrator:
         finally:
             if checkout is not None:
                 self._clone_service.cleanup(checkout)
-
-    @staticmethod
-    def _discarded_edit_detail(result: FixPipelineResult) -> str:
-        details = [
-            f"{edit.relpath}: {edit.verdict.value}"
-            + (f" ({edit.error_message})" if edit.error_message else "")
-            for edit in result.edits
-            if edit.verdict not in {EditVerdict.KEPT, EditVerdict.APPLIED}
-        ]
-        return "no kept/committable edits" + ("; " + "; ".join(details) if details else "")
 
     def _apply_plan_artifact(
         self, checkout: Checkout, scan_result: RepoScanResult, change: BreakingChange, artifact: PlanArtifact
@@ -605,6 +606,8 @@ class Orchestrator:
         fix_result: FixPipelineResult,
         edits: list[FileEdit],
         draft: bool,
+        escalated: bool = False,
+        plan_digest: str = "",
     ) -> PullRequest:
         write_token = self._gh_auth.installation_token(
             installation_id,
@@ -621,14 +624,33 @@ class Orchestrator:
                 message=f"depfix: migrate {change.old_api} -> {change.replacement}",
                 edits=edits,
             )
-        return open_pull_request(
+        confidence_floor = ConfidenceTier(self._settings.draft_below_confidence)
+        auto_draft = not fix_result.confidence.at_least(confidence_floor)
+        pr = open_pull_request(
             owner=owner,
             repo=name,
             token=write_token.token,
             head_branch=head_branch,
             base_branch=base_branch,
             title=pr_title_for(change),
-            body=build_pr_body(change, fix_result, edits=edits),
-            draft=draft,
+            body=build_pr_body(
+                change,
+                fix_result,
+                edits=edits,
+                escalated=escalated,
+                plan_digest=plan_digest,
+            ),
+            draft=draft or auto_draft,
             api_url=self._settings.github_api_url,
         )
+        from depfix.gh import apply_pr_labels
+
+        apply_pr_labels(
+            owner=owner,
+            repo=name,
+            pr_number=pr.number,
+            labels=[f"depfix:confidence={fix_result.confidence.value}"],
+            token=write_token.token,
+            api_url=self._settings.github_api_url,
+        )
+        return pr
