@@ -18,7 +18,9 @@ from dataclasses import dataclass
 
 from depfix.agent.fix_agent import FixAgent
 from depfix.agent.tools import FixToolset
-from depfix.apply.models import EditVerdict, FileEdit
+from depfix.apply.models import EditOrigin, EditVerdict, FileEdit
+from depfix.codemods import CodemodRegistry
+from depfix.verify.confidence import ConfidenceTier
 from depfix.apply.workspace import WorkspaceEditor
 from depfix.core.models import BreakingChange, FileUsage
 from depfix.fixers.gemini import FixGenerator
@@ -45,6 +47,23 @@ class FixPipelineResult:
     total_tokens: int
     duration_ms: int
     verification: VerificationReport | None = None
+    codemod_notes: tuple[str, ...] = ()
+
+    @property
+    def confidence(self) -> ConfidenceTier:
+        if self.verification is not None:
+            return self.verification.tier
+        if any(edit.verdict in (EditVerdict.APPLIED, EditVerdict.KEPT) for edit in self.edits):
+            return ConfidenceTier.LOW
+        return ConfidenceTier.NONE
+
+    @property
+    def confidence_reason(self) -> str:
+        if self.verification is not None and self.verification.tier_reason:
+            return self.verification.tier_reason
+        if self.verification is None:
+            return "verification was disabled; only a syntax check ran"
+        return ""
 
     @property
     def applied_edits(self) -> list[FileEdit]:
@@ -59,6 +78,14 @@ class FixPipelineResult:
     @property
     def suspect_edits(self) -> list[FileEdit]:
         return [e for e in self.edits if e.verdict == EditVerdict.SUSPECT]
+
+    @property
+    def codemod_edits(self) -> list[FileEdit]:
+        return [edit for edit in self.edits if edit.origin is EditOrigin.CODEMOD]
+
+    @property
+    def llm_edits(self) -> list[FileEdit]:
+        return [edit for edit in self.edits if edit.origin is EditOrigin.LLM]
 
 
 class FixPipeline:
@@ -79,12 +106,15 @@ class FixPipeline:
         verifier: Verifier | None = None,
         retry_loop: RetryLoop | None = None,
         toolset: FixToolset | None = None,
+        codemods: CodemodRegistry | None = None,
     ) -> None:
         self._fixer = fixer
         self._validator = validator or FixValidator()
         self._verifier = verifier
         self._retry_loop = retry_loop
         self._toolset = toolset
+        self._codemods = codemods
+        self._codemod_notes: list[str] = []
 
     def run(
         self,
@@ -100,11 +130,12 @@ class FixPipeline:
         start = time.time()
         file_usages = scan_result.to_file_usages(editor.checkout.path)
 
+        self._codemod_notes = []
         edits = [self._fix_one(file_usage, breaking_change, editor) for file_usage in file_usages]
 
         verification: VerificationReport | None = None
         if self._verifier is not None:
-            verification = self._verifier.verify(edits)
+            verification = self._verifier.verify(edits, change=breaking_change)
             edits = list(verification.edits)
 
             if self._retry_loop is not None:
@@ -135,12 +166,13 @@ class FixPipeline:
             total_tokens=self._fixer.total_tokens,
             duration_ms=int((time.time() - start) * 1000),
             verification=verification,
+            codemod_notes=tuple(self._codemod_notes),
         )
 
     def _fix_one(
         self, file_usage: FileUsage, breaking_change: BreakingChange, editor: WorkspaceEditor
     ) -> FileEdit:
-        """Generate + validate + write one file's fix.
+        """Try a deterministic codemod before requesting an LLM fix.
 
         A generation failure (LLM error, exhausted retries) produces a
         SKIPPED edit rather than propagating -- one bad file must not abort
@@ -149,6 +181,28 @@ class FixPipeline:
         :class:`depfix.apply.models.EditVerdict`'s docstring for why an
         unconfirmed fix is kept and flagged rather than silently dropped.
         """
+        if self._codemods is not None:
+            result = self._codemods.apply(
+                file_usage.filepath, file_usage.file_content, breaking_change
+            )
+            if result is not None and result.changed and result.source is not None:
+                validation = self._validator.validate(
+                    file_usage.file_content, result.source, file_usage.filepath
+                )
+                if validation.is_valid:
+                    self._codemod_notes.append(f"{file_usage.filepath}: {result.note}")
+                    return editor.write_fix(
+                        file_usage.filepath, result.source, confidence=1.0,
+                        usages_fixed=file_usage.usage_count, validation=validation,
+                        origin=EditOrigin.CODEMOD, codemod_id=result.codemod_id,
+                    )
+                self._codemod_notes.append(
+                    f"{file_usage.filepath}: {result.codemod_id} produced invalid syntax; fell back to the model"
+                )
+            elif result is not None and result.declined:
+                self._codemod_notes.append(
+                    f"{file_usage.filepath}: {result.codemod_id} declined ({result.declined_reason}); fell back to the model"
+                )
         try:
             kwargs = {"toolset": self._toolset} if isinstance(self._fixer, FixAgent) else {}
             fixed_code, confidence, _llm_call = self._fixer.generate_fix(
@@ -176,4 +230,5 @@ class FixPipeline:
             confidence=confidence,
             usages_fixed=usages_fixed,
             validation=validation,
+            origin=EditOrigin.LLM,
         )

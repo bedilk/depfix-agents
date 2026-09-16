@@ -122,7 +122,7 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 _RUN_COMMANDS = {
-    "run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline", "init", "plan", "apply"
+    "run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline", "init", "plan", "apply", "doctor", "status"
 }
 _TOP_LEVEL_FLAGS = {"-h", "--help", "--log-level", "--log-format"}
 
@@ -284,6 +284,15 @@ def _build_fixer(settings):
         base_url=settings.ollama_base_url,
         timeout=settings.ollama_timeout,
     )
+
+
+def _apply_model_overrides(args: argparse.Namespace, settings: Settings) -> None:
+    if getattr(args, "fallback_provider", None):
+        settings.llm_fallback_provider = args.fallback_provider
+    if getattr(args, "fallback_model", None):
+        settings.llm_fallback_model = args.fallback_model
+    if getattr(args, "no_codemods", False):
+        settings.codemods_enabled = False
 
 
 def _print_header() -> None:
@@ -850,8 +859,19 @@ def _open_pr_for_fix(
             head_branch=head_branch,
             base_branch=base_branch,
             title=pr_title_for(breaking),
-            body=build_pr_body(breaking, result),
+            body=build_pr_body(breaking, result, edits=edits),
             draft=args.draft_pr,
+            api_url=settings.github_api_url,
+        )
+        from depfix.gh import apply_pr_labels
+
+        apply_pr_labels(
+            owner=owner,
+            repo=name,
+            pr_number=pr.number,
+            labels=[f"depfix:confidence={result.confidence.value}"],
+            token=write_token.token,
+            api_url=settings.github_api_url,
         )
         verb = "Reused existing" if pr.already_existed else "Opened"
         console.print(f"[green]{verb} PR: {pr.html_url}[/green]")
@@ -865,6 +885,7 @@ def _open_pr_for_fix(
 
 def _cmd_fix(args: argparse.Namespace) -> int:
     settings = get_settings()
+    _apply_model_overrides(args, settings)
     api_key = args.api_key or settings.google_api_key
     model = args.model or settings.gemini_model
     llm_provider = args.llm_provider or settings.llm_provider
@@ -1024,6 +1045,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
                 owner=owner,
                 name=name,
                 result=result,
+                escalated=service_result.escalated,
             )
             if pr_result is not None:
                 record_pull_request(session, run, pr_result)
@@ -1096,6 +1118,10 @@ def _cmd_init(args: argparse.Namespace) -> int:
     configured App can read the repo and whether a known migration has any
     call sites before a plan is allowed to spend model tokens.
     """
+    if args.write_config:
+        console.print(_starter_repo_config(), soft_wrap=True, highlight=False)
+        return 0
+
     settings = get_settings()
     try:
         providers = load_providers_file(args.providers_file or settings.providers_file)
@@ -1213,6 +1239,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         args.dry_run = True
         args.no_pr = True
     settings = get_settings()
+    _apply_model_overrides(args, settings)
     api_key = args.api_key or settings.google_api_key
     model = args.model or settings.gemini_model
     llm_provider = args.llm_provider or settings.llm_provider
@@ -1266,32 +1293,68 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     if args.provider:
         wanted = set(args.provider)
         changes = [c for c in changes if c.provider_id in wanted]
-    if not changes:
+    # `apply <repo>` may obtain its one change from the repo's canonical
+    # plan artifact, so do not reject an empty database/change-file result
+    # until plan discovery has had a chance to run.
+    if not changes and not args.plan_file and args.command != "apply":
         console.print("[yellow]No breaking changes to process.[/yellow]")
         gh_auth.close()
         return 0
     plan_artifacts: dict[tuple[str, str], PlanArtifact] = {}
+    resolved_artifact: PlanArtifact | None = None
+
     if args.plan_file:
         try:
-            artifact = PlanArtifact.read(args.plan_file)
+            resolved_artifact = PlanArtifact.read(args.plan_file)
         except (OSError, ValueError, json.JSONDecodeError, KeyError, TypeError) as exc:
             console.print(f"[red]Error loading plan artifact: {exc}[/red]")
             gh_auth.close()
             return 2
+    elif args.command == "apply" and len(repo_full_names) == 1 and not (args.from_event or args.change_file):
+        resolved_artifact = PlanArtifact.latest_for_repo(
+            repo_full_names[0], directory=settings.plan_dir
+        )
+        if resolved_artifact is None:
+            console.print(
+                f"[red]No plan artifact found for {repo_full_names[0]}.[/red]\n"
+                f"[dim]Run first:[/dim] "
+                f"[bold]depfix plan {repo_full_names[0]} --from-event <ID>[/bold]"
+            )
+            gh_auth.close()
+            return 2
+        console.print(
+            f"[dim]Using latest plan for {repo_full_names[0]} "
+            f"({resolved_artifact.digest[:19]}...)[/dim]"
+        )
+
+    if resolved_artifact is not None:
         if args.command != "apply":
             console.print("[red]Error: --plan-file is only valid with `depfix apply`.[/red]")
             gh_auth.close()
             return 2
-        matching = [c for c in changes if c.dedupe_key == artifact.change_dedupe_key]
-        if len(matching) != 1:
-            console.print("[red]Error: --from-event must identify the change stored in --plan-file.[/red]")
+        if resolved_artifact.repo_full_name not in repo_full_names:
+            console.print(
+                f"[red]Error: plan artifact is for "
+                f"{resolved_artifact.repo_full_name}, which is not included in "
+                "this apply command.[/red]"
+            )
             gh_auth.close()
             return 2
-        if artifact.repo_full_name not in repo_full_names:
-            console.print("[red]Error: plan artifact repo is not included in this apply command.[/red]")
-            gh_auth.close()
-            return 2
-        plan_artifacts[(artifact.repo_full_name, artifact.change_dedupe_key)] = artifact
+        conflicting = [c for c in changes if c.dedupe_key != resolved_artifact.change_dedupe_key]
+        if conflicting and (args.from_event or args.change_file):
+            console.print(
+                "[yellow]Note: ignoring --from-event/--change-file; the plan "
+                f"artifact applies change {resolved_artifact.change_dedupe_key[:12]}.[/yellow]"
+            )
+        changes = [resolved_artifact.change]
+        plan_artifacts[
+            (resolved_artifact.repo_full_name, resolved_artifact.change_dedupe_key)
+        ] = resolved_artifact
+
+    if not changes:
+        console.print("[yellow]No breaking changes to process.[/yellow]")
+        gh_auth.close()
+        return 0
 
     def fixer_factory() -> FixGenerator | OllamaFixGenerator:
         if llm_provider == "gemini":
@@ -1346,14 +1409,26 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
 
     _print_orchestrator_outcome(outcome, show_skips=args.show_skips)
     if args.command == "plan":
-        output_dir = Path(args.plan_output_dir)
+        # Write the canonical per-repo artifact so ``apply <repo>`` can use
+        # the latest reviewed plan without a copied filename. Keep optional
+        # run-stamped copies for CI/audit workflows.
+        legacy_dir = Path(args.plan_output_dir)
         for repo in outcome.repos:
             for change in repo.changes:
                 if change.plan_artifact is None:
                     continue
-                path = output_dir / f"{outcome.run_id}-{change.plan_artifact.change_dedupe_key[:12]}.json"
-                change.plan_artifact.write(path)
-                console.print(f"[green]Plan artifact:[/green] {path}")
+                canonical = change.plan_artifact.write_for_repo(settings.plan_dir)
+                console.print(f"[green]Plan artifact:[/green] {canonical}")
+                if args.plan_output_dir != Path(settings.plan_dir).as_posix():
+                    stamped = legacy_dir / (
+                        f"{outcome.run_id}-"
+                        f"{change.plan_artifact.change_dedupe_key[:12]}.json"
+                    )
+                    change.plan_artifact.write(stamped)
+                console.print(
+                    f"[dim]Apply with:[/dim] "
+                    f"[bold]{change.plan_artifact.apply_command()}[/bold]"
+                )
 
     if outcome.stopped_early:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
@@ -1618,6 +1693,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(eval_p)
 
+    doctor_p = sub.add_parser("doctor", help="Read-only preflight checks")
+    doctor_p.add_argument("--offline", action="store_true", help="Skip network-dependent checks")
+    _add_command_logging_arguments(doctor_p)
+
+    status_p = sub.add_parser("status", help="Show the orchestrator attempt ledger")
+    status_p.add_argument("--repo", action="append", default=None, metavar="OWNER/NAME")
+    status_p.add_argument("--status", default=None, help="Filter by attempt status")
+    status_p.add_argument("--limit", type=int, default=50)
+    status_p.add_argument("-v", "--verbose", action="store_true")
+    status_p.add_argument("--reconcile", action="store_true", help="Cross-reference open depfix PRs on GitHub")
+    _add_command_logging_arguments(status_p)
+
     # -- scan -------------------------------------------------------------------
     scan_p = sub.add_parser("scan", help="Find SDK call sites in a local checkout or a cloned repo")
     scan_p.add_argument(
@@ -1768,6 +1855,9 @@ def build_parser() -> argparse.ArgumentParser:
     fix_p.add_argument(
         "--no-save", action="store_true", help="Don't persist this fix run to the database"
     )
+    fix_p.add_argument("--no-codemods", action="store_true")
+    fix_p.add_argument("--fallback-provider", choices=["gemini", "ollama"], default=None)
+    fix_p.add_argument("--fallback-model", default=None)
     fix_p.add_argument(
         "--open-pr",
         action="store_true",
@@ -1921,6 +2011,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Proceed without the advisory lock; intended only for deliberate parallel runs.",
     )
+    pipeline_p.add_argument("--no-codemods", action="store_true")
+    pipeline_p.add_argument("--fallback-provider", choices=["gemini", "ollama"], default=None)
+    pipeline_p.add_argument("--fallback-model", default=None)
     pipeline_p.add_argument(
         "--show-skips",
         action="store_true",
@@ -1967,6 +2060,11 @@ def build_parser() -> argparse.ArgumentParser:
     init_p.add_argument(
         "--limit", type=int, default=0,
         help="Number of database changes to scan when no --change-file/--from-event is supplied (default: 0)",
+    )
+    init_p.add_argument(
+        "--write-config",
+        action="store_true",
+        help="Print a starter .depfix.yml to stdout for committing in the target repository.",
     )
     _add_command_logging_arguments(init_p)
 
@@ -2043,6 +2141,167 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0 if result.success_rate == 1.0 else 1
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from depfix.doctor import CheckStatus, run_checks, worst_status
+
+    checks = run_checks(get_settings(), skip_network=args.offline)
+    _print_header()
+    styles = {CheckStatus.OK: "[green]OK[/green]", CheckStatus.WARN: "[yellow]WARN[/yellow]", CheckStatus.FAIL: "[red]FAIL[/red]"}
+    for check in checks:
+        console.print(f"{styles[check.status]:<18} {check.name:<24} {check.detail}")
+        if check.hint and check.status is not CheckStatus.OK:
+            console.print(f"  [dim]{check.hint}[/dim]")
+    return 1 if worst_status(checks) is CheckStatus.FAIL else 0
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    """Show the ledger and optionally cross-reference open GitHub PRs."""
+    from depfix.storage.schema import ChangeAttemptRow, RepoRow
+
+    init_schema()
+    settings = get_settings()
+    reconciled_by_repo: dict[str, dict[str, str]] = {}
+    if args.reconcile:
+        gh_auth = _build_gh_auth(settings)
+        if gh_auth is None:
+            console.print("[yellow]--reconcile skipped: GitHub App not configured.[/yellow]")
+        else:
+            try:
+                reconciled_by_repo = _reconcile_open_prs(gh_auth, args.repo)
+            except GitHubAppError as exc:
+                console.print(f"[yellow]--reconcile failed: {exc}[/yellow]")
+            finally:
+                gh_auth.close()
+
+    with session_scope() as session:
+        repos = args.repo or [row.id for row in session.scalars(select(RepoRow)).all()]
+        if not repos:
+            console.print("[dim]No repos have been processed yet.[/dim]")
+            return 0
+        table = Table(title="Change Attempt Ledger")
+        table.add_column("Repo", style="cyan")
+        table.add_column("Dedupe key", style="dim")
+        table.add_column("Ledger status")
+        if args.reconcile:
+            table.add_column("GitHub")
+        table.add_column("Attempts", justify="right")
+        table.add_column("Updated", style="dim")
+        drift_count = 0
+        shown = 0
+        for repo_id in repos:
+            github_state = reconciled_by_repo.get(repo_id, {})
+            rows = session.scalars(
+                select(ChangeAttemptRow)
+                .where(ChangeAttemptRow.repo_id == repo_id)
+                .order_by(ChangeAttemptRow.updated_at.desc())
+            )
+            for row in rows:
+                if args.status and row.status != args.status:
+                    continue
+                cells = [row.repo_id, row.dedupe_key[:12], _status_cell(row.status)]
+                if args.reconcile:
+                    github_cell, drifted = _github_cell(
+                        row.status, github_state.get(row.dedupe_key[:12])
+                    )
+                    cells.append(github_cell)
+                    drift_count += int(drifted)
+                cells += [
+                    str(row.attempts_used),
+                    row.updated_at.isoformat(" ", "seconds") if row.updated_at else "-",
+                ]
+                table.add_row(*cells)
+                shown += 1
+                if shown >= args.limit:
+                    break
+            if shown >= args.limit:
+                break
+        console.print(table if shown else "[dim]No matching ledger entries.[/dim]")
+        if args.reconcile and drift_count:
+            console.print(
+                f"\n[yellow]{drift_count} drift(s) detected. Re-run "
+                "`depfix pipeline --force <repo>` on those changes to resync.[/yellow]"
+            )
+        if args.verbose:
+            errors = session.scalars(
+                select(ChangeAttemptRow)
+                .where(ChangeAttemptRow.last_error != "")
+                .order_by(ChangeAttemptRow.updated_at.desc())
+                .limit(args.limit)
+            ).all()
+            if errors:
+                console.print("\n[bold]Recent failure details:[/bold]")
+                for row in errors:
+                    console.print(f"\n[cyan]{row.repo_id}[/cyan] · [dim]{row.dedupe_key[:12]}[/dim]")
+                    console.print(f"  {row.last_error}")
+    return 0
+
+
+_STATUS_STYLE_MAP = {
+    "pr_opened": "green", "fixed_no_pr": "cyan", "no_call_sites": "dim",
+    "no_kept_edits": "yellow", "failed": "red", "ignored": "dim",
+}
+
+
+def _status_cell(status: str) -> str:
+    return f"[{_STATUS_STYLE_MAP.get(status, 'white')}]{status}[/{_STATUS_STYLE_MAP.get(status, 'white')}]"
+
+
+def _reconcile_open_prs(gh_auth, repo_filter: list[str] | None) -> dict[str, dict[str, str]]:
+    """Return open depfix PRs, keyed by repo and branch dedupe-key prefix."""
+    from depfix.gh import BRANCH_PREFIX
+
+    result: dict[str, dict[str, str]] = {}
+    if repo_filter is None:
+        return result
+    for repo_full_name in repo_filter:
+        owner, _, name = repo_full_name.partition("/")
+        if not name:
+            continue
+        try:
+            prs = gh_auth.list_open_pull_requests(owner, name)
+        except Exception as exc:  # noqa: BLE001 - one inaccessible repo should not fail status
+            logger.warning("could not list PRs for %s: %s", repo_full_name, exc)
+            continue
+        result[repo_full_name] = {
+            pr.head_branch[len(BRANCH_PREFIX):][:12]: "open"
+            for pr in prs
+            if pr.head_branch.startswith(BRANCH_PREFIX)
+        }
+    return result
+
+
+def _github_cell(ledger_status: str, github_state: str | None) -> tuple[str, bool]:
+    if ledger_status == "pr_opened":
+        return ("[green]open[/green]", False) if github_state == "open" else ("[yellow]closed/merged[/yellow]", True)
+    if github_state == "open":
+        return "[red]open (stale)[/red]", True
+    return "[dim]—[/dim]", False
+
+
+_STARTER_REPO_CONFIG = """# depfix per-repo opt-in configuration.
+# Commit this file at the default branch's root to opt the repository in.
+
+version: 1
+
+# Kill switch. Set false to pause depfix without deleting this configuration.
+enabled: true
+
+# Run the repository's tests against each migration where possible.
+verify: true
+
+# Open a pull request after verification. Disable during onboarding rehearsals.
+open_pr: true
+
+# Low-confidence PRs are drafted automatically; this drafts every depfix PR.
+draft_pr: false
+"""
+
+
+def _starter_repo_config() -> str:
+    """The .depfix.yml template printed by ``depfix init --write-config``."""
+    return _STARTER_REPO_CONFIG
+
+
 def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
 
@@ -2077,6 +2336,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_repos(args)
     if args.command == "init":
         return _cmd_init(args)
+    if args.command == "doctor":
+        return _cmd_doctor(args)
+    if args.command == "status":
+        return _cmd_status(args)
     if args.command in {"pipeline", "plan", "apply"}:
         return _cmd_pipeline(args)
     return _cmd_run(args)

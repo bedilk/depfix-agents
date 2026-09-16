@@ -140,7 +140,12 @@ def _legacy_schema_revision(engine: Engine) -> str | None:
         return "0001"
 
     change_event_columns = {column["name"] for column in inspector.get_columns("change_event")}
-    return "0003" if "body_url" in change_event_columns else "0002"
+    if "body_url" not in change_event_columns:
+        return "0002"
+    fix_run_columns = {column["name"] for column in inspector.get_columns("fix_run")}
+    if "confidence_tier" not in fix_run_columns:
+        return "0003"
+    return "0005" if "escalated" in fix_run_columns else "0004"
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:

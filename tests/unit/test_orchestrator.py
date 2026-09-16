@@ -192,7 +192,13 @@ def _change(old_api: str = "openai.createModeration()") -> BreakingChange:
 
 
 def _settings(**overrides: object) -> Settings:
-    defaults: dict[str, object] = {"verify_enabled": False, "retry_max_rounds": 0}
+    # These tests exercise the fake LLM path; dedicated codemod tests cover
+    # deterministic rewrites independently.
+    defaults: dict[str, object] = {
+        "verify_enabled": False,
+        "retry_max_rounds": 0,
+        "codemods_enabled": False,
+    }
     defaults.update(overrides)
     return Settings(**defaults)
 
@@ -239,6 +245,9 @@ def _mock_pr_endpoints(respx_mock: respx.Router, *, owner: str, repo: str, pr_nu
                 "base": {"ref": "main"},
             },
         )
+    )
+    respx_mock.post(f"/repos/{owner}/{repo}/issues/{pr_number}/labels").mock(
+        return_value=httpx.Response(200, json={"labels": []})
     )
 
 

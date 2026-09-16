@@ -11,6 +11,14 @@ from dataclasses import dataclass
 from depfix.core.models import ValidationResult
 
 
+class EditOrigin(str, enum.Enum):
+    """Who authored an edit."""
+
+    CODEMOD = "codemod"
+    LLM = "llm"
+    PLAN = "plan"
+
+
 class EditVerdict(str, enum.Enum):
     """Outcome of writing one candidate fix to one file.
 
@@ -63,6 +71,8 @@ class FileEdit:
     usages_fixed: int = 0
     validation: ValidationResult | None = None
     error_message: str = ""
+    origin: EditOrigin = EditOrigin.LLM
+    codemod_id: str = ""
 
     @property
     def is_on_disk(self) -> bool:

@@ -26,6 +26,7 @@ def record_fix_run(
     repo_scan_id: int | None = None,
     installation_id: int | None = None,
     default_branch: str | None = None,
+    escalated: bool = False,
 ) -> FixRunRow:
     """Persist one :class:`FixPipelineResult`, creating the parent ``repo``
     row if this is the first time it's been touched by any pipeline (scan
@@ -68,6 +69,9 @@ def record_fix_run(
         verification_skipped_reason=(
             result.verification.skipped_reason if result.verification is not None else ""
         ),
+        confidence_tier=result.confidence.value,
+        typechecked=result.verification is not None and result.verification.typechecked,
+        escalated=escalated,
     )
     run.file_fixes = [
         FileFixRow(
@@ -77,6 +81,8 @@ def record_fix_run(
             usages_fixed=edit.usages_fixed,
             diff=edit.diff,
             error_message=edit.error_message,
+            origin=edit.origin.value,
+            codemod_id=edit.codemod_id,
         )
         for edit in result.edits
     ]

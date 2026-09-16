@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from depfix.apply.models import EditVerdict, FileEdit
+from depfix.apply.models import EditOrigin, EditVerdict, FileEdit
 from depfix.clone import Checkout
 from depfix.core.models import ValidationResult
 from depfix.validators.javascript import create_unified_diff
@@ -72,6 +72,8 @@ class WorkspaceEditor:
         confidence: float = 0.0,
         usages_fixed: int = 0,
         validation: ValidationResult | None = None,
+        origin: EditOrigin = EditOrigin.LLM,
+        codemod_id: str = "",
     ) -> FileEdit:
         """Write ``fixed_content`` to ``relpath``, preserving the original
         file's byte-level formatting quirks (line endings, trailing newline,
@@ -98,6 +100,7 @@ class WorkspaceEditor:
                 usages_fixed=usages_fixed,
                 validation=validation,
                 error_message=f"could not read {relpath}: {exc}",
+                origin=origin, codemod_id=codemod_id,
             )
 
         try:
@@ -113,6 +116,7 @@ class WorkspaceEditor:
                 usages_fixed=usages_fixed,
                 validation=validation,
                 error_message=f"could not decode {relpath} as utf-8: {exc}",
+                origin=origin, codemod_id=codemod_id,
             )
 
         if relpath not in self._originals:
@@ -128,6 +132,7 @@ class WorkspaceEditor:
                 confidence=confidence,
                 usages_fixed=usages_fixed,
                 validation=validation,
+                origin=origin, codemod_id=codemod_id,
             )
 
         diff = create_unified_diff(original_text, fixed_content, relpath)
@@ -146,6 +151,7 @@ class WorkspaceEditor:
                 usages_fixed=usages_fixed,
                 validation=validation,
                 error_message=f"could not write {relpath}: {exc}",
+                origin=origin, codemod_id=codemod_id,
             )
 
         verdict = EditVerdict.SUSPECT if validation is not None and not validation.is_valid else EditVerdict.APPLIED
@@ -158,6 +164,7 @@ class WorkspaceEditor:
             confidence=confidence,
             usages_fixed=usages_fixed,
             validation=validation,
+            origin=origin, codemod_id=codemod_id,
         )
 
     def revert(self, relpath: str) -> bool:
