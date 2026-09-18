@@ -32,6 +32,31 @@ Full findings in [`docs/research/BUSINESS_ASSESSMENT.md`](research/BUSINESS_ASSE
 ### 4. Plan agreed
 Timeline compressed to **3 days to MVP + test** — see [`docs/MVP_3DAY_PLAN.md`](MVP_3DAY_PLAN.md). One wedge (OpenAI SDK), one metric (KEPT rate under real test verification), one deliverable (recorded end-to-end run + 2–3 real repos + numbers).
 
+## Session 2 (2026-09-18): review fixes + top-10 ecosystems + impact check
+
+1. **Code review of the Week1-2 merge applied** (commit `c55e863`): manifest-bump
+   verdict bug, dependency-section `break`→`continue` bug, changelog-HTML fetch now
+   size-capped + reformatted, config-key codemod position-guarded, smoke-check
+   failure messages no longer overwrite each other, `--no-pr` no longer requires
+   the PR permission for auto-reconciliation, `depfix status --reconcile` now
+   shares the orchestrator's reconcile code instead of duplicating it.
+2. **Top-10 ecosystem support** (`src/depfix/ecosystems/`): fix+verify for
+   JavaScript/TypeScript and **Python** (venv + pip + pytest/JUnit + ast validation,
+   proven end-to-end locally); scan-only (detection + manifest deps + import-level
+   call sites) for Java, Kotlin, Go, Rust, Ruby, PHP, C#, Swift. providers.yaml
+   gained pypi SDKs for openai/stripe/anthropic. The providers.yaml `ecosystem:`
+   tag now actually reaches the scanner (it was silently dropped before).
+3. **Plan-time impact check** (`src/depfix/verify/impact.py`): `depfix plan` now
+   locally tests a noticed change *before* any fix is generated -- baseline test
+   run vs. run with the dependency bumped, diffed by test identity; result quoted
+   in the plan output. `PLAN_IMPACT_CHECK_ENABLED=false` to disable.
+4. **UI plan** written: `docs/UI_PLAN.md` (spec browser with release notes,
+   FastAPI read layer over the existing schema, phased P0-P4).
+5. **Hygiene**: 284 committed build artifacts (pycache/pyc/sqlite/output/egg-info)
+   untracked and gitignored.
+6. Tests: 603+ unit tests green; two real parser bugs caught by the new
+   agent-written tests and fixed.
+
 ## Decisions needed from Bedil
 1. `GOOGLE_API_KEY` available, or Ollama-only for the MVP?
 2. GitHub App (APP_ID + private key) — exists, or local-path testing this week?
