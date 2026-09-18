@@ -81,12 +81,33 @@ def _reporter_args(framework: TestFramework, out_path: Path) -> list[str]:
     return []
 
 
-def _test_argv(package_manager: str, framework: TestFramework, out_path: Path) -> list[str]:
+def _script_already_configures_reporter(root: Path, framework: TestFramework) -> bool:
+    """True when the repo's own ``test`` script already pins the reporter we
+    would append. Appending it again used to be harmless; Node 26 rejects a
+    duplicated ``--test-reporter`` outright (``ERR_INVALID_ARG_VALUE``), which
+    turned every ``node:test`` repo with an explicit reporter into a crashed,
+    unverifiable run."""
+    script = _read_package_json(root).get("scripts", {}).get("test", "")
+    if framework == TestFramework.NODE_TEST:
+        return "--test-reporter" in script
+    if framework == TestFramework.JEST:
+        return "--json" in script
+    if framework == TestFramework.VITEST:
+        return "--reporter" in script
+    if framework == TestFramework.MOCHA:
+        return "--reporter" in script
+    return False
+
+
+def _test_argv(
+    package_manager: str, framework: TestFramework, out_path: Path, *, skip_reporter_args: bool = False
+) -> list[str]:
+    reporter = [] if skip_reporter_args else _reporter_args(framework, out_path)
     if package_manager == "bun":
-        return ["bun", "run", "test", "--", *_reporter_args(framework, out_path)]
+        return ["bun", "run", "test", "--", *reporter]
     if package_manager == "pnpm":
-        return ["pnpm", "run", "test", "--", *_reporter_args(framework, out_path)]
-    return [package_manager, "test", "--", *_reporter_args(framework, out_path)]
+        return ["pnpm", "run", "test", "--", *reporter]
+    return [package_manager, "test", "--", *reporter]
 
 
 def run_tests(
@@ -120,7 +141,10 @@ def run_tests(
 
     with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
         out_path = Path(tmp) / "results.json"
-        argv = _test_argv(manager, framework, out_path)
+        argv = _test_argv(
+            manager, framework, out_path,
+            skip_reporter_args=_script_already_configures_reporter(effective_cwd, framework),
+        )
 
         # CI=1 stops Jest/Vitest/Mocha from defaulting to interactive watch
         # mode when stdin isn't a TTY, which would otherwise hang until the
