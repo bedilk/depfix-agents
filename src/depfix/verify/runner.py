@@ -32,9 +32,14 @@ def _read_package_json(root: Path) -> dict:
         return {}
 
 
-def has_test_script(root: str | Path) -> bool:
-    """True if ``root``'s ``package.json`` declares a real ``test`` script
-    (not npm's auto-generated "no test specified" placeholder)."""
+def has_test_script(root: str | Path, ecosystem: str = "javascript") -> bool:
+    """True if ``root`` has a runnable test setup for its ecosystem --
+    a real npm ``test`` script (not the "no test specified" placeholder),
+    or a pytest configuration/convention for python."""
+    if ecosystem == "python":
+        from depfix.ecosystems.python_runtime import has_pytest_setup
+
+        return has_pytest_setup(root)
     pkg = _read_package_json(Path(root))
     script = pkg.get("scripts", {}).get("test", "")
     return bool(script) and _NO_TEST_SPECIFIED not in script
@@ -91,6 +96,7 @@ def run_tests(
     package_manager: str | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     test_cwd: str | Path | None = None,
+    ecosystem: str = "javascript",
 ) -> TestRunResult:
     """Run ``root``'s ``test`` script under a JSON-ish reporter and parse
     the result. Never raises -- any failure to detect/run/parse is folded
@@ -98,9 +104,17 @@ def run_tests(
     ``timed_out``, ``used_fallback_parser``) so callers always get a value
     to compare against a baseline, rather than having to handle exceptions
     from a subprocess they don't control.
+
+    ``ecosystem="python"`` runs pytest with a JUnit XML reporter instead of
+    an npm test script; everything downstream (identity-diffing, fallback
+    degradation) is framework-agnostic and unchanged.
     """
     root = Path(root)
     effective_cwd = Path(test_cwd) if test_cwd else root
+
+    if ecosystem == "python":
+        return _run_pytest(effective_cwd, timeout=timeout, max_output_bytes=max_output_bytes)
+
     manager = package_manager or detect_package_manager(effective_cwd)
     framework = detect_framework(effective_cwd)
 
@@ -135,6 +149,66 @@ def run_tests(
 
     return TestRunResult(
         framework=framework,
+        command=result.argv,
+        exit_code=result.exit_code,
+        duration_ms=result.duration_ms,
+        cases=cases,
+        parse_error=parse_error,
+        used_fallback_parser=used_fallback,
+        raw_output_tail=(result.stdout[-2000:] + result.stderr[-2000:]),
+    )
+
+
+def _run_pytest(
+    cwd: Path, *, timeout: float, max_output_bytes: int
+) -> TestRunResult:
+    """Run pytest with ``--junit-xml`` and parse the report.
+
+    The venv interpreter is preferred when the checkout's ``.depfix-venv``
+    exists (i.e. after :func:`depfix.verify.manager.install_dependencies`
+    ran for python), so tests see the dependencies that were installed for
+    them rather than whatever the operator's system python happens to have.
+    """
+    from depfix.ecosystems.python_runtime import test_argv
+    from depfix.ecosystems.specs import PYTHON
+
+    with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
+        out_path = Path(tmp) / "results.xml"
+        argv = test_argv(cwd, out_path)
+        if argv is None:
+            return TestRunResult(
+                framework=TestFramework.PYTEST,
+                parse_error="python3 not found on PATH",
+                used_fallback_parser=True,
+            )
+
+        result = run_sandboxed(
+            argv,
+            cwd=cwd,
+            timeout=timeout,
+            extra_env={"CI": "1"},
+            max_output_bytes=max_output_bytes,
+            extra_allowlist=PYTHON.env_allowlist_extra,
+        )
+
+        if result.timed_out:
+            return TestRunResult(
+                framework=TestFramework.PYTEST,
+                command=result.argv,
+                exit_code=result.exit_code,
+                duration_ms=result.duration_ms,
+                timed_out=True,
+                raw_output_tail=result.stdout[-2000:] + result.stderr[-2000:],
+            )
+
+        raw = out_path.read_text(encoding="utf-8") if out_path.is_file() else ""
+        report_input = raw if raw else result.stdout
+        cases, parse_error, used_fallback = parse_output(
+            TestFramework.PYTEST, report_input, result.stderr
+        )
+
+    return TestRunResult(
+        framework=TestFramework.PYTEST,
         command=result.argv,
         exit_code=result.exit_code,
         duration_ms=result.duration_ms,

@@ -103,6 +103,11 @@ class ScanTarget:
     api_base_urls: tuple[str, ...] = ()
     call_site_anchors: tuple[str, ...] = ()
     symbols: tuple[str, ...] = ()  # narrows matching to these dotted symbols, if non-empty
+    #: (package name, registry name) pairs -- preserves each SDK package's
+    #: ``ecosystem:`` tag from providers.yaml, which the bare ``sdk_packages``
+    #: tuple historically dropped. Empty for legacy callers; scanners then
+    #: treat every package as belonging to whatever ecosystem they scan.
+    sdk_package_refs: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass

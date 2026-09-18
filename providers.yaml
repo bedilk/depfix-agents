@@ -15,6 +15,8 @@ providers:
     sdk_packages:
       - name: openai
         ecosystem: npm
+      - name: openai
+        ecosystem: pypi
     # Week 3 uses these as the seed grep set, before AST work.
     call_site_anchors:
       - "new OpenAI("
@@ -42,6 +44,8 @@ providers:
     sdk_packages:
       - name: stripe
         ecosystem: npm
+      - name: stripe
+        ecosystem: pypi
     call_site_anchors:
       - "new Stripe("
       - "stripe.charges"
@@ -69,6 +73,8 @@ providers:
     sdk_packages:
       - name: "@anthropic-ai/sdk"
         ecosystem: npm
+      - name: anthropic
+        ecosystem: pypi
     call_site_anchors:
       - "new Anthropic("
       - "anthropic.messages.create"

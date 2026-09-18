@@ -1,7 +1,9 @@
 """Small workspace-root discovery seam for install and verification."""
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
 
 def find_workspace_root(start: Path) -> Path:
     current = start.resolve(); fallback = current

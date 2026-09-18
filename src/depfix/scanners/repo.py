@@ -18,6 +18,7 @@ from pathlib import Path
 
 from depfix.clone import Checkout, CloneService
 from depfix.core.models import BreakingChange
+from depfix.ecosystems import registry as ecosystems_registry
 from depfix.gh import GitHubAppAuth
 from depfix.providers.models import ProviderSpec
 from depfix.scanners.callsites import CallSiteScanner
@@ -26,30 +27,16 @@ from depfix.scanners.models import RepoScanResult, ScanTarget
 
 logger = logging.getLogger(__name__)
 
-_ECOSYSTEM_MARKERS: tuple[tuple[str, str, int], ...] = (
-    ("package.json", "javascript", 10), ("package-lock.json", "javascript", 5),
-    ("yarn.lock", "javascript", 5), ("pnpm-lock.yaml", "javascript", 5),
-    ("tsconfig.json", "typescript", 8), ("pyproject.toml", "python", 10),
-    ("setup.py", "python", 8), ("requirements.txt", "python", 5),
-    ("Pipfile", "python", 5), ("go.mod", "go", 10), ("Cargo.toml", "rust", 10),
-    ("Gemfile", "ruby", 10), ("composer.json", "php", 10),
-    ("pom.xml", "java", 10), ("build.gradle", "java", 10),
-    ("build.gradle.kts", "kotlin", 10),
-)
-SUPPORTED_ECOSYSTEMS = frozenset({"javascript", "typescript"})
+# Both names delegate to depfix.ecosystems -- the single authority on
+# which ecosystems exist and which support the full fix pipeline.
+# ``typescript`` stays in SUPPORTED_ECOSYSTEMS for callers that still pass
+# it explicitly; detection itself folds TS markers into "javascript".
+SUPPORTED_ECOSYSTEMS = frozenset(ecosystems_registry.fixable_ids()) | {"typescript"}
 
 
 def detect_repo_ecosystem(root: Path) -> str:
     """Return the dominant root ecosystem, or ``unknown`` when unmarked."""
-    scores: dict[str, int] = {}
-    for marker, ecosystem, weight in _ECOSYSTEM_MARKERS:
-        if (root / marker).exists():
-            scores[ecosystem] = scores.get(ecosystem, 0) + weight
-    if not scores:
-        return "unknown"
-    if "typescript" in scores:
-        scores["javascript"] = scores.get("javascript", 0) + scores.pop("typescript")
-    return max(scores, key=lambda ecosystem: scores[ecosystem])
+    return ecosystems_registry.detect(root)
 
 
 def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = None) -> ScanTarget:
@@ -67,6 +54,7 @@ def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = No
         api_base_urls=provider.api_base_urls,
         call_site_anchors=provider.call_site_anchors,
         symbols=symbols,
+        sdk_package_refs=tuple((pkg.name, pkg.ecosystem) for pkg in provider.sdk_packages),
     )
 
 
@@ -149,6 +137,19 @@ def _current_commit_sha(path: Path) -> str:
     return result.stdout.strip()
 
 
+def _npm_package_names(target: ScanTarget) -> list[str]:
+    """The target's npm-ecosystem packages -- all of ``sdk_packages`` when no
+    per-package ecosystem refs were provided (legacy callers/tests)."""
+    if not target.sdk_package_refs:
+        return list(target.sdk_packages)
+    names = []
+    for name, registry_name in target.sdk_package_refs:
+        spec = ecosystems_registry.ecosystem_for_registry(registry_name)
+        if spec is not None and spec.id == "javascript":
+            names.append(name)
+    return names
+
+
 def scan_checkout(
     checkout: Checkout,
     target: ScanTarget,
@@ -158,23 +159,48 @@ def scan_checkout(
 ) -> RepoScanResult:
     """Scan an already-acquired checkout for manifests + call sites.
 
+    Dispatches on the checkout's detected ecosystem: JavaScript keeps the
+    binding-aware :class:`CallSiteScanner` + npm lockfile resolution;
+    every other known ecosystem goes through the generic import scanner
+    and its own manifest parsers (:mod:`depfix.ecosystems`). An unknown
+    ecosystem still runs the JS scanner -- the historical behavior, and
+    the right conservative default for polyglot or unmarked trees.
+
     ``scanner`` lets a caller (e.g. the CLI, wiring in ``scan_max_file_bytes``/
     ``scan_max_files`` from :class:`depfix.config.Settings`) supply a
     pre-configured :class:`CallSiteScanner`; a default is constructed when
     omitted so tests and simple callers don't have to.
     """
-    manifest_scan = scan_manifests(checkout.path, list(target.sdk_packages))
-    call_site_result = (scanner or CallSiteScanner()).scan(checkout.path, target)
+    ecosystem_id = ecosystems_registry.detect(checkout.path)
+    spec = ecosystems_registry.get(ecosystem_id)
+
+    if spec is not None and spec.id != "javascript":
+        from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
+
+        call_site_result = GenericImportScanner(spec).scan(checkout.path, target)
+        manifest_matches: list[str] = []
+        if spec.scan_dependencies is not None:
+            packages = packages_for_spec(target, spec)
+            for declaration in spec.scan_dependencies(checkout.path, packages):
+                manifest_matches.append(
+                    f"{declaration.package}@"
+                    f"{declaration.resolved_version or declaration.declared_version or '?'} "
+                    f"({declaration.source}, {declaration.manifest_path})"
+                )
+    else:
+        manifest_scan = scan_manifests(checkout.path, _npm_package_names(target))
+        call_site_result = (scanner or CallSiteScanner()).scan(checkout.path, target)
+        manifest_matches = [
+            f"{m.package}@{m.resolved_version or m.declared_range or '?'} "
+            f"({m.source}, {m.manifest_path})"
+            for m in manifest_scan.matches
+        ]
 
     return RepoScanResult(
         repo_full_name=repo_full_name,
         commit_sha=_current_commit_sha(checkout.path),
         call_sites=call_site_result.call_sites,
-        manifest_matches=[
-            f"{m.package}@{m.resolved_version or m.declared_range or '?'} "
-            f"({m.source}, {m.manifest_path})"
-            for m in manifest_scan.matches
-        ],
+        manifest_matches=manifest_matches,
         files_scanned=call_site_result.files_scanned,
         errors=call_site_result.errors,
     )

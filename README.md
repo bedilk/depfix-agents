@@ -187,6 +187,24 @@ and [Sentry JavaScript](https://github.com/getsentry/sentry-javascript). These
 forks are useful for safe scan experiments; for end-to-end fix and PR tests,
 use a small repository you control with deliberately outdated SDK call sites.
 
+## Ecosystem support
+
+depfix understands the top-10 language ecosystems at two honest tiers
+(single authority: `src/depfix/ecosystems/`):
+
+| Tier | Ecosystems | What you get |
+| --- | --- | --- |
+| **Fix + verify** | JavaScript/TypeScript (npm), Python (PyPI) | Full pipeline: call-site scan, LLM fix, syntax validation, dependency install + the repo's own test suite run before/after each edit. Python installs into a throwaway in-checkout `.depfix-venv` and runs pytest with a JUnit reporter. |
+| **Scan-only** | Java, Kotlin, Go, Rust, Ruby, PHP, C#/.NET, Swift | Repo detection, SDK dependency-declaration scanning across each ecosystem's manifests/lockfiles (go.mod, Cargo.toml/lock, Gemfile/lock, composer.json/lock, pom.xml/gradle, csproj, Package.swift/resolved, requirements/pyproject/poetry), and import-level call-site flagging. `depfix fix` declines with an explicit message instead of generating an edit nobody can verify locally. |
+
+A provider declares which registries its SDKs live in per package
+(`providers.yaml` → `sdk_packages: [{name: stripe, ecosystem: npm}, {name:
+stripe, ecosystem: pypi}]`); the scanner routes each package to the right
+ecosystem's matcher. Import-pattern confidence is honest about guesswork:
+patterns derived mechanically from the package name (Python modules, Go
+module paths, Maven group ids) report HIGH, convention-based namespace
+guesses (Composer, NuGet, SwiftPM) report MEDIUM.
+
 ## Fixing breaking changes
 
 `depfix fix` scans for call sites, generates a fix for each one, writes kept
@@ -289,6 +307,16 @@ depfix apply acme/widgets --from-event 42 \
   --plan-file output/plans/<run-id>-<change>.json
 ```
 
+During `plan` (and any `--dry-run` pass), depfix also runs a **local
+impact check** before generating any fix: it runs the repo's test suite
+against the current dependency tree, bumps the affected dependency to the
+post-change version (manifest + regenerated lockfile, reverted afterwards),
+runs the suite again, and reports which tests newly fail. A confirmed
+break is quoted in the plan output as evidence; a clean run is reported as
+exactly what it is -- "this repo's own tests don't observe the break"
+(mocked externals prove nothing), never "safe to skip". Disable with
+`PLAN_IMPACT_CHECK_ENABLED=false`.
+
 Use `--force` only for intentional controlled retries (for example a seed
 fixture that is in retry cooldown). A plan with no artifact reports the
 per-file terminal verdict, such as `reverted`, `suspect`, or `skipped`, and
@@ -361,6 +389,7 @@ make docker-up            # postgres + redis + app via docker compose
 dependency-fix-agent/
 ├── src/depfix/               # main package
 │   ├── core/                 # models + agent orchestrator
+│   ├── ecosystems/           # the multi-ecosystem seam: 10 specs, detection, manifests, import scanning
 │   ├── scanners/             # codebase scanning (manifest + call-site + repo orchestration)
 │   ├── fixers/               # LLM-based fix generation (Gemini, Ollama)
 │   ├── validators/           # syntax / semantic validation

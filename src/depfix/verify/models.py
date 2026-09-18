@@ -29,6 +29,7 @@ class TestFramework(StrEnum):
     VITEST = "vitest"
     MOCHA = "mocha"
     NODE_TEST = "node_test"
+    PYTEST = "pytest"
     UNKNOWN = "unknown"
 
 

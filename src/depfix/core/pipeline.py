@@ -19,15 +19,15 @@ from dataclasses import dataclass, replace
 from depfix.agent.fix_agent import FixAgent
 from depfix.agent.tools import FixToolset
 from depfix.apply.models import EditOrigin, EditVerdict, FileEdit
-from depfix.codemods import CodemodRegistry
-from depfix.verify.confidence import ConfidenceTier
 from depfix.apply.workspace import WorkspaceEditor
+from depfix.codemods import CodemodRegistry
 from depfix.core.models import BreakingChange, FileUsage
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.retry.loop import RetryLoop
 from depfix.scanners.models import RepoScanResult
 from depfix.validators.javascript import FixValidator
+from depfix.verify.confidence import ConfidenceTier
 from depfix.verify.verifier import VerificationReport, Verifier
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,11 @@
 """Safe codemods for dated API-version literals and configuration keys."""
 from __future__ import annotations
+
 import re
+
 from depfix.codemods.base import CodemodResult
 from depfix.core.models import BreakingChange, ChangeKind
+
 
 class ApiVersionLiteralCodemod:
     id="config.api-version-literal"; specificity=30

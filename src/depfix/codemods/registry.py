@@ -53,7 +53,7 @@ class CodemodRegistry:
             try:
                 if codemod.claims(change):
                     return codemod
-            except Exception:  # noqa: BLE001 - a broken claim() must not end the run
+            except Exception:
                 logger.exception("codemod %s raised in claims(); ignoring it", codemod.id)
         return None
 
@@ -71,7 +71,7 @@ class CodemodRegistry:
             return None
         try:
             result = codemod.apply(source, change)
-        except Exception as exc:  # noqa: BLE001 - degrade to a decline, never crash
+        except Exception as exc:
             logger.exception("codemod %s raised on %s", codemod.id, relpath)
             return CodemodResult.decline(
                 codemod.id, f"the rule raised {type(exc).__name__} (this is a depfix bug)"
@@ -127,7 +127,7 @@ class CodemodRegistry:
             for rule in claimants:
                 try:
                     result = rule.apply(current, change)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.exception("codemod %s raised on %s in batch", rule.id, relpath)
                     continue
                 if result.changed and result.source is not None:
@@ -145,7 +145,7 @@ class CodemodRegistry:
     def _safe_claims(codemod: Codemod, change: BreakingChange) -> bool:
         try:
             return codemod.claims(change)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("codemod %s raised in claims()", codemod.id)
             return False
 

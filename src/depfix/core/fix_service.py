@@ -7,16 +7,16 @@ quietly drifting apart.
 
 from __future__ import annotations
 
-import logging
 import dataclasses
+import logging
 from dataclasses import dataclass
 
 from depfix.agent import FixAgent, make_fix_strategy
 from depfix.agent.tools import FixToolset
 from depfix.apply.models import FileEdit
 from depfix.apply.workspace import WorkspaceEditor
-from depfix.clone import Checkout
 from depfix.classify.llm import GeminiCompleter, LLMCompleter, OllamaCompleter
+from depfix.clone import Checkout
 from depfix.config import Settings
 from depfix.core.models import BreakingChange
 from depfix.core.pipeline import FixPipeline, FixPipelineResult
@@ -27,7 +27,7 @@ from depfix.repoconfig.models import RepoConfig
 from depfix.retry.loop import RetryLoop
 from depfix.scanners import CallSiteScanner
 from depfix.scanners.models import RepoScanResult
-from depfix.validators.javascript import FixValidator
+from depfix.validators import validator_for_ecosystem
 from depfix.verify import Characterizer, Verifier
 from depfix.verify.confidence import ConfidenceTier
 
@@ -52,14 +52,15 @@ def build_fix_pipeline(
     editor: WorkspaceEditor,
     max_retries: int | None = None,
     toolset: FixToolset | None = None,
-    codemods: "CodemodRegistry | None" = None,
-    characterizer: "Characterizer | None" = None,
+    codemods: CodemodRegistry | None = None,
+    characterizer: Characterizer | None = None,
+    ecosystem: str = "javascript",
 ) -> FixPipeline:
     """Build one fix pipeline under the common verification policy."""
     from depfix.codemods import CodemodRegistry as _Registry
 
     verify_required = repo_config.verify and settings.verify_enabled
-    validator = FixValidator(use_ast_validation=settings.fix_validate_syntax)
+    validator = validator_for_ecosystem(ecosystem, use_ast_validation=settings.fix_validate_syntax)
     effective_codemods = codemods
     if effective_codemods is None and settings.codemods_enabled:
         effective_codemods = _Registry()
@@ -73,6 +74,7 @@ def build_fix_pipeline(
             typecheck_enabled=settings.verify_typecheck_enabled,
             typecheck_timeout=settings.verify_typecheck_timeout,
             characterizer=characterizer,
+            ecosystem=ecosystem,
         )
         if verify_required
         else None
@@ -133,26 +135,39 @@ def run_fix_for_change(
     max_retries: int | None = None,
 ) -> FixServiceResult:
     """Run a fix, escalating once when the primary has no committable edit."""
-    from depfix.scanners.repo import SUPPORTED_ECOSYSTEMS, detect_repo_ecosystem
+    from depfix.ecosystems import fixable_ids
+    from depfix.ecosystems import get as get_ecosystem
+    from depfix.scanners.repo import detect_repo_ecosystem
 
     ecosystem = detect_repo_ecosystem(checkout.path)
-    if ecosystem not in SUPPORTED_ECOSYSTEMS:
+    if ecosystem == "typescript":
+        ecosystem = "javascript"
+    if ecosystem not in fixable_ids():
         pretty = ecosystem if ecosystem != "unknown" else "unrecognized"
+        spec = get_ecosystem(ecosystem)
+        supported = ", ".join(sorted(fixable_ids()))
+        note = (
+            f"skipped: {spec.display_name} repos are scan-only today -- depfix found the "
+            f"call sites above but only generates verified fixes for: {supported}"
+            if spec is not None
+            else f"skipped: repo ecosystem is {pretty}; depfix generates fixes for: {supported}"
+        )
         result = FixPipelineResult(
             repo_full_name=scan_result.repo_full_name,
             breaking_change=change,
             files_scanned=scan_result.files_scanned,
             files_affected=0,
             edits=(), total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
-            codemod_notes=(
-                f"skipped: repo ecosystem is {pretty}; depfix currently supports JavaScript and TypeScript only",
-            ),
+            codemod_notes=(note,),
         )
         logger.info("skipping %s: unsupported ecosystem %s", change.dedupe_key[:12], pretty)
         return FixServiceResult(result, [], repo_config.verify and settings.verify_enabled)
     verify_required = repo_config.verify and settings.verify_enabled
     characterizer = None
-    if settings.verify_characterize_enabled:
+    # The characterization harness is Node/CommonJS-specific
+    # (verify/characterize.py); other ecosystems skip straight to their
+    # own smoke checks.
+    if settings.verify_characterize_enabled and ecosystem == "javascript":
         completer = _build_completer_for_characterize(settings)
         if completer is not None:
             characterizer = Characterizer(
@@ -164,7 +179,7 @@ def run_fix_for_change(
     primary = _run_once(
         checkout=checkout, scan_result=scan_result, change=change, settings=settings,
         repo_config=repo_config, fixer=fixer, max_retries=max_retries,
-        characterizer=characterizer,
+        characterizer=characterizer, ecosystem=ecosystem,
     )
     if primary.committable:
         return primary
@@ -187,7 +202,7 @@ def run_fix_for_change(
     escalated = _run_once(
         checkout=checkout, scan_result=scan_result, change=change, settings=settings,
         repo_config=repo_config, fixer=fallback, max_retries=max_retries,
-        characterizer=characterizer,
+        characterizer=characterizer, ecosystem=ecosystem,
     )
     if escalated.committable:
         return FixServiceResult(
@@ -214,6 +229,7 @@ def _run_once(
     fixer: FixGenerator | OllamaFixGenerator,
     max_retries: int | None,
     characterizer: Characterizer | None,
+    ecosystem: str = "javascript",
 ) -> FixServiceResult:
     """Run one isolated primary or fallback fix attempt."""
     editor = WorkspaceEditor(checkout)
@@ -238,6 +254,7 @@ def _run_once(
         max_retries=max_retries,
         toolset=toolset,
         characterizer=characterizer,
+        ecosystem=ecosystem,
     )
     result = pipeline.run(scan_result, change, editor)
     committable = committable_edits(result, allow_unverified=not verify_required)

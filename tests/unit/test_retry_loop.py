@@ -80,7 +80,7 @@ def test_retry_loop_fixes_a_reverted_edit_on_second_round(
     (tmp_path / "src").mkdir()
     (tmp_path / _RELPATH).write_text(_ORIGINAL, encoding="utf-8")
 
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root: True)
+    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
     monkeypatch.setattr(
         "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
     )

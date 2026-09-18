@@ -46,7 +46,7 @@ def reconcile_open_prs(session: Session, gh_auth: GitHubAppAuth, repo_full_names
                 drift += 1
         except GitHubAppError as exc:
             logger.debug("PR reconciliation skipped for %s: %s", repo_full_name, exc)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("PR reconciliation failed for %s", repo_full_name, exc_info=True)
     return drift
 

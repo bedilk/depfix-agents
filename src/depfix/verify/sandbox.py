@@ -82,8 +82,11 @@ class SandboxResult:
         return not self.timed_out and not self.error and self.exit_code == 0
 
 
-def _sandboxed_env(extra_env: dict[str, str] | None) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if k in ENV_ALLOWLIST}
+def _sandboxed_env(
+    extra_env: dict[str, str] | None, extra_allowlist: frozenset[str] | None
+) -> dict[str, str]:
+    allowlist = ENV_ALLOWLIST | (extra_allowlist or frozenset())
+    env = {k: v for k, v in os.environ.items() if k in allowlist}
     if extra_env:
         env.update(extra_env)
     return env
@@ -116,10 +119,16 @@ def run_sandboxed(
     timeout: float,
     extra_env: dict[str, str] | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    extra_allowlist: frozenset[str] | None = None,
 ) -> SandboxResult:
     """Run ``argv`` (a fixed arg list, never a shell string) inside ``cwd``
     with an allowlisted environment, killing the whole process group if it
     exceeds ``timeout`` seconds.
+
+    ``extra_allowlist`` widens the pass-through env for one call -- how a
+    non-npm ecosystem admits its own tooling vars (``VIRTUAL_ENV``,
+    ``PIP_*``, ...; see ``EcosystemSpec.env_allowlist_extra``) without the
+    base allowlist growing a union of every ecosystem's needs.
     """
     argv = tuple(argv)
     start = time.monotonic() * 1000.0
@@ -127,7 +136,7 @@ def run_sandboxed(
         proc = subprocess.Popen(
             argv,
             cwd=str(cwd),
-            env=_sandboxed_env(extra_env),
+            env=_sandboxed_env(extra_env, extra_allowlist),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,  # own process group, for killpg on timeout

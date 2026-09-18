@@ -188,7 +188,7 @@ class Characterizer:
 
     def __init__(
         self,
-        completer: "LLMCompleter",
+        completer: LLMCompleter,
         *,
         timeout: float = 120.0,
         max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
@@ -232,7 +232,7 @@ class Characterizer:
 
         try:
             fixtures, cost = self._generate_fixtures(relpath, original_source, change)
-        except Exception as exc:  # noqa: BLE001 - a bad fixture is a skip, not a crash
+        except Exception as exc:
             report.skipped_reason = f"fixture generation failed: {exc}"
             return report
         report.cost_usd = cost

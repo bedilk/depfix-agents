@@ -11,9 +11,9 @@ import httpx
 from depfix.config import get_settings
 from depfix.registry.client import NpmRegistryClient
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
+from depfix.sources.changelog_html import ChangelogHtmlSource
 from depfix.sources.fixture_change import FixtureChangeSource
 from depfix.sources.github_release import GitHubReleaseSource
-from depfix.sources.changelog_html import ChangelogHtmlSource
 from depfix.sources.http import build_http_client
 from depfix.sources.models import SourceKind
 from depfix.sources.npm_dist_tag import NpmDistTagSource
