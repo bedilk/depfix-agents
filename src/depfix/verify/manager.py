@@ -19,6 +19,7 @@ from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, SandboxResult, run_s
 #: (e.g. a repo mid-migration between package managers); npm is the most
 #: conservative default since it's always present with Node.
 _LOCKFILE_MANAGERS: tuple[tuple[str, str], ...] = (
+    ("bun.lockb", "bun"),
     ("package-lock.json", "npm"),
     ("npm-shrinkwrap.json", "npm"),
     ("yarn.lock", "yarn"),
@@ -56,7 +57,10 @@ def detect_package_manager(root: str | Path) -> str:
 def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> list[str]:
     has_lockfile = any((root / lockfile).is_file() for lockfile, mgr in _LOCKFILE_MANAGERS if mgr == package_manager)
 
-    if package_manager == "npm":
+    if package_manager == "bun":
+        argv = ["bun", "install"]
+        if has_lockfile: argv.append("--frozen-lockfile")
+    elif package_manager == "npm":
         argv = ["npm", "ci"] if has_lockfile else ["npm", "install"]
     elif package_manager == "yarn":
         argv = ["yarn", "install"]
@@ -93,13 +97,15 @@ def install_dependencies(
     if not (root / "package.json").is_file():
         return InstallResult(package_manager="none", skipped_reason="no package.json found")
 
-    manager = package_manager or detect_package_manager(root)
-    argv = _install_argv(manager, root, ignore_scripts=ignore_scripts)
+    from depfix.scanners.workspace import find_workspace_root
+    install_root = find_workspace_root(root)
+    manager = package_manager or detect_package_manager(install_root)
+    argv = _install_argv(manager, install_root, ignore_scripts=ignore_scripts)
 
     if _which(argv[0]) is None:
         return InstallResult(package_manager=manager, skipped_reason=f"{argv[0]} not found on PATH")
 
-    result = run_sandboxed(argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes)
+    result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)
     return InstallResult(package_manager=manager, sandbox=result)
 
 

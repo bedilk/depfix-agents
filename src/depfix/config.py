@@ -56,8 +56,12 @@ class Settings(BaseSettings):
     output_dir: str = Field(default="./output/fixes")
     context_lines: int = Field(default=5, ge=0, le=50)
 
-    # --- Infra (Day 3+; present now for docker-compose parity) ----------------
-    database_url: str = Field(default="postgresql+psycopg://depfix:depfix@localhost:5432/depfix")
+    # --- Infra -----------------------------------------------------------------
+    database_url: str = Field(
+        default="sqlite:///depfix.db",
+        description="Database URL. Defaults to a local SQLite file for development; "
+        "set a postgresql+psycopg:// URL for a production fleet deployment.",
+    )
     redis_url: str = Field(default="redis://localhost:6379/0")
 
     # --- npm registry (used by sources.npm_dist_tag feeds) --------------------
@@ -178,6 +182,7 @@ class Settings(BaseSettings):
     verify_characterize_timeout: int = Field(default=120, ge=1, le=1800)
     llm_fallback_provider: str = Field(default="")
     llm_fallback_model: str = Field(default="")
+    lockfile_regenerate: bool = Field(default=False)
     verify_ignore_scripts: bool = Field(
         default=True,
         description="Pass --ignore-scripts to the install command so a hostile repo's "

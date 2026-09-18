@@ -1,0 +1,17 @@
+{
+  "id": 8,
+  "package": "seed-multi",
+  "old_version": "12.0.0",
+  "new_version": "13.0.0",
+  "old_api": "stripe.charges.create",
+  "new_api": "stripe.paymentIntents.create",
+  "description": "Multi-SDK Stripe migration.",
+  "migration_guide": "",
+  "kind": "method_renamed",
+  "source": "spec_diff",
+  "provider_id": "seed-multi",
+  "source_url": null,
+  "evidence": null,
+  "confidence": 1.0,
+  "call_site_hints": []
+}

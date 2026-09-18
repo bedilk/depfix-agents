@@ -1,0 +1,17 @@
+{
+  "id": 9,
+  "package": "seed-multi",
+  "old_version": "3.3.0",
+  "new_version": "4.0.1",
+  "old_api": "openai.createChatCompletion",
+  "new_api": "openai.chat.completions.create",
+  "description": "Multi-SDK OpenAI chat migration.",
+  "migration_guide": "",
+  "kind": "method_renamed",
+  "source": "spec_diff",
+  "provider_id": "seed-multi",
+  "source_url": null,
+  "evidence": null,
+  "confidence": 1.0,
+  "call_site_hints": []
+}

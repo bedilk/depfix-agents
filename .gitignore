@@ -1,2 +1,4 @@
 # Local runtime configuration may contain API credentials.
 .env
+.depfix-local.yml
+depfix.db

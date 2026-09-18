@@ -29,6 +29,7 @@ class ChangeOutcome:
     skip_reason: SkipReason | None = None
     attempt_status: AttemptStatus | None = None
     detail: str = ""
+    skip_detail_text: str = ""
     pr_url: str = ""
     #: ``True`` when this outcome describes what the orchestrator *would*
     #: have done under ``--dry-run``, rather than something it actually did
@@ -111,6 +112,7 @@ class OrchestratorOutcome:
     #: that *did* run are still complete and correct, this just means the
     #: batch wasn't exhaustive.
     stopped_early: bool = False
+    merge_rate: dict[str, int | float | None] | None = None
 
     @property
     def failures(self) -> list[RepoOutcome]:

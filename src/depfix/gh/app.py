@@ -327,6 +327,24 @@ class GitHubAppAuth:
         raw = self._paginate(url, headers)
         return [_pull_request_from_dict(item) for item in raw]
 
+    def get_pull_request_state(self, owner: str, repo: str, number: int) -> dict:
+        """Return GitHub's current state fields for one PR."""
+        installation = self.resolve_installation_for_repo(owner, repo)
+        headers = self._installation_headers(
+            installation.id, repositories=(repo,), permissions={"pull_requests": "read"}
+        )
+        response = self._client.get(
+            f"{self._api_url}/repos/{owner}/{repo}/pulls/{number}", headers=headers
+        )
+        self._raise_for_status(response)
+        payload = response.json()
+        return {
+            "state": str(payload.get("state") or "").lower(),
+            "merged": bool(payload.get("merged")),
+            "merged_at": payload.get("merged_at"),
+            "closed_at": payload.get("closed_at"),
+        }
+
 
 def _installation_from_dict(item: dict) -> Installation:
     account = item.get("account") or {}

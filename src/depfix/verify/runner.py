@@ -56,6 +56,8 @@ def detect_framework(root: str | Path) -> TestFramework:
         return TestFramework.MOCHA
     if "--test" in script or "node:test" in script:
         return TestFramework.NODE_TEST
+    if script.strip().startswith("bun test"):
+        return TestFramework.NODE_TEST
     return TestFramework.UNKNOWN
 
 
@@ -75,6 +77,10 @@ def _reporter_args(framework: TestFramework, out_path: Path) -> list[str]:
 
 
 def _test_argv(package_manager: str, framework: TestFramework, out_path: Path) -> list[str]:
+    if package_manager == "bun":
+        return ["bun", "run", "test", "--", *_reporter_args(framework, out_path)]
+    if package_manager == "pnpm":
+        return ["pnpm", "run", "test", "--", *_reporter_args(framework, out_path)]
     return [package_manager, "test", "--", *_reporter_args(framework, out_path)]
 
 
@@ -84,6 +90,7 @@ def run_tests(
     timeout: float,
     package_manager: str | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    test_cwd: str | Path | None = None,
 ) -> TestRunResult:
     """Run ``root``'s ``test`` script under a JSON-ish reporter and parse
     the result. Never raises -- any failure to detect/run/parse is folded
@@ -93,8 +100,9 @@ def run_tests(
     from a subprocess they don't control.
     """
     root = Path(root)
-    manager = package_manager or detect_package_manager(root)
-    framework = detect_framework(root)
+    effective_cwd = Path(test_cwd) if test_cwd else root
+    manager = package_manager or detect_package_manager(effective_cwd)
+    framework = detect_framework(effective_cwd)
 
     with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
         out_path = Path(tmp) / "results.json"
@@ -105,7 +113,7 @@ def run_tests(
         # timeout on every single run.
         result = run_sandboxed(
             argv,
-            cwd=root,
+            cwd=effective_cwd,
             timeout=timeout,
             extra_env={"CI": "1"},
             max_output_bytes=max_output_bytes,

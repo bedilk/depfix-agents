@@ -74,7 +74,7 @@ from depfix.obs.logging import log_context
 from depfix.orchestrator.budget import RunBudget
 from depfix.orchestrator.models import ChangeOutcome, OrchestratorOutcome, RepoOutcome
 from depfix.orchestrator.plan import PlanArtifact
-from depfix.orchestrator.policy import SkipReason, decide
+from depfix.orchestrator.policy import SkipReason, decide_with_detail
 from depfix.providers.models import ProviderSpec
 from depfix.repoconfig.loader import RepoConfigError, parse_repo_config
 from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
@@ -161,6 +161,18 @@ class Orchestrator:
             if not acquired:
                 outcome.locked = False
                 return outcome
+
+            if not self._dry_run:
+                try:
+                    from depfix.orchestrator.reconcile import compute_merge_rate, reconcile_open_prs
+
+                    with session_scope() as session:
+                        drift = reconcile_open_prs(session, self._gh_auth, repo_full_names)
+                        outcome.merge_rate = compute_merge_rate(session, repo_full_names)
+                    if drift:
+                        logger.info("auto-reconciled %d PR outcome(s) before processing", drift)
+                except Exception:  # noqa: BLE001
+                    logger.debug("auto-reconciliation failed; proceeding with stale ledger", exc_info=True)
 
             self._budget = RunBudget(
                 self._max_duration_seconds,
@@ -260,7 +272,7 @@ class Orchestrator:
                 break
 
             attempt = attempts.get(change.dedupe_key)
-            skip_reason = decide(
+            skip = decide_with_detail(
                 repo_config=repo_config,
                 change=change,
                 known_provider_ids=self._known_provider_ids,
@@ -271,13 +283,14 @@ class Orchestrator:
                 settings=self._settings,
                 force=self._force,
             )
-            if skip_reason is not None:
+            if skip is not None:
                 change_outcomes.append(
                     ChangeOutcome(
                         dedupe_key=change.dedupe_key,
                         package=change.package,
                         old_api=change.old_api,
-                        skip_reason=skip_reason,
+                        skip_reason=skip.reason,
+                        skip_detail_text=skip.one_line(),
                     )
                 )
                 continue
@@ -569,7 +582,11 @@ class Orchestrator:
                 planned.relpath, planned.fixed_content,
                 confidence=planned.confidence, usages_fixed=planned.usages_fixed,
             )
-            edits.append(dataclasses.replace(edit, verdict=EditVerdict.KEPT, diff=planned.diff))
+            edits.append(dataclasses.replace(
+                edit, verdict=EditVerdict.KEPT, diff=planned.diff,
+                derivation_trace=(f"Replay from reviewed plan artifact ({artifact.digest[:19]}). "
+                                  "No LLM call; content matches the plan exactly."),
+            ))
         result = FixPipelineResult(
             repo_full_name=scan_result.repo_full_name, breaking_change=change,
             files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),

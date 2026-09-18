@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from depfix.classify.llm import LLMCompleter
 
-_SUPPORTED_SUFFIXES = frozenset({".js", ".cjs"})
+_SUPPORTED_SUFFIXES = frozenset({".js", ".cjs", ".mjs"})
 
 # The harness is a template with four sentinels substituted per probe. The
 # oracle -- "did the subject return the same stable value?" -- lives here in
@@ -93,7 +93,8 @@ function stable(value) {
 (async () => {
   let payload;
   try {
-    const subject = require(__DEPFIX_SUBJECT__);
+    const subjectPath = __DEPFIX_SUBJECT__;
+    const subject = subjectPath.endsWith('.mjs') ? await import(subjectPath) : require(subjectPath);
     const value = await (async () => { __DEPFIX_EXERCISE__ })();
     payload = { ok: true, value: stable(value === undefined ? null : value), moduleLoads };
   } catch (err) {

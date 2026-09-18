@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "repo_full_name": "bedilk/seed-supabase-v1-v2",
+  "base_sha": "eb1c432f6d7427ec027328f82adc39fb24199859",
+  "change_dedupe_key": "c715ecde02f1868c612e12d6994478a3d49997338a691520f22efa7a462a8211",
+  "change": {
+    "package": "supabase",
+    "old_version": "1.0.0",
+    "new_version": "2.0.0",
+    "old_api": "supabase.auth.signIn",
+    "new_api": "supabase.auth.signInWithPassword",
+    "description": "Supabase auth migration.",
+    "migration_guide": "",
+    "kind": "method_renamed",
+    "source": "spec_diff",
+    "provider_id": "supabase",
+    "source_url": null,
+    "evidence": null,
+    "confidence": 1.0,
+    "call_site_hints": [],
+    "examples": []
+  },
+  "confidence": "high",
+  "verified_by": "the repository's own test suite introduced no new failures",
+  "created_at": "2026-09-16T21:13:20.911712+00:00",
+  "edits": [
+    {
+      "relpath": "src/migration.js",
+      "original_content": "\"use strict\";\n\nconst sdk = require(\"@supabase/supabase-js\");\n\nasync function runMigrationTarget() {\n  const result = await sdk.auth.signIn({ seed: true });\n  return result.value;\n}\n\nmodule.exports = { runMigrationTarget };\n",
+      "fixed_content": "\"use strict\";\n\nconst sdk = require(\"@supabase/supabase-js\");\n\nasync function runMigrationTarget() {\n  const result = await sdk.auth.signInWithPassword({ seed: true });\n  return result.value;\n}\n\nmodule.exports = { runMigrationTarget };",
+      "diff": "--- a/src/migration.js\n+++ b/src/migration.js\n@@ -3,7 +3,7 @@\n const sdk = require(\"@supabase/supabase-js\");\n \n async function runMigrationTarget() {\n-  const result = await sdk.auth.signIn({ seed: true });\n+  const result = await sdk.auth.signInWithPassword({ seed: true });\n   return result.value;\n }\n \n",
+      "confidence": 0.29999999999999993,
+      "usages_fixed": 1
+    }
+  ]
+}

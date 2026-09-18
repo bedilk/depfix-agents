@@ -1,0 +1,17 @@
+{
+  "id": 7,
+  "package": "mongodb",
+  "old_version": "4.0.0",
+  "new_version": "5.0.0",
+  "old_api": "mongodb.findOne",
+  "new_api": "mongodb.findOneAsync",
+  "description": "MongoDB callback migration.",
+  "migration_guide": "",
+  "kind": "method_renamed",
+  "source": "spec_diff",
+  "provider_id": "mongodb",
+  "source_url": null,
+  "evidence": null,
+  "confidence": 1.0,
+  "call_site_hints": []
+}

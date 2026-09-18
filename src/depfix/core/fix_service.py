@@ -8,6 +8,7 @@ quietly drifting apart.
 from __future__ import annotations
 
 import logging
+import dataclasses
 from dataclasses import dataclass
 
 from depfix.agent import FixAgent, make_fix_strategy
@@ -132,6 +133,23 @@ def run_fix_for_change(
     max_retries: int | None = None,
 ) -> FixServiceResult:
     """Run a fix, escalating once when the primary has no committable edit."""
+    from depfix.scanners.repo import SUPPORTED_ECOSYSTEMS, detect_repo_ecosystem
+
+    ecosystem = detect_repo_ecosystem(checkout.path)
+    if ecosystem not in SUPPORTED_ECOSYSTEMS:
+        pretty = ecosystem if ecosystem != "unknown" else "unrecognized"
+        result = FixPipelineResult(
+            repo_full_name=scan_result.repo_full_name,
+            breaking_change=change,
+            files_scanned=scan_result.files_scanned,
+            files_affected=0,
+            edits=(), total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+            codemod_notes=(
+                f"skipped: repo ecosystem is {pretty}; depfix currently supports JavaScript and TypeScript only",
+            ),
+        )
+        logger.info("skipping %s: unsupported ecosystem %s", change.dedupe_key[:12], pretty)
+        return FixServiceResult(result, [], repo_config.verify and settings.verify_enabled)
     verify_required = repo_config.verify and settings.verify_enabled
     characterizer = None
     if settings.verify_characterize_enabled:
@@ -230,6 +248,51 @@ def _run_once(
             len(committable), change.dedupe_key[:12], result.confidence.value, floor.value,
         )
         committable = []
+    if committable:
+        from depfix.apply.models import EditOrigin, EditVerdict
+        from depfix.codemods.lockfile import build_manifest_bumps
+
+        bumped_any = False
+        for bump in build_manifest_bumps(checkout.path, change):
+            edit = editor.write_fix(bump.manifest_relpath, bump.fixed_content, confidence=1.0, usages_fixed=0)
+            edit = dataclasses.replace(
+                edit, verdict=EditVerdict.KEPT, origin=EditOrigin.CODEMOD,
+                codemod_id="manifest.version-bump",
+                derivation_trace=(f"Manifest bump: {bump.package} {bump.old_range} → "
+                                  f"{bump.new_range} in {bump.manifest_relpath}."),
+            )
+            committable.append(edit)
+            result = dataclasses.replace(
+                result, edits=(*result.edits, edit), codemod_notes=(*result.codemod_notes, bump.note)
+            )
+            bumped_any = True
+        if bumped_any and settings.lockfile_regenerate and checkout.is_temporary:
+            from depfix.codemods.lockfile import lockfile_paths, try_regenerate_lockfile
+
+            ok, message = try_regenerate_lockfile(
+                checkout.path, timeout=settings.verify_install_timeout,
+                ignore_scripts=settings.verify_ignore_scripts,
+            )
+            if ok:
+                for lockfile in lockfile_paths(checkout.path):
+                    relpath = lockfile.relative_to(checkout.path).as_posix()
+                    try:
+                        content = lockfile.read_text(encoding="utf-8")
+                    except UnicodeDecodeError:
+                        continue  # binary bun.lockb cannot be represented as a FileEdit
+                    edit = editor.write_fix(relpath, content, confidence=1.0, usages_fixed=0)
+                    if edit.changed:
+                        edit = dataclasses.replace(
+                            edit, verdict=EditVerdict.KEPT, origin=EditOrigin.CODEMOD,
+                            codemod_id="manifest.lockfile-regen",
+                            derivation_trace=f"Lockfile regenerated after manifest bump: {message}.",
+                        )
+                        committable.append(edit)
+                        result = dataclasses.replace(result, edits=(*result.edits, edit),
+                            codemod_notes=(*result.codemod_notes, message))
+            else:
+                result = dataclasses.replace(result, codemod_notes=(*result.codemod_notes,
+                    f"lockfile not regenerated: {message}; regenerate it before merging"))
     return FixServiceResult(
         pipeline_result=result,
         committable=committable,

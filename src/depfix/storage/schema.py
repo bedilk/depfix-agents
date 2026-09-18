@@ -469,7 +469,10 @@ class PullRequestRow(Base):
     """
 
     __tablename__ = "pull_request"
-    __table_args__ = (UniqueConstraint("fix_run_id", name="uq_pull_request_fix_run"),)
+    __table_args__ = (
+        UniqueConstraint("fix_run_id", name="uq_pull_request_fix_run"),
+        Index("ix_pull_request_state", "state"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fix_run_id: Mapped[int] = mapped_column(
@@ -480,6 +483,11 @@ class PullRequestRow(Base):
     head_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     base_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     already_existed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    merged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -487,7 +495,7 @@ class PullRequestRow(Base):
     fix_run: Mapped[FixRunRow] = relationship(back_populates="pull_request")
 
     def __repr__(self) -> str:  # pragma: no cover
-        return f"PullRequestRow(#{self.number} {self.head_branch} -> {self.base_branch})"
+        return f"PullRequestRow(#{self.number} {self.state})"
 
 
 # ============================================================================
