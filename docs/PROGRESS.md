@@ -57,6 +57,16 @@ Timeline compressed to **3 days to MVP + test** — see [`docs/MVP_3DAY_PLAN.md`
 6. Tests: 603+ unit tests green; two real parser bugs caught by the new
    agent-written tests and fixed.
 
+## Handoff note (2026-09-18): LLM key
+
+Tohir's Gemini key was used only for the test runs in `docs/RESULTS.md` and is
+being deleted. **Bedil: use your own key** — `cp .env.example .env`, paste your
+`GOOGLE_API_KEY` (https://aistudio.google.com/app/apikey), keep
+`GEMINI_MODEL=gemini-3-flash-preview` and `LLM_FALLBACK_MODEL=gemini-2.5-pro`
+(the tested configuration). `.env` is gitignored; never commit a key. Sanity
+check after: `depfix doctor` should show "llm (gemini): key present", and
+`depfix eval` should reproduce ~90% for about a cent.
+
 ## Decisions needed from Bedil
 1. `GOOGLE_API_KEY` available, or Ollama-only for the MVP?
 2. GitHub App (APP_ID + private key) — exists, or local-path testing this week?
