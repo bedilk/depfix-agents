@@ -23,13 +23,17 @@ from depfix.sources.models import ChangeEvent, Severity, SourceKind, SpecChange,
 from depfix.storage.schema import BreakingChangeRow, ChangeEventRow, SpecChangeRow
 
 
-def load_unclassified_events(session: Session, *, limit: int | None = None) -> list[ChangeEventRow]:
-    """Return ``change_event`` rows not yet run through the classifier."""
+def load_unclassified_events(
+    session: Session, *, limit: int | None = None, provider_id: str | None = None
+) -> list[ChangeEventRow]:
+    """Return unclassified events, optionally narrowed to one provider."""
     stmt = (
         select(ChangeEventRow)
         .where(ChangeEventRow.classified_at.is_(None))
         .order_by(ChangeEventRow.detected_at)
     )
+    if provider_id is not None:
+        stmt = stmt.where(ChangeEventRow.provider_id == provider_id)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
@@ -146,7 +150,11 @@ class ClassifyRunSummary:
 
 
 def classify_pending(
-    session: Session, classifier: Classifier, *, limit: int | None = None
+    session: Session,
+    classifier: Classifier,
+    *,
+    limit: int | None = None,
+    provider_id: str | None = None,
 ) -> ClassifyRunSummary:
     """Classify every unclassified event and persist the results.
 
@@ -158,7 +166,7 @@ def classify_pending(
     retry could produce a different answer from an empty body.
     """
     summary = ClassifyRunSummary()
-    for row in load_unclassified_events(session, limit=limit):
+    for row in load_unclassified_events(session, limit=limit, provider_id=provider_id):
         summary.events_processed += 1
         event = event_from_row(row)
         outcome = classifier.classify(event)

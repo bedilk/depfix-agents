@@ -44,18 +44,23 @@ depfix run --codebase ./tests/fixtures/openai_v3_project --change-file my_change
 
 `depfix watch` polls every feed declared in `providers.yaml` — npm dist-tags,
 GitHub releases, and OpenAPI specs today; changelogs and RSS are declared but
-not yet implemented — and records changes to Postgres. Like the old poller it
+not yet implemented — and records changes in the configured database. Local
+commands use a persistent `depfix.db` SQLite file by default; set
+`DATABASE_URL` to Postgres for shared or concurrent deployments. Like the old poller it
 replaces, it's designed to be driven by cron or systemd: one shot per
 invocation, no in-process scheduler.
 
 ```bash
-# 1. Bring up Postgres (Redis too, but the watcher only needs Postgres).
+# Optional: use Postgres instead of the default local SQLite database.
 docker compose up -d postgres
 
-# 2. Edit the provider/feed list.
+# Configure the local process to use it.
+export DATABASE_URL=postgresql+psycopg://depfix:depfix@localhost:5432/depfix
+
+# Edit the provider/feed list.
 $EDITOR providers.yaml
 
-# 3. Run a watch pass.
+# Run a watch pass.
 depfix watch --once
 
 # Only watch specific providers, or preview without writing to the DB.
@@ -399,7 +404,7 @@ All configuration is read from environment variables (or a local `.env` file). S
 | ----------------- | -------------------- | ---------------------------------------- |
 | `GOOGLE_API_KEY`  | *(required)*         | Google Generative AI credential          |
 | `GEMINI_MODEL`    | `gemini-2.5-flash`   | Which Gemini model to call               |
-| `DATABASE_URL`    | in-memory / unset    | Postgres DSN (watcher state, future workers) |
+| `DATABASE_URL`    | `sqlite:///depfix.db` | Persistent local SQLite database; set a Postgres DSN for shared/concurrent deployments |
 | `REDIS_URL`       | unset                | Redis URL (used by future workers)       |
 | `NPM_REGISTRY_URL`| `registry.npmjs.org` | npm registry base URL (override for tests) |
 | `CLASSIFY_MIN_CONFIDENCE` | `0.5`        | Drop LLM-derived (release-notes) changes below this confidence |

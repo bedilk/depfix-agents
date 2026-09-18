@@ -13,6 +13,7 @@ from depfix.registry.client import NpmRegistryClient
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
 from depfix.sources.fixture_change import FixtureChangeSource
 from depfix.sources.github_release import GitHubReleaseSource
+from depfix.sources.changelog_html import ChangelogHtmlSource
 from depfix.sources.http import build_http_client
 from depfix.sources.models import SourceKind
 from depfix.sources.npm_dist_tag import NpmDistTagSource
@@ -88,6 +89,8 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
         )
     if feed.kind is SourceKind.FIXTURE_CHANGE:
         return FixtureChangeSource(provider_id, feed.config)
+    if feed.kind is SourceKind.CHANGELOG_HTML:
+        return ChangelogHtmlSource(provider_id, feed.config, deps.http)
     raise UnsupportedSourceKind(
         f"feed kind '{feed.kind.value}' is declared but not implemented (Week 2)"
     )

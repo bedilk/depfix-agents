@@ -350,6 +350,14 @@ def check_clone_dir(settings: Settings) -> Check:
     return _ok("clone dir", str(directory))
 
 
+def check_ecosystem_support() -> Check:
+    return _warn(
+        "ecosystem support",
+        "javascript, typescript",
+        "python, go, rust, ruby, php, java are not supported yet and will be skipped explicitly",
+    )
+
+
 def run_checks(settings: Settings, *, skip_network: bool = False) -> list[Check]:
     """Every check, in the order a failure would actually block you."""
     checks: list[Check] = [
@@ -360,6 +368,7 @@ def run_checks(settings: Settings, *, skip_network: bool = False) -> list[Check]
         check_typecheck_tool(),
         check_clone_dir(settings),
         check_providers(settings),
+        check_ecosystem_support(),
     ]
     checks.extend(check_database(settings))
     if skip_network:

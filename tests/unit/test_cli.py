@@ -57,12 +57,18 @@ def test_plan_and_apply_share_the_pipeline_inputs() -> None:
         assert args.llm_provider == "ollama"
 
 
-def test_init_accepts_a_scoped_readiness_scan() -> None:
-    args = build_parser().parse_args(
-        ["init", "acme/widgets", "--provider", "openai", "--change-file", "change.json"]
-    )
+def test_init_accepts_only_local_setup_options() -> None:
+    args = build_parser().parse_args(["init", "--providers-file", "providers.test.yaml"])
 
     assert args.command == "init"
-    assert args.repos == ["acme/widgets"]
-    assert args.provider == ["openai"]
-    assert args.change_file == ["change.json"]
+    assert args.providers_file == "providers.test.yaml"
+    assert not hasattr(args, "repos")
+    assert not hasattr(args, "provider")
+
+
+def test_pr_list_accepts_a_repository() -> None:
+    args = build_parser().parse_args(["pr", "list", "--repo", "acme/widgets"])
+
+    assert args.command == "pr"
+    assert args.pr_command == "list"
+    assert args.repo == "acme/widgets"

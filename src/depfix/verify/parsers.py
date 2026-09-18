@@ -48,6 +48,18 @@ _JEST_STATUS_MAP = {
 parse_vitest_json = parse_jest_json
 
 
+def parse_vitest_verbose(raw: str) -> list[TestCase]:
+    """Best-effort parser for Vitest's default Unicode reporter."""
+    cases: list[TestCase] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if line.startswith(("✓", "√")):
+            cases.append(TestCase(name=line.lstrip("✓√ ").strip(), status=TestStatus.PASSED))
+        elif line.startswith(("×", "✕")):
+            cases.append(TestCase(name=line.lstrip("×✕ ").strip(), status=TestStatus.FAILED))
+    return cases
+
+
 def parse_mocha_json(raw: str) -> list[TestCase]:
     """Parse Mocha's ``--reporter json`` output. Mocha's JSON has no notion
     of "skipped as distinct from pending" in the flat pass/fail lists, so
@@ -167,6 +179,10 @@ def parse_output(
         # Structured parser ran clean but found nothing -- fall through to
         # the aggregate fallback rather than silently reporting "0 tests".
 
+    if framework in (TestFramework.VITEST, TestFramework.UNKNOWN):
+        vitest_cases = parse_vitest_verbose(combined)
+        if vitest_cases:
+            return vitest_cases, "", True
     fallback_cases = parse_fallback(combined)
     error = "" if fallback_cases else "no recognizable test output"
     return fallback_cases, error, True

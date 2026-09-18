@@ -26,6 +26,31 @@ from depfix.scanners.models import RepoScanResult, ScanTarget
 
 logger = logging.getLogger(__name__)
 
+_ECOSYSTEM_MARKERS: tuple[tuple[str, str, int], ...] = (
+    ("package.json", "javascript", 10), ("package-lock.json", "javascript", 5),
+    ("yarn.lock", "javascript", 5), ("pnpm-lock.yaml", "javascript", 5),
+    ("tsconfig.json", "typescript", 8), ("pyproject.toml", "python", 10),
+    ("setup.py", "python", 8), ("requirements.txt", "python", 5),
+    ("Pipfile", "python", 5), ("go.mod", "go", 10), ("Cargo.toml", "rust", 10),
+    ("Gemfile", "ruby", 10), ("composer.json", "php", 10),
+    ("pom.xml", "java", 10), ("build.gradle", "java", 10),
+    ("build.gradle.kts", "kotlin", 10),
+)
+SUPPORTED_ECOSYSTEMS = frozenset({"javascript", "typescript"})
+
+
+def detect_repo_ecosystem(root: Path) -> str:
+    """Return the dominant root ecosystem, or ``unknown`` when unmarked."""
+    scores: dict[str, int] = {}
+    for marker, ecosystem, weight in _ECOSYSTEM_MARKERS:
+        if (root / marker).exists():
+            scores[ecosystem] = scores.get(ecosystem, 0) + weight
+    if not scores:
+        return "unknown"
+    if "typescript" in scores:
+        scores["javascript"] = scores.get("javascript", 0) + scores.pop("typescript")
+    return max(scores, key=lambda ecosystem: scores[ecosystem])
+
 
 def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = None) -> ScanTarget:
     """Build a :class:`ScanTarget` from a provider, optionally narrowed to

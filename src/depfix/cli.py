@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import shutil
 import sys
 from collections import Counter
 from dataclasses import replace
@@ -68,6 +69,7 @@ from depfix.config import Settings, get_settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import AgentResult, BreakingChange, ChangeKind, ClassificationSource
 from depfix.core.pipeline import FixPipelineResult
+from depfix.core.shortcuts import ensure_changes_detected, latest_change_for_provider
 from depfix.evals import (
     CorpusError,
     EvalCategory,
@@ -81,6 +83,7 @@ from depfix.evals import (
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh import (
+    BRANCH_PREFIX,
     BranchWriter,
     GitHubAppAuth,
     GitHubAppError,
@@ -94,7 +97,6 @@ from depfix.obs.logging import configure_logging, configure_sentry
 from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome, PlanArtifact
 from depfix.providers.loader import ProviderConfigError, load_providers_file
 from depfix.providers.models import ProviderSpec
-from depfix.repoconfig import RepoConfigError, parse_repo_config
 from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
 from depfix.scanners import (
     CallSiteScanner,
@@ -111,6 +113,7 @@ from depfix.sources.models import Severity
 from depfix.storage import (
     AttemptStatus,
     BreakingChangeRow,
+    get_engine,
     init_schema,
     record_fix_run,
     record_pull_request,
@@ -122,7 +125,7 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 _RUN_COMMANDS = {
-    "run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline", "init", "plan", "apply", "doctor", "status"
+    "run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline", "init", "plan", "apply", "doctor", "status", "pr"
 }
 _TOP_LEVEL_FLAGS = {"-h", "--help", "--log-level", "--log-format"}
 
@@ -325,6 +328,7 @@ def _print_results(result: AgentResult) -> None:
     table.add_row("Files Scanned", str(result.files_scanned))
     table.add_row("Files Affected", str(result.files_affected))
     table.add_row("Total Usages Fixed", str(result.total_usages_fixed))
+    table.add_row("Confidence", f"[bold]{result.confidence.value}[/bold]")
     rate_color = "green" if result.success_rate == 1.0 else "yellow"
     table.add_row("Success Rate", f"[{rate_color}]{result.success_rate:.0%}[/{rate_color}]")
     table.add_row("Total Cost", f"${result.total_cost:.4f}")
@@ -470,6 +474,8 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
 
 def _outcome_text(change: ChangeOutcome) -> str:
     if change.skip_reason is not None:
+        if change.skip_detail_text:
+            return f"[dim]skip: {change.skip_detail_text}[/dim]"
         return f"[dim]skip: {change.skip_reason.value}[/dim]"
     if change.attempt_status == AttemptStatus.PR_OPENED:
         return "[green]pr_opened[/green]"
@@ -524,6 +530,11 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
         f"\n{outcome.prs_opened} PR(s), {outcome.changes_failed} failed change(s), "
         f"${outcome.total_cost_usd:.4f} spent"
     )
+    if outcome.merge_rate and outcome.merge_rate["total"]:
+        console.print(
+            f"historical merge rate: {outcome.merge_rate['merged']}/{outcome.merge_rate['total']} "
+            f"({float(outcome.merge_rate['rate'] or 0):.0%})"
+        )
     if skip_tally and not show_skips:
         summary = ", ".join(f"{count}x {reason}" for reason, count in skip_tally.most_common())
         console.print(f"skipped: {summary} (--show-skips for detail)")
@@ -672,6 +683,22 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         console.print(f"[red]Error: {exc}[/red]")
         return 2
 
+    if change is None and not args.old_api:
+        console.print(f"[dim]Detecting changes for {provider.id}...[/dim]")
+        try:
+            created = ensure_changes_detected(provider.id, providers_file=providers_file)
+            if created:
+                console.print(f"[green]{created} new breaking change(s) classified[/green]")
+            change, _change_id = latest_change_for_provider(provider.id)
+        except Exception as exc:  # detection must not prevent a broad provider scan
+            console.print(f"[yellow]Change detection failed ({exc}); scanning all provider symbols[/yellow]")
+        else:
+            if change is not None:
+                console.print(
+                    f"[dim]Auto-selected:[/dim] {change.old_api} → {change.new_api} "
+                    f"({change.old_version} → {change.new_version})"
+                )
+
     target = build_scan_target(provider, change)
     if args.old_api:
         if change is not None:
@@ -782,6 +809,22 @@ def _print_fix_result(result: FixPipelineResult) -> None:
             )
             if edit.error_message:
                 console.print(f"      [red]{edit.error_message}[/red]")
+
+    from depfix.core.explain import explain_rejections
+
+    explanations = explain_rejections(result)
+    if explanations:
+        console.print()
+        console.print("[bold yellow]Why some edits weren't kept:[/bold yellow]")
+        for explanation in explanations:
+            console.print(explanation.render(indent="  "))
+    if result.codemod_notes:
+        console.print()
+        console.print("[bold]Codemod / cross-file notes:[/bold]")
+        for note in result.codemod_notes[:20]:
+            console.print(f"  - {note}")
+        if len(result.codemod_notes) > 20:
+            console.print(f"  - _(+{len(result.codemod_notes) - 20} more; see PR body)_")
     console.print()
 
 
@@ -1111,123 +1154,70 @@ def _cmd_repos(args: argparse.Namespace) -> int:
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    """Perform read-only readiness checks for Terraform-style onboarding.
-
-    Unlike ``watch``, this deliberately never advances feed state.  Optional
-    changes are scanned but never sent to an LLM: init answers whether the
-    configured App can read the repo and whether a known migration has any
-    call sites before a plan is allowed to spend model tokens.
-    """
-    if args.write_config:
-        console.print(_starter_repo_config(), soft_wrap=True, highlight=False)
-        return 0
-
+    """Initialize the local database, provider configuration, and tool checks."""
     settings = get_settings()
-    try:
-        providers = load_providers_file(args.providers_file or settings.providers_file)
-    except (FileNotFoundError, ProviderConfigError) as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        return 2
+    _print_header()
+    exit_code = 0
 
-    if args.provider:
-        wanted = set(args.provider)
-        unknown = wanted - {provider.id for provider in providers}
-        if unknown:
-            console.print(f"[red]Unknown provider id(s): {', '.join(sorted(unknown))}[/red]")
-            return 2
-        providers = [provider for provider in providers if provider.id in wanted]
-
-    gh_auth = _build_gh_auth(settings)
-    if gh_auth is None:
-        console.print(
-            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
-            "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
-        )
-        return 2
-
+    console.print("[dim]Initializing database...[/dim]")
     try:
         init_schema()
-        repo_full_names = _load_pipeline_repos(args, gh_auth)
-        changes = _load_pipeline_changes(args, settings, limit=args.limit)
-    except (GitHubAppError, FileNotFoundError, LookupError, json.JSONDecodeError) as exc:
-        console.print(f"[red]Init failed: {exc}[/red]")
-        gh_auth.close()
-        return 1
-
-    _print_header()
-    console.print(
-        f"[dim]Repos:[/dim] {len(repo_full_names)}  [dim]Providers:[/dim] {len(providers)}  "
-        f"[dim]Known changes to scan:[/dim] {len(changes)}\n"
-    )
-    exit_code = 0
-    try:
-        with SourceDeps.from_settings() as deps:
-            watch_outcome = Watcher(deps=deps, dry_run=True).run_once(providers)
-        console.print(
-            f"[green]Feed check:[/green] {watch_outcome.feeds_polled} feeds polled, "
-            f"{len(watch_outcome.failures)} failed (dry-run; no events saved)"
-        )
-        if watch_outcome.failures:
-            exit_code = 1
-
-        provider_by_id = {provider.id: provider for provider in providers}
-        clone_service = CloneService(
-            clone_dir=settings.clone_dir or None,
-            timeout=settings.clone_timeout,
-            max_repo_mb=settings.clone_max_repo_mb,
-        )
-        for repo_full_name in repo_full_names:
-            try:
-                owner, name = repo_full_name.split("/", 1)
-                installation = gh_auth.resolve_installation_for_repo(owner, name)
-                repo = gh_auth.get_repository(owner, name)
-                config_text = gh_auth.get_file_contents(
-                    owner, name, settings.repo_config_filename, ref=repo.default_branch
-                )
-                if config_text is None:
-                    console.print(f"[yellow]{repo_full_name}: .depfix.yml missing (plan/apply will skip it)[/yellow]")
-                    continue
-                repo_config = parse_repo_config(
-                    config_text, where=f"{repo_full_name}/{settings.repo_config_filename}"
-                )
-                console.print(
-                    f"[green]{repo_full_name}: ready[/green] "
-                    f"(enabled={repo_config.enabled}, open_pr={repo_config.open_pr})"
-                )
-                if not changes:
-                    continue
-                token = gh_auth.installation_token(installation.id, repositories=(name,))
-                checkout = clone_service.clone(owner, name, ref=repo.default_branch, token=token.token)
-                try:
-                    scanner = CallSiteScanner(
-                        max_file_bytes=settings.scan_max_file_bytes,
-                        max_files=settings.scan_max_files,
-                    )
-                    for change in changes:
-                        provider = provider_by_id.get(change.provider_id)
-                        if provider is None:
-                            continue
-                        result = scan_checkout(
-                            checkout,
-                            build_scan_target(provider, change),
-                            repo_full_name=repo_full_name,
-                            scanner=scanner,
-                        )
-                        console.print(
-                            f"  scan {change.package} {change.old_api}: "
-                            f"{len(result.actionable_sites)} actionable call site(s)"
-                        )
-                finally:
-                    clone_service.cleanup(checkout)
-            except (GitHubAppError, CloneError, RepoConfigError, ValueError) as exc:
-                console.print(f"[red]{repo_full_name}: failed readiness check: {exc}[/red]")
-                exit_code = 1
+        console.print(f"  [green]✓[/green] database ready ({get_engine().dialect.name})")
     except Exception as exc:
-        console.print(f"[red]Init failed: {exc}[/red]")
-        logger.exception("Init crashed")
-        return 1
-    finally:
-        gh_auth.close()
+        console.print(f"  [red]✗[/red] database failed: {exc}")
+        exit_code = 1
+
+    providers_file = args.providers_file or settings.providers_file
+    try:
+        providers = load_providers_file(providers_file)
+        enabled = sum(provider.enabled for provider in providers)
+        console.print(
+            f"  [green]✓[/green] {len(providers)} provider(s) loaded from {providers_file} "
+            f"({enabled} enabled)"
+        )
+    except (FileNotFoundError, ProviderConfigError) as exc:
+        console.print(f"  [red]✗[/red] providers: {exc}")
+        exit_code = 1
+
+    gh_auth = _build_gh_auth(settings)
+    if gh_auth is not None:
+        try:
+            installations = gh_auth.list_installations()
+            accounts = ", ".join(installation.account_login for installation in installations[:5])
+            console.print(
+                f"  [green]✓[/green] GitHub App authenticated "
+                f"({len(installations)} installation(s): {accounts})"
+            )
+        except GitHubAppError as exc:
+            console.print(f"  [yellow]![/yellow] GitHub App: {exc}")
+            exit_code = 1
+        finally:
+            gh_auth.close()
+    else:
+        console.print(
+            "  [yellow]![/yellow] GitHub App not configured "
+            "(set GITHUB_APP_ID and a private key for --repo commands)"
+        )
+
+    if settings.llm_provider == "gemini":
+        if settings.google_api_key:
+            console.print(f"  [green]✓[/green] LLM ready (gemini, model={settings.gemini_model})")
+        else:
+            console.print("  [yellow]![/yellow] GOOGLE_API_KEY not set")
+    else:
+        console.print(f"  [dim]i[/dim] LLM: ollama, model={settings.ollama_model}")
+
+    for binary in ("git", "node", "npm"):
+        if shutil.which(binary):
+            console.print(f"  [green]✓[/green] {binary}")
+        else:
+            console.print(f"  [yellow]![/yellow] {binary} not on PATH")
+
+    if exit_code == 0:
+        console.print("\n[bold green]depfix is ready.[/bold green]")
+        console.print("[dim]Next:[/dim] depfix scan --repo OWNER/NAME --provider ID")
+    else:
+        console.print("\n[yellow]Some checks failed. Fix the issues above and re-run.[/yellow]")
     return exit_code
 
 
@@ -1238,7 +1228,10 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     if args.command == "plan":
         args.dry_run = True
         args.no_pr = True
+        args.force = True
     settings = get_settings()
+    from depfix.defaults import fill_pipeline_context, load_local_defaults
+    fill_pipeline_context(args, load_local_defaults())
     _apply_model_overrides(args, settings)
     api_key = args.api_key or settings.google_api_key
     model = args.model or settings.gemini_model
@@ -1293,6 +1286,22 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     if args.provider:
         wanted = set(args.provider)
         changes = [c for c in changes if c.provider_id in wanted]
+    if not changes and args.provider and not args.plan_file:
+        for provider_id in args.provider:
+            console.print(f"[dim]No classified changes for {provider_id}; detecting...[/dim]")
+            try:
+                created = ensure_changes_detected(provider_id, providers_file=providers_file)
+                if created:
+                    console.print(
+                        f"[green]{created} new breaking change(s) classified for {provider_id}[/green]"
+                    )
+                resolved, _change_id = latest_change_for_provider(provider_id)
+            except Exception as exc:
+                console.print(f"[yellow]Change detection for {provider_id} failed: {exc}[/yellow]")
+                continue
+            if resolved is not None:
+                changes.append(resolved)
+                console.print(f"[dim]Auto-selected:[/dim] {resolved.old_api} → {resolved.new_api}")
     # `apply <repo>` may obtain its one change from the repo's canonical
     # plan artifact, so do not reject an empty database/change-file result
     # until plan discovery has had a chance to run.
@@ -1434,6 +1443,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
     if not outcome.locked:
         console.print("[yellow]Another orchestrator run already holds the lock; skipped.[/yellow]")
+
+    if not outcome.failures and outcome.locked and getattr(args, "_depfix_has_target", False):
+        from depfix.defaults import save_context
+        save_context(repos=repo_full_names, provider=args.provider, from_event=args.from_event,
+                     change_file=args.change_file)
 
     return 1 if outcome.failures else 0
 
@@ -1887,6 +1901,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(repos_p)
 
+    # -- pr ---------------------------------------------------------------------
+    pr_p = sub.add_parser("pr", help="Pull request operations")
+    pr_sub = pr_p.add_subparsers(dest="pr_command")
+    pr_list_p = pr_sub.add_parser("list", help="List open depfix pull requests")
+    pr_list_p.add_argument(
+        "--repo",
+        type=str,
+        required=True,
+        metavar="OWNER/NAME",
+        help="Repository to list PRs for",
+    )
+    _add_command_logging_arguments(pr_list_p)
+
     # -- pipeline -----------------------------------------------------------------
     pipeline_p = sub.add_parser(
         "pipeline",
@@ -2040,32 +2067,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     init_p = sub.add_parser(
-        "init",
-        help="Check provider feeds, GitHub App access, .depfix.yml, and optionally scan known changes",
+        "init", help="Initialize the local database, credentials, and toolchain"
     )
-    init_p.add_argument(
-        "repos", nargs="*", help="OWNER/NAME; omit to check every repository visible to the GitHub App"
-    )
-    init_p.add_argument("--repo", action="append", default=None, metavar="OWNER/NAME")
-    init_p.add_argument("--provider", action="append", default=None, help="Provider id to poll/scan (repeatable)")
     init_p.add_argument("--providers-file", default=None, help="Path to providers.yaml")
-    init_p.add_argument(
-        "--change-file", action="append", default=None,
-        help="Known BreakingChange JSON to scan for (repeatable; no LLM is called)",
-    )
-    init_p.add_argument(
-        "--from-event", type=int, action="append", default=None, metavar="ID",
-        help="Classified breaking_change row to scan for (repeatable)",
-    )
-    init_p.add_argument(
-        "--limit", type=int, default=0,
-        help="Number of database changes to scan when no --change-file/--from-event is supplied (default: 0)",
-    )
-    init_p.add_argument(
-        "--write-config",
-        action="store_true",
-        help="Print a starter .depfix.yml to stdout for committing in the target repository.",
-    )
     _add_command_logging_arguments(init_p)
 
     return p
@@ -2233,6 +2237,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
                 for row in errors:
                     console.print(f"\n[cyan]{row.repo_id}[/cyan] · [dim]{row.dedupe_key[:12]}[/dim]")
                     console.print(f"  {row.last_error}")
+        _print_merge_rate(session, args.repo)
     return 0
 
 
@@ -2247,27 +2252,75 @@ def _status_cell(status: str) -> str:
 
 
 def _reconcile_open_prs(gh_auth, repo_filter: list[str] | None) -> dict[str, dict[str, str]]:
-    """Return open depfix PRs, keyed by repo and branch dedupe-key prefix."""
+    """Read GitHub PR state and persist observed merged/closed outcomes."""
+    from datetime import UTC, datetime
     from depfix.gh import BRANCH_PREFIX
+    from depfix.storage.schema import FixRunRow, PullRequestRow
 
     result: dict[str, dict[str, str]] = {}
-    if repo_filter is None:
-        return result
-    for repo_full_name in repo_filter:
-        owner, _, name = repo_full_name.partition("/")
-        if not name:
-            continue
-        try:
-            prs = gh_auth.list_open_pull_requests(owner, name)
-        except Exception as exc:  # noqa: BLE001 - one inaccessible repo should not fail status
-            logger.warning("could not list PRs for %s: %s", repo_full_name, exc)
-            continue
-        result[repo_full_name] = {
-            pr.head_branch[len(BRANCH_PREFIX):][:12]: "open"
-            for pr in prs
-            if pr.head_branch.startswith(BRANCH_PREFIX)
-        }
+    with session_scope() as session:
+        repos = repo_filter or list(session.scalars(select(FixRunRow.repo_id).distinct()).all())
+        for repo_full_name in repos:
+            owner, _, name = repo_full_name.partition("/")
+            if not name:
+                continue
+            try:
+                prs = gh_auth.list_open_pull_requests(owner, name)
+            except Exception as exc:  # noqa: BLE001 - one inaccessible repo should not fail status
+                logger.warning("could not list PRs for %s: %s", repo_full_name, exc)
+                continue
+            open_by_key = {
+                pr.head_branch[len(BRANCH_PREFIX):][:12]: "open"
+                for pr in prs if pr.head_branch.startswith(BRANCH_PREFIX)
+            }
+            result[repo_full_name] = open_by_key
+            rows = session.scalars(
+                select(PullRequestRow).join(PullRequestRow.fix_run).where(
+                    FixRunRow.repo_id == repo_full_name, PullRequestRow.state == "open"
+                )
+            ).all()
+            open_numbers = {pr.number for pr in prs if pr.head_branch.startswith(BRANCH_PREFIX)}
+            for row in rows:
+                row.last_reconciled_at = datetime.now(UTC)
+                if row.number in open_numbers:
+                    continue
+                try:
+                    state = gh_auth.get_pull_request_state(owner, name, row.number)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("could not reconcile %s#%s: %s", repo_full_name, row.number, exc)
+                    continue
+                merged = bool(state["merged"])
+                row.merged = merged
+                row.state = "merged" if merged else (state["state"] or "closed")
+                row.merged_at = _parse_github_datetime(state["merged_at"])
+                row.closed_at = _parse_github_datetime(state["closed_at"])
     return result
+
+
+def _parse_github_datetime(value: str | None):
+    from datetime import datetime
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _print_merge_rate(session, repo_filter: list[str] | None) -> None:
+    from depfix.storage.schema import FixRunRow, PullRequestRow
+    statement = select(PullRequestRow).join(PullRequestRow.fix_run).where(PullRequestRow.state != "open")
+    if repo_filter:
+        statement = statement.where(FixRunRow.repo_id.in_(repo_filter))
+    rows = session.scalars(statement).all()
+    if not rows:
+        return
+    merged = sum(row.merged for row in rows)
+    total = len(rows)
+    rate = merged / total
+    color = "green" if rate >= .7 else "yellow" if rate >= .3 else "red"
+    console.print(f"\n[bold]Merge rate:[/bold] [{color}]{rate:.0%}[/{color}] "
+                  f"([dim]{merged} merged / {total} resolved; {total - merged} closed unmerged[/dim])")
 
 
 def _github_cell(ledger_status: str, github_state: str | None) -> tuple[str, bool]:
@@ -2278,28 +2331,42 @@ def _github_cell(ledger_status: str, github_state: str | None) -> tuple[str, boo
     return "[dim]—[/dim]", False
 
 
-_STARTER_REPO_CONFIG = """# depfix per-repo opt-in configuration.
-# Commit this file at the default branch's root to opt the repository in.
+def _cmd_pr_list(args: argparse.Namespace) -> int:
+    """List open pull requests created by depfix for one repository."""
+    settings = get_settings()
+    gh_auth = _build_gh_auth(settings)
+    if gh_auth is None:
+        console.print(
+            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+            "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
+        )
+        return 2
 
-version: 1
+    owner, name = args.repo.split("/", 1)
+    try:
+        prs = gh_auth.list_open_pull_requests(owner, name)
+    except GitHubAppError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 1
+    finally:
+        gh_auth.close()
 
-# Kill switch. Set false to pause depfix without deleting this configuration.
-enabled: true
-
-# Run the repository's tests against each migration where possible.
-verify: true
-
-# Open a pull request after verification. Disable during onboarding rehearsals.
-open_pr: true
-
-# Low-confidence PRs are drafted automatically; this drafts every depfix PR.
-draft_pr: false
-"""
-
-
-def _starter_repo_config() -> str:
-    """The .depfix.yml template printed by ``depfix init --write-config``."""
-    return _STARTER_REPO_CONFIG
+    depfix_prs = [pr for pr in prs if pr.head_branch.startswith(BRANCH_PREFIX)]
+    other_count = len(prs) - len(depfix_prs)
+    if not depfix_prs:
+        console.print(f"No open depfix PRs for {args.repo}")
+    else:
+        table = Table(title=f"Open depfix PRs — {args.repo}")
+        table.add_column("#", style="cyan", justify="right")
+        table.add_column("Branch")
+        table.add_column("Base")
+        table.add_column("URL")
+        for pr in depfix_prs:
+            table.add_row(str(pr.number), pr.head_branch, pr.base_branch, pr.html_url)
+        console.print(table)
+    if other_count:
+        console.print(f"[dim]({other_count} other open PR(s) not opened by depfix)[/dim]")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2314,6 +2381,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(raw)
 
     settings = get_settings()
+    from depfix.defaults import apply_defaults_to_settings, load_local_defaults
+    apply_defaults_to_settings(settings, load_local_defaults())
     log_level = getattr(args, "log_level", None) or settings.log_level
     # Human-readable in a developer's terminal, JSON lines everywhere else
     # (staging/production/test) where a log aggregator, not a human, is the
@@ -2340,6 +2409,11 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_doctor(args)
     if args.command == "status":
         return _cmd_status(args)
+    if args.command == "pr":
+        if args.pr_command == "list":
+            return _cmd_pr_list(args)
+        console.print("[red]Error: pass `depfix pr list --repo OWNER/NAME`.[/red]")
+        return 2
     if args.command in {"pipeline", "plan", "apply"}:
         return _cmd_pipeline(args)
     return _cmd_run(args)

@@ -251,11 +251,14 @@ class Verifier:
     ) -> TestRunResult:
         for relpath in touched_relpaths:
             self._editor.revert(relpath)
+        from depfix.scanners.workspace import owning_package_dir
+        test_cwd = owning_package_dir(self._editor.checkout.path, touched_relpaths[0])
         return run_tests(
             self._editor.checkout.path,
             timeout=self._test_timeout,
             package_manager=package_manager,
             max_output_bytes=self._max_output_bytes,
+            test_cwd=test_cwd,
         )
 
     def _run_tests_on_fixed(
@@ -266,11 +269,14 @@ class Verifier:
     ) -> TestRunResult:
         for relpath in touched_relpaths:
             self._editor.write_fix(relpath, edit_by_relpath[relpath].fixed_content)
+        from depfix.scanners.workspace import owning_package_dir
+        test_cwd = owning_package_dir(self._editor.checkout.path, touched_relpaths[0])
         return run_tests(
             self._editor.checkout.path,
             timeout=self._test_timeout,
             package_manager=package_manager,
             max_output_bytes=self._max_output_bytes,
+            test_cwd=test_cwd,
         )
 
     # -- typecheck fallback ----------------------------------------------------
@@ -315,6 +321,18 @@ class Verifier:
                 )
                 tier = ConfidenceTier.MEDIUM
                 reason = "characterization fixture preserved the pre-migration behaviour"
+            elif characterization is None or not characterization.confirmed:
+                from depfix.verify.smoke import run_smoke_check
+                for edit in on_disk:
+                    smoke = run_smoke_check(root, edit.relpath)
+                    if smoke.ran and not smoke.passed:
+                        self._editor.revert(edit.relpath)
+                        settled = tuple(
+                            self._settle(candidate, EditVerdict.REVERTED)
+                            if candidate.relpath == edit.relpath and candidate.is_on_disk else candidate
+                            for candidate in settled
+                        )
+                        reason = f"{tier_reason}; smoke check failed: {smoke.error or 'module would not load'}"
             return VerificationReport(
                 ran=ran,
                 skipped_reason=skipped_reason,
