@@ -459,11 +459,9 @@ def test_python_requirement_bumps_strips_a_leading_v_from_the_new_version(
     assert bumps == {"requirements.txt": "stripe==11.0.0\n"}
 
 
-def test_python_requirement_bumps_drops_an_environment_marker(tmp_path: Path) -> None:
-    """Documents CURRENT behavior, not necessarily desired behavior: the
-    rewrite regex consumes everything up to ``#``/newline after the version
-    operator, so a PEP 508 environment marker on the same line is lost.
-    Suspected src bug -- see the final report."""
+def test_python_requirement_bumps_preserves_an_environment_marker(tmp_path: Path) -> None:
+    """A PEP 508 environment marker scopes *whether* the dependency applies
+    at all -- the version rewrite must carry it through verbatim."""
     (tmp_path / "requirements.txt").write_text(
         'stripe==10.0.0 ; python_version >= "3.9"\n', encoding="utf-8"
     )
@@ -472,7 +470,7 @@ def test_python_requirement_bumps_drops_an_environment_marker(tmp_path: Path) ->
         tmp_path, _change(package="stripe", old_version="10.0.0", new_version="11.0.0")
     )
 
-    assert bumps == {"requirements.txt": "stripe==11.0.0\n"}
+    assert bumps == {"requirements.txt": 'stripe==11.0.0 ; python_version >= "3.9"\n'}
 
 
 # -- ImpactReport.summary ----------------------------------------------------------

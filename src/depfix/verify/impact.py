@@ -59,6 +59,11 @@ class ImpactReport:
             return f"impact check skipped: {self.skipped_reason}"
         if self.install_failed_after_bump:
             return "impact check: dependency install FAILED after bumping to the new version -- change confirmed disruptive"
+        if self.degraded and self.new_failing_tests:
+            return (
+                "impact check: failure count increased on the new version, but the test "
+                "reporter only yielded aggregate counts -- likely breaking, exact tests unknown"
+            )
         if self.new_failing_tests:
             named = ", ".join(self.new_failing_tests[:5])
             more = f" (+{len(self.new_failing_tests) - 5} more)" if len(self.new_failing_tests) > 5 else ""
@@ -217,10 +222,19 @@ def _python_requirement_bumps(root: Path, change: BreakingChange) -> dict[str, s
         except (OSError, UnicodeDecodeError):
             continue
         pattern = re.compile(
-            rf"^(?P<prefix>\s*{re.escape(change.package)}(?:\[[^\]]*\])?)\s*(?:==|~=|>=|<=|<|>)[^#\n]*",
+            rf"^(?P<prefix>\s*{re.escape(change.package)}(?:\[[^\]]*\])?)"
+            rf"\s*(?:==|~=|>=|<=|<|>)[^;#\n]*(?P<marker>;[^#\n]*)?",
             re.MULTILINE | re.IGNORECASE,
         )
-        bumped, count = pattern.subn(rf"\g<prefix>=={new_version}", original)
+
+        def _replace(match: re.Match[str]) -> str:
+            # A PEP 508 environment marker (`; python_version >= "3.9"`)
+            # scopes *whether* the dependency applies -- it must survive
+            # the version rewrite verbatim.
+            marker = match.group("marker") or ""
+            return f"{match.group('prefix')}=={new_version} {marker}".rstrip() if marker else f"{match.group('prefix')}=={new_version}"
+
+        bumped, count = pattern.subn(_replace, original)
         if count and bumped != original:
             out[name] = bumped
     return out
