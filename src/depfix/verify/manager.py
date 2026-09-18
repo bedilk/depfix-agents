@@ -78,6 +78,16 @@ def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> 
     return argv
 
 
+def build_install_argv(root: str | Path, *, ignore_scripts: bool, package_manager: str | None = None) -> list[str]:
+    """Public entry point for the install command :func:`install_dependencies`
+    would run for ``root``, for callers (e.g. :mod:`depfix.codemods.lockfile`)
+    that need to regenerate a lockfile without duplicating the detection
+    logic and without reaching into this module's private helpers."""
+    root = Path(root)
+    manager = package_manager or detect_package_manager(root)
+    return _install_argv(manager, root, ignore_scripts=ignore_scripts)
+
+
 def install_dependencies(
     root: str | Path,
     *,
@@ -85,6 +95,7 @@ def install_dependencies(
     ignore_scripts: bool = True,
     package_manager: str | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    ecosystem: str = "javascript",
 ) -> InstallResult:
     """Install ``root``'s dependencies, defaulting to ``--ignore-scripts``
     so a hostile ``postinstall``/``preinstall`` in a dependency (or the repo
@@ -92,8 +103,17 @@ def install_dependencies(
     verifying a fix -- at the cost of tests that genuinely need a build
     step (native addons, codegen) failing for reasons unrelated to the fix
     under test. That tradeoff is intentional: see docs/decisions.md.
+
+    ``ecosystem="python"`` installs into a throwaway in-checkout virtualenv
+    instead (see :mod:`depfix.ecosystems.python_runtime` for the isolation
+    model and its own note on why pip has no ``--ignore-scripts`` analogue).
     """
     root = Path(root)
+    if ecosystem == "python":
+        return _install_python_dependencies(
+            root, timeout=timeout, max_output_bytes=max_output_bytes
+        )
+
     if not (root / "package.json").is_file():
         return InstallResult(package_manager="none", skipped_reason="no package.json found")
 
@@ -107,6 +127,44 @@ def install_dependencies(
 
     result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)
     return InstallResult(package_manager=manager, sandbox=result)
+
+
+def _install_python_dependencies(
+    root: Path, *, timeout: float, max_output_bytes: int
+) -> InstallResult:
+    """Create the checkout's ``.depfix-venv`` (once) and pip-install into it."""
+    from depfix.ecosystems.python_runtime import create_venv_argv, install_argv
+    from depfix.ecosystems.specs import PYTHON
+
+    if not _python_has_manifest(root):
+        return InstallResult(
+            package_manager="none",
+            skipped_reason="no requirements.txt/pyproject.toml/setup.py found",
+        )
+
+    venv_argv = create_venv_argv(root)
+    if venv_argv is not None:
+        venv_result = run_sandboxed(
+            venv_argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+            extra_allowlist=PYTHON.env_allowlist_extra,
+        )
+        if not venv_result.ok:
+            return InstallResult(package_manager="pip", sandbox=venv_result)
+
+    argv = install_argv(root)
+    if argv is None:
+        return InstallResult(package_manager="pip", skipped_reason="python3 not found on PATH")
+    result = run_sandboxed(
+        argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+        extra_allowlist=PYTHON.env_allowlist_extra,
+    )
+    return InstallResult(package_manager="pip", sandbox=result)
+
+
+def _python_has_manifest(root: Path) -> bool:
+    from depfix.ecosystems.python_runtime import has_installable_manifest
+
+    return has_installable_manifest(root)
 
 
 def _which(executable: str) -> str | None:

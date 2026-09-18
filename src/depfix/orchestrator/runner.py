@@ -56,7 +56,6 @@ from depfix.config import Settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import BreakingChange
 from depfix.core.pipeline import FixPipelineResult
-from depfix.verify.confidence import ConfidenceTier
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh import (
@@ -93,6 +92,7 @@ from depfix.storage import (
     touch_no_call_sites,
 )
 from depfix.storage.lock import advisory_lock
+from depfix.verify.confidence import ConfidenceTier
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,11 @@ class Orchestrator:
                 outcome.locked = False
                 return outcome
 
-            if not self._dry_run:
+            # Same contract as `should_inspect_prs` below: --no-pr (like
+            # --dry-run) must never require the GitHub App's Pull requests
+            # permission, so auto-reconciliation -- which lists open PRs --
+            # is skipped for both, not just for dry runs.
+            if not self._dry_run and not self._no_pr:
                 try:
                     from depfix.orchestrator.reconcile import compute_merge_rate, reconcile_open_prs
 
@@ -171,7 +175,7 @@ class Orchestrator:
                         outcome.merge_rate = compute_merge_rate(session, repo_full_names)
                     if drift:
                         logger.info("auto-reconciled %d PR outcome(s) before processing", drift)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.debug("auto-reconciliation failed; proceeding with stale ledger", exc_info=True)
 
             self._budget = RunBudget(
@@ -432,6 +436,32 @@ class Orchestrator:
                 outcome.planned = self._dry_run
                 return outcome
 
+            # Plan-time impact check: before any fix is generated, measure
+            # whether the change actually breaks this repo's own tests when
+            # the dependency is bumped -- evidence for the plan output, not
+            # a gate (mocked suites passing proves nothing; see
+            # depfix.verify.impact's docstring).
+            if self._dry_run and self._settings.plan_impact_check_enabled:
+                from depfix.scanners.repo import detect_repo_ecosystem
+                from depfix.verify.impact import run_impact_check
+
+                impact_ecosystem = detect_repo_ecosystem(checkout.path)
+                if impact_ecosystem == "typescript":
+                    impact_ecosystem = "javascript"
+                try:
+                    impact = run_impact_check(
+                        checkout, change,
+                        install_timeout=self._settings.verify_install_timeout,
+                        test_timeout=self._settings.verify_test_timeout,
+                        ignore_scripts=self._settings.verify_ignore_scripts,
+                        max_output_bytes=self._settings.verify_max_output_bytes,
+                        ecosystem=impact_ecosystem,
+                    )
+                    outcome.impact_summary = impact.summary()
+                except Exception:
+                    logger.exception("impact check failed for %s", change.dedupe_key[:12])
+                    outcome.impact_summary = "impact check errored; see logs"
+
             artifact = self._plan_artifacts.get((repo_full_name, change.dedupe_key))
             plan_digest = ""
             if artifact is not None:
@@ -464,6 +494,8 @@ class Orchestrator:
                 )
                 paths = ", ".join(edit.relpath for edit in committable)
                 outcome.detail = f"[dry-run] verified {len(committable)} file(s): {paths}"
+                if outcome.impact_summary:
+                    outcome.detail = f"{outcome.detail}\n{outcome.impact_summary}"
                 outcome.planned = True
                 return outcome
 

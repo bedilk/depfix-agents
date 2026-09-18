@@ -103,8 +103,10 @@ class Verifier:
         typecheck_enabled: bool = True,
         typecheck_timeout: float = 300.0,
         characterizer: Characterizer | None = None,
+        ecosystem: str = "javascript",
     ) -> None:
         self._editor = editor
+        self._ecosystem = ecosystem
         self._install_timeout = install_timeout
         self._test_timeout = test_timeout
         self._ignore_scripts = ignore_scripts
@@ -137,7 +139,7 @@ class Verifier:
 
         root = self._editor.checkout.path
 
-        if not has_test_script(root):
+        if not has_test_script(root, self._ecosystem):
             return self._decide_without_tests(
                 edits, on_disk, ran=False, skipped_reason="repo has no test script"
             )
@@ -147,6 +149,7 @@ class Verifier:
             timeout=self._install_timeout,
             ignore_scripts=self._ignore_scripts,
             max_output_bytes=self._max_output_bytes,
+            ecosystem=self._ecosystem,
         )
         if not install.ok:
             return self._decide_without_tests(
@@ -251,14 +254,13 @@ class Verifier:
     ) -> TestRunResult:
         for relpath in touched_relpaths:
             self._editor.revert(relpath)
-        from depfix.scanners.workspace import owning_package_dir
-        test_cwd = owning_package_dir(self._editor.checkout.path, touched_relpaths[0])
         return run_tests(
             self._editor.checkout.path,
             timeout=self._test_timeout,
             package_manager=package_manager,
             max_output_bytes=self._max_output_bytes,
-            test_cwd=test_cwd,
+            test_cwd=self._test_cwd(touched_relpaths[0]),
+            ecosystem=self._ecosystem,
         )
 
     def _run_tests_on_fixed(
@@ -269,15 +271,23 @@ class Verifier:
     ) -> TestRunResult:
         for relpath in touched_relpaths:
             self._editor.write_fix(relpath, edit_by_relpath[relpath].fixed_content)
-        from depfix.scanners.workspace import owning_package_dir
-        test_cwd = owning_package_dir(self._editor.checkout.path, touched_relpaths[0])
         return run_tests(
             self._editor.checkout.path,
             timeout=self._test_timeout,
             package_manager=package_manager,
             max_output_bytes=self._max_output_bytes,
-            test_cwd=test_cwd,
+            test_cwd=self._test_cwd(touched_relpaths[0]),
+            ecosystem=self._ecosystem,
         )
+
+    def _test_cwd(self, first_relpath: str):
+        """The directory tests run from. npm monorepos resolve the touched
+        file's owning workspace package; python runs from the checkout root
+        (pytest's rootdir discovery handles src-layouts on its own)."""
+        if self._ecosystem == "python":
+            return self._editor.checkout.path
+        from depfix.scanners.workspace import owning_package_dir
+        return owning_package_dir(self._editor.checkout.path, first_relpath)
 
     # -- typecheck fallback ----------------------------------------------------
 
@@ -321,8 +331,9 @@ class Verifier:
                 )
                 tier = ConfidenceTier.MEDIUM
                 reason = "characterization fixture preserved the pre-migration behaviour"
-            elif characterization is None or not characterization.confirmed:
+            else:
                 from depfix.verify.smoke import run_smoke_check
+                smoke_failures: list[str] = []
                 for edit in on_disk:
                     smoke = run_smoke_check(root, edit.relpath)
                     if smoke.ran and not smoke.passed:
@@ -332,7 +343,11 @@ class Verifier:
                             if candidate.relpath == edit.relpath and candidate.is_on_disk else candidate
                             for candidate in settled
                         )
-                        reason = f"{tier_reason}; smoke check failed: {smoke.error or 'module would not load'}"
+                        smoke_failures.append(
+                            f"{edit.relpath}: {smoke.error or 'module would not load'}"
+                        )
+                if smoke_failures:
+                    reason = f"{tier_reason}; smoke check failed: {'; '.join(smoke_failures)}"
             return VerificationReport(
                 ran=ran,
                 skipped_reason=skipped_reason,
@@ -350,6 +365,15 @@ class Verifier:
         if not self._typecheck_enabled:
             return suspect("typecheck verification is disabled", resolved_install=install)
 
+        if self._ecosystem != "javascript":
+            # The typecheck fallback is `tsc --noEmit`; other ecosystems
+            # have no wired static-check oracle yet (mypy/pyright would
+            # slot in here), so fall through to characterize/smoke-check.
+            return suspect(
+                f"no static-check oracle wired for {self._ecosystem}",
+                resolved_install=install,
+            )
+
         # `tsc` needs node_modules for the SDK's own .d.ts files, so the
         # "no test script" path has to install even though it never intended
         # to run anything.
@@ -360,6 +384,7 @@ class Verifier:
                 timeout=self._install_timeout,
                 ignore_scripts=self._ignore_scripts,
                 max_output_bytes=self._max_output_bytes,
+                ecosystem=self._ecosystem,
             )
         if not resolved_install.ok:
             return suspect(

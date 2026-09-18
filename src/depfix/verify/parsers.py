@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import re
+from xml.etree import ElementTree
+from xml.etree.ElementTree import ParseError as _XML_PARSE_ERROR
 
 from depfix.verify.models import TestCase, TestFramework, TestStatus
 
@@ -119,14 +121,46 @@ def parse_tap(raw: str) -> list[TestCase]:
     return cases
 
 
+def parse_junit_xml(raw: str) -> list[TestCase]:
+    """Parse a JUnit XML report -- pytest's ``--junit-xml`` output, and the
+    lingua franca of most other ecosystems' test runners.
+
+    Identity is ``classname::name`` (pytest encodes the module/class path
+    in ``classname``), stable across runs the same way Jest's ``fullName``
+    is. A ``<failure>``/``<error>`` child means FAILED; ``<skipped>`` means
+    SKIPPED; a bare ``<testcase>`` passed.
+    """
+    root = ElementTree.fromstring(raw)
+    cases: list[TestCase] = []
+    for case in root.iter("testcase"):
+        classname = case.get("classname") or ""
+        name = case.get("name") or "<unnamed>"
+        title = f"{classname}::{name}" if classname else name
+        file = case.get("file") or ""
+        failure = case.find("failure")
+        error = case.find("error")
+        if failure is not None or error is not None:
+            node = failure if failure is not None else error
+            message = (node.get("message") or "") if node is not None else ""
+            cases.append(TestCase(name=title, file=file, status=TestStatus.FAILED, message=message))
+        elif case.find("skipped") is not None:
+            cases.append(TestCase(name=title, file=file, status=TestStatus.SKIPPED))
+        else:
+            cases.append(TestCase(name=title, file=file, status=TestStatus.PASSED))
+    return cases
+
+
 #: Best-effort aggregate counters for the human-readable default reporters
-#: of Jest/Vitest/Mocha, e.g. "Tests: 2 failed, 8 passed, 10 total" (Jest)
-#: or "10 passing (1s)" / "2 failing" (Mocha).
+#: of Jest/Vitest/Mocha/pytest, e.g. "Tests: 2 failed, 8 passed, 10 total"
+#: (Jest), "10 passing (1s)" / "2 failing" (Mocha), or pytest's
+#: "==== 2 failed, 8 passed in 1.23s ====" summary line.
 _COUNT_PATTERNS: tuple[tuple[TestStatus, re.Pattern[str]], ...] = (
     (TestStatus.FAILED, re.compile(r"(?P<n>\d+)\s+failing")),
     (TestStatus.FAILED, re.compile(r"Tests:.*?(?P<n>\d+)\s+failed")),
+    (TestStatus.FAILED, re.compile(r"(?P<n>\d+)\s+failed")),
     (TestStatus.PASSED, re.compile(r"(?P<n>\d+)\s+passing")),
     (TestStatus.PASSED, re.compile(r"Tests:.*?(?P<n>\d+)\s+passed")),
+    (TestStatus.PASSED, re.compile(r"(?P<n>\d+)\s+passed")),
 )
 
 
@@ -171,7 +205,7 @@ def parse_output(
     if parser is not None:
         try:
             cases = parser(stdout) if stdout.strip() else parser(stderr)
-        except (json.JSONDecodeError, ValueError, KeyError, TypeError) as exc:
+        except (json.JSONDecodeError, ValueError, KeyError, TypeError, _XML_PARSE_ERROR) as exc:
             fallback_cases = parse_fallback(stdout + "\n" + stderr)
             return fallback_cases, f"structured parse failed: {exc}", True
         if cases:
@@ -193,4 +227,5 @@ _STRUCTURED_PARSERS = {
     TestFramework.VITEST: parse_vitest_json,
     TestFramework.MOCHA: parse_mocha_json,
     TestFramework.NODE_TEST: parse_tap,
+    TestFramework.PYTEST: parse_junit_xml,
 }

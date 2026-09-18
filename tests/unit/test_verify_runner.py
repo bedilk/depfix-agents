@@ -236,3 +236,37 @@ def test_run_tests_returns_timed_out_result_without_reading_reporter_file(
     assert result.cases == []
     assert "partial output" in result.raw_output_tail
     assert "stderr tail" in result.raw_output_tail
+
+
+# -- duplicate-reporter guard ------------------------------------------------
+
+
+def test_reporter_args_skipped_when_script_already_configures_one(tmp_path: Path) -> None:
+    """A repo whose own test script pins ``--test-reporter=tap`` must not get
+    the flag appended a second time -- Node 26 rejects the duplicate with
+    ERR_INVALID_ARG_VALUE, turning a healthy suite into a crashed run."""
+    import json
+
+    from depfix.verify.runner import _script_already_configures_reporter
+
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"test": "node --test --test-reporter=tap"}}),
+        encoding="utf-8",
+    )
+    assert _script_already_configures_reporter(tmp_path, TestFramework.NODE_TEST)
+
+    argv = _test_argv(
+        "npm", TestFramework.NODE_TEST, tmp_path / "out.json", skip_reporter_args=True
+    )
+    assert argv == ["npm", "test", "--"]
+
+
+def test_reporter_args_kept_when_script_has_no_reporter(tmp_path: Path) -> None:
+    import json
+
+    from depfix.verify.runner import _script_already_configures_reporter
+
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"test": "node --test"}}), encoding="utf-8"
+    )
+    assert not _script_already_configures_reporter(tmp_path, TestFramework.NODE_TEST)

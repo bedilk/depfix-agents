@@ -44,6 +44,9 @@ class ChangeOutcome:
     #: apart from "found things, but they're out of scope for this repo".
     suppressed_call_sites: int = 0
     plan_artifact: PlanArtifact | None = None
+    #: One-line result of the plan-time impact check (see
+    #: :mod:`depfix.verify.impact`); empty when the check didn't run.
+    impact_summary: str = ""
 
     @property
     def skipped(self) -> bool:

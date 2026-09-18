@@ -62,7 +62,7 @@ def _binary_version(executable: str, *args: str) -> tuple[str | None, str]:
         return None, ""
     try:
         result = subprocess.run(
-            [path, *args], capture_output=True, text=True, timeout=15  # noqa: S603
+            [path, *args], capture_output=True, text=True, timeout=15
         )
     except (OSError, subprocess.TimeoutExpired):
         return path, ""
@@ -253,7 +253,7 @@ def check_github_app(settings: Settings) -> list[Check]:
 
     # Imported lazily so `doctor` still reports every other check on a box
     # with no App configured at all.
-    from depfix.cli import _build_gh_auth  # noqa: PLC0415
+    from depfix.cli import _build_gh_auth
 
     gh_auth = _build_gh_auth(settings)
     if gh_auth is None:  # pragma: no cover - guarded above
@@ -351,10 +351,13 @@ def check_clone_dir(settings: Settings) -> Check:
 
 
 def check_ecosystem_support() -> Check:
-    return _warn(
+    from depfix.ecosystems import all_ids, fixable_ids
+
+    fixable = sorted(fixable_ids())
+    scan_only = sorted(set(all_ids()) - fixable_ids())
+    return _ok(
         "ecosystem support",
-        "javascript, typescript",
-        "python, go, rust, ruby, php, java are not supported yet and will be skipped explicitly",
+        f"fix + verify: {', '.join(fixable)}; scan-only: {', '.join(scan_only)}",
     )
 
 

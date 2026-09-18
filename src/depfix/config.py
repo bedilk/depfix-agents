@@ -173,6 +173,14 @@ class Settings(BaseSettings):
         description="Wall-clock cap for one baseline or after-fix test run.",
     )
     verify_typecheck_enabled: bool = Field(default=True)
+    plan_impact_check_enabled: bool = Field(
+        default=True,
+        description="During `depfix plan`/--dry-run, before generating any fix: run the "
+        "repo's test suite on the current dependency tree, bump the affected dependency "
+        "to the post-change version, run the suite again, and report which tests newly "
+        "fail. Confirms (or fails to confirm) that the detected breaking change actually "
+        "breaks this repo, locally, before an LLM is ever asked for a fix.",
+    )
     verify_typecheck_timeout: float = Field(default=300.0, ge=1.0, le=1800.0)
     plan_dir: str = Field(default=".depfix/plans")
     apply_min_confidence: Literal["high", "medium", "low", "none"] = Field(default="low")
