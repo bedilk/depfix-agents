@@ -1,0 +1,17 @@
+{
+  "id": 10,
+  "package": "seed-multi",
+  "old_version": "3.3.0",
+  "new_version": "4.0.1",
+  "old_api": "openai.createModeration",
+  "new_api": "openai.moderations.create",
+  "description": "Multi-SDK OpenAI moderation migration.",
+  "migration_guide": "",
+  "kind": "method_renamed",
+  "source": "spec_diff",
+  "provider_id": "seed-multi",
+  "source_url": null,
+  "evidence": null,
+  "confidence": 1.0,
+  "call_site_hints": []
+}

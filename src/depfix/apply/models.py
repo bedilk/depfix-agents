@@ -73,6 +73,7 @@ class FileEdit:
     error_message: str = ""
     origin: EditOrigin = EditOrigin.LLM
     codemod_id: str = ""
+    derivation_trace: str = ""
 
     @property
     def is_on_disk(self) -> bool:

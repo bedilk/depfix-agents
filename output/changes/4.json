@@ -1,0 +1,17 @@
+{
+  "id": 4,
+  "package": "supabase",
+  "old_version": "1.0.0",
+  "new_version": "2.0.0",
+  "old_api": "supabase.auth.signIn",
+  "new_api": "supabase.auth.signInWithPassword",
+  "description": "Supabase auth migration.",
+  "migration_guide": "",
+  "kind": "method_renamed",
+  "source": "spec_diff",
+  "provider_id": "supabase",
+  "source_url": null,
+  "evidence": null,
+  "confidence": 1.0,
+  "call_site_hints": []
+}

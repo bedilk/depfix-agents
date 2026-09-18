@@ -11,6 +11,7 @@ its verdict.
 from __future__ import annotations
 
 import enum
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from depfix.config import Settings
@@ -46,6 +47,21 @@ class SkipReason(enum.StrEnum):
     NO_CALL_SITES_UNCHANGED = "no_call_sites_unchanged"
     MAX_OPEN_PRS_REACHED = "max_open_prs_reached"
     MAX_CHANGES_PER_RUN_REACHED = "max_changes_per_run_reached"
+
+
+@dataclass(frozen=True)
+class SkipDetail:
+    reason: SkipReason
+    message: str = ""
+    resumes_at: str = ""
+
+    def one_line(self) -> str:
+        parts = [self.reason.value]
+        if self.message:
+            parts.append(self.message)
+        if self.resumes_at:
+            parts.append(f"resumes at {self.resumes_at}")
+        return " — ".join(parts)
 
 
 def effective_max_changes_per_run(repo_config: RepoConfig, settings: Settings) -> int:
@@ -111,6 +127,43 @@ def decide(
             return SkipReason.MAX_CHANGES_PER_RUN_REACHED
 
     return None
+
+
+def decide_with_detail(**kwargs: object) -> SkipDetail | None:
+    """Return the policy decision plus a concise operator-actionable reason."""
+    reason = decide(**kwargs)  # type: ignore[arg-type]
+    if reason is None:
+        return None
+    attempt = kwargs.get("attempt")
+    settings = kwargs["settings"]
+    message = ""
+    resumes_at = ""
+    if reason is SkipReason.COOLDOWN_ACTIVE and attempt is not None:
+        updated_at = attempt.updated_at
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        expires = updated_at + timedelta(hours=settings.pipeline_retry_cooldown_hours)
+        resumes_at = expires.isoformat(timespec="seconds")
+        message = f"{max(0, (expires - datetime.now(UTC)).total_seconds() / 3600):.1f}h left"
+    elif reason is SkipReason.ALREADY_TERMINAL and attempt is not None:
+        message = f"ledger status is {attempt.status}; use --force to retry"
+    elif reason is SkipReason.MAX_ATTEMPTS_REACHED and attempt is not None:
+        message = f"{attempt.attempts_used}/{settings.pipeline_max_attempts} attempts used; use --force"
+    elif reason is SkipReason.MAX_OPEN_PRS_REACHED:
+        message = "merge or close an existing depfix PR, or use --force"
+    elif reason is SkipReason.NO_CALL_SITES_UNCHANGED:
+        message = "will recheck when HEAD changes"
+    elif reason is SkipReason.MAX_CHANGES_PER_RUN_REACHED:
+        message = "deferred to the next fleet pass"
+    elif reason is SkipReason.TENANT_IGNORED:
+        message = "excluded by .depfix.yml"
+    elif reason is SkipReason.PIPELINE_DISABLED:
+        message = "enabled: false in .depfix.yml"
+    elif reason is SkipReason.PROVIDER_NOT_ALLOWED:
+        message = "provider excluded by .depfix.yml"
+    elif reason is SkipReason.UNKNOWN_PROVIDER:
+        message = "provider is not configured"
+    return SkipDetail(reason, message, resumes_at)
 
 
 def _cooldown_active(attempt: ChangeAttemptRow, settings: Settings) -> bool:

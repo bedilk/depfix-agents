@@ -13,7 +13,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, inspect
+from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from depfix.config import get_settings
@@ -47,14 +48,52 @@ _BASELINE_TABLES = frozenset(
 
 
 def get_engine() -> Engine:
-    """Return the process-wide engine, building it on first use."""
+    """Return the process-wide engine, building it on first use.
+
+    Local development defaults to SQLite.  A configured local Postgres URL
+    also falls back to the same SQLite file when its server is unavailable,
+    which keeps CLI commands usable after a Docker service stops.  Remote
+    Postgres URLs never fall back: an explicit production database outage
+    must remain visible to its operator.
+    """
     global _engine, _session_factory
     if _engine is None:
         url = get_settings().database_url
-        _engine = create_engine(url, future=True)
+        _engine = _engine_for_url(url)
         _session_factory = sessionmaker(bind=_engine, expire_on_commit=False)
         logger.debug("SQLAlchemy engine created (driver=%s)", _engine.dialect.name)
     return _engine
+
+
+def _engine_for_url(url: str) -> Engine:
+    """Build an engine, falling back only from an unreachable local Postgres."""
+    engine = create_engine(url, future=True)
+    if not _is_local_postgres_url(url):
+        return engine
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        fallback_url = f"sqlite:///{Path('depfix.db').resolve()}"
+        logger.warning(
+            "Local Postgres unavailable (%s); falling back to SQLite at %s. "
+            "Start Postgres or set DATABASE_URL=sqlite:///depfix.db to silence this warning.",
+            type(exc).__name__,
+            fallback_url,
+        )
+        return create_engine(fallback_url, future=True)
+    return engine
+
+
+def _is_local_postgres_url(url: str) -> bool:
+    """Whether ``url`` names a Postgres server on this machine."""
+    parsed = make_url(url)
+    return parsed.drivername.startswith("postgresql") and parsed.host in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }
 
 
 def init_schema() -> None:
@@ -145,7 +184,10 @@ def _legacy_schema_revision(engine: Engine) -> str | None:
     fix_run_columns = {column["name"] for column in inspector.get_columns("fix_run")}
     if "confidence_tier" not in fix_run_columns:
         return "0003"
-    return "0005" if "escalated" in fix_run_columns else "0004"
+    if "escalated" not in fix_run_columns:
+        return "0004"
+    pr_columns = {column["name"] for column in inspector.get_columns("pull_request")}
+    return "0006" if "state" in pr_columns else "0005"
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:

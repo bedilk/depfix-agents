@@ -64,6 +64,11 @@ def build_pr_body(
     lines += ["", "### Files changed", "", "| File | Verdict | Author | Usages fixed |", "| --- | --- | --- | --- |"]
     for edit in edits:
         lines.append(f"| `{edit.relpath}` | {edit.verdict.value} | {_author_label(edit)} | {edit.usages_fixed} |")
+    if any(edit.derivation_trace for edit in edits):
+        lines += ["", "### How each fix was derived", ""]
+        for edit in edits:
+            if edit.derivation_trace:
+                lines += [f"**`{edit.relpath}`**: {edit.derivation_trace}", ""]
 
     lines += ["", "### Confidence", "", result.confidence.summary]
     if result.confidence_reason:

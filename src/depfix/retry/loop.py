@@ -13,6 +13,7 @@ nothing useful to tell the LLM about them.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Protocol
 
 from depfix.agent.fix_agent import FixAgent
@@ -113,6 +114,11 @@ class RetryLoop:
                     confidence=confidence,
                     usages_fixed=usages_fixed,
                     validation=validation,
+                )
+                new_edit = replace(
+                    new_edit,
+                    derivation_trace=(f"Retry round {_ + 1}: LLM regenerated after feedback: "
+                                      f"{feedback[:200]}"),
                 )
                 current_edits = [
                     new_edit if e.relpath == new_edit.relpath else e for e in current_edits

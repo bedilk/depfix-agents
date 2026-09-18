@@ -38,6 +38,37 @@ providers:
     feeds:
       - {kind: fixture_change, id: mongodb-v4-v5, old_token: "4.0.0", new_token: "5.0.0", spec_changes: [{kind: operation_id_changed, severity: breaking, subject: "mongodb.findOne", after: "mongodb.findOneAsync", detail: "MongoDB callback migration."}]}
   - id: seed-multi
-    call_site_anchors: ["sdk.charges.create("]
+    sdk_packages:
+      - {name: stripe, ecosystem: npm}
+      - {name: openai, ecosystem: npm}
+    call_site_anchors:
+      - "sdk.charges.create("
+      - "stripe.charges.create("
+      - "openai.createChatCompletion("
+      - "openai.createModeration("
     feeds:
-      - {kind: fixture_change, id: multi-stripe, old_token: "12.0.0", new_token: "13.0.0", spec_changes: [{kind: operation_id_changed, severity: breaking, subject: "sdk.charges.create", after: "sdk.paymentIntents.create", detail: "Multi-SDK Stripe migration."}]}
+      - kind: fixture_change
+        id: multi-stripe-v12-v13
+        old_token: "12.0.0"
+        new_token: "13.0.0"
+        spec_changes:
+          - kind: operation_id_changed
+            severity: breaking
+            subject: "stripe.charges.create"
+            after: "stripe.paymentIntents.create"
+            detail: "Multi-SDK Stripe migration."
+      - kind: fixture_change
+        id: multi-openai-v3-v4
+        old_token: "3.3.0"
+        new_token: "4.0.1"
+        spec_changes:
+          - kind: operation_id_changed
+            severity: breaking
+            subject: "openai.createChatCompletion"
+            after: "openai.chat.completions.create"
+            detail: "Multi-SDK OpenAI chat migration."
+          - kind: operation_id_changed
+            severity: breaking
+            subject: "openai.createModeration"
+            after: "openai.moderations.create"
+            detail: "Multi-SDK OpenAI moderation migration."
