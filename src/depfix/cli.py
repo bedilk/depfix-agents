@@ -2252,59 +2252,34 @@ def _status_cell(status: str) -> str:
 
 
 def _reconcile_open_prs(gh_auth, repo_filter: list[str] | None) -> dict[str, dict[str, str]]:
-    """Read GitHub PR state and persist observed merged/closed outcomes."""
-    from datetime import UTC, datetime
-    from depfix.gh import BRANCH_PREFIX
+    """Persist observed merged/closed PR outcomes, then read back which of
+    depfix's PRs are still open for ``depfix status``'s display.
+
+    The actual GitHub-state reconciliation (list live PRs, blame closed
+    rows against ``get_pull_request_state``) is
+    :func:`depfix.orchestrator.reconcile.reconcile_open_prs` -- the same
+    function the fleet orchestrator runs before a pass -- so the two entry
+    points can't drift on what "reconciled" means. After that pass, any
+    row still ``state == "open"`` in the ledger reflects the live PR list
+    it was just checked against, so the display data comes straight from
+    the DB rather than a second round of GitHub API calls.
+    """
+    from depfix.orchestrator.reconcile import reconcile_open_prs
     from depfix.storage.schema import FixRunRow, PullRequestRow
 
     result: dict[str, dict[str, str]] = {}
     with session_scope() as session:
         repos = repo_filter or list(session.scalars(select(FixRunRow.repo_id).distinct()).all())
-        for repo_full_name in repos:
-            owner, _, name = repo_full_name.partition("/")
-            if not name:
-                continue
-            try:
-                prs = gh_auth.list_open_pull_requests(owner, name)
-            except Exception as exc:  # noqa: BLE001 - one inaccessible repo should not fail status
-                logger.warning("could not list PRs for %s: %s", repo_full_name, exc)
-                continue
-            open_by_key = {
-                pr.head_branch[len(BRANCH_PREFIX):][:12]: "open"
-                for pr in prs if pr.head_branch.startswith(BRANCH_PREFIX)
-            }
-            result[repo_full_name] = open_by_key
-            rows = session.scalars(
-                select(PullRequestRow).join(PullRequestRow.fix_run).where(
-                    FixRunRow.repo_id == repo_full_name, PullRequestRow.state == "open"
-                )
-            ).all()
-            open_numbers = {pr.number for pr in prs if pr.head_branch.startswith(BRANCH_PREFIX)}
-            for row in rows:
-                row.last_reconciled_at = datetime.now(UTC)
-                if row.number in open_numbers:
-                    continue
-                try:
-                    state = gh_auth.get_pull_request_state(owner, name, row.number)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("could not reconcile %s#%s: %s", repo_full_name, row.number, exc)
-                    continue
-                merged = bool(state["merged"])
-                row.merged = merged
-                row.state = "merged" if merged else (state["state"] or "closed")
-                row.merged_at = _parse_github_datetime(state["merged_at"])
-                row.closed_at = _parse_github_datetime(state["closed_at"])
+        reconcile_open_prs(session, gh_auth, repos)
+
+        rows = session.scalars(
+            select(PullRequestRow).join(PullRequestRow.fix_run).where(
+                FixRunRow.repo_id.in_(repos), PullRequestRow.state == "open"
+            )
+        ).all()
+        for row in rows:
+            result.setdefault(row.fix_run.repo_id, {})[row.fix_run.dedupe_key[:12]] = "open"
     return result
-
-
-def _parse_github_datetime(value: str | None):
-    from datetime import datetime
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
 
 
 def _print_merge_rate(session, repo_filter: list[str] | None) -> None:

@@ -321,8 +321,9 @@ class Verifier:
                 )
                 tier = ConfidenceTier.MEDIUM
                 reason = "characterization fixture preserved the pre-migration behaviour"
-            elif characterization is None or not characterization.confirmed:
+            else:
                 from depfix.verify.smoke import run_smoke_check
+                smoke_failures: list[str] = []
                 for edit in on_disk:
                     smoke = run_smoke_check(root, edit.relpath)
                     if smoke.ran and not smoke.passed:
@@ -332,7 +333,11 @@ class Verifier:
                             if candidate.relpath == edit.relpath and candidate.is_on_disk else candidate
                             for candidate in settled
                         )
-                        reason = f"{tier_reason}; smoke check failed: {smoke.error or 'module would not load'}"
+                        smoke_failures.append(
+                            f"{edit.relpath}: {smoke.error or 'module would not load'}"
+                        )
+                if smoke_failures:
+                    reason = f"{tier_reason}; smoke check failed: {'; '.join(smoke_failures)}"
             return VerificationReport(
                 ran=ran,
                 skipped_reason=skipped_reason,

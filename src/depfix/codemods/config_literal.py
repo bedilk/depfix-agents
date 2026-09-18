@@ -20,5 +20,12 @@ class ConfigKeyCodemod:
     def claims(self, change: BreakingChange) -> bool:
         return change.kind in (ChangeKind.PARAM_RENAMED,ChangeKind.FIELD_RENAMED) and bool(re.fullmatch(r"[A-Za-z_]\w*",change.old_api.strip())) and bool(re.fullmatch(r"[A-Za-z_]\w*",change.new_api.strip()))
     def apply(self, source: str, change: BreakingChange) -> CodemodResult:
-        old,new=change.old_api.strip(),change.new_api.strip(); result,count=re.subn(rf"(?<![.\w]){re.escape(old)}(\s*:)",rf"{new}\1",source)
+        old,new=change.old_api.strip(),change.new_api.strip()
+        # Require the identifier to sit where an object-literal key can --
+        # right after `{`, `,`, `(`, or a line start -- so a same-named
+        # ternary reference (`cond ? old : val`) or a mention inside a
+        # comment/string is left alone. Not a full parse, but it rules out
+        # the cheapest false positives a bare `\bold\s*:` would catch.
+        pattern=re.compile(rf"(^|[{{,(\n])(\s*){re.escape(old)}(\s*:)", re.MULTILINE)
+        result,count=pattern.subn(rf"\1\2{new}\3",source)
         return CodemodResult.rewrote(self.id,result,f"renamed config key {old} -> {new}") if count else CodemodResult.unchanged(self.id,"no config key found")

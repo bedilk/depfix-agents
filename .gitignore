@@ -2,3 +2,13 @@
 .env
 .depfix-local.yml
 depfix.db
+
+# Build/runtime artifacts
+__pycache__/
+*.pyc
+.venv/
+src/depfix.egg-info/
+output/
+.depfix-e2e.sqlite3
+.depfix-cache/
+.DS_Store

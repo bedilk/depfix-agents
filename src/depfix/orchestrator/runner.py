@@ -162,7 +162,11 @@ class Orchestrator:
                 outcome.locked = False
                 return outcome
 
-            if not self._dry_run:
+            # Same contract as `should_inspect_prs` below: --no-pr (like
+            # --dry-run) must never require the GitHub App's Pull requests
+            # permission, so auto-reconciliation -- which lists open PRs --
+            # is skipped for both, not just for dry runs.
+            if not self._dry_run and not self._no_pr:
                 try:
                     from depfix.orchestrator.reconcile import compute_merge_rate, reconcile_open_prs
 

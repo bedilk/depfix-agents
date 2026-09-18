@@ -124,7 +124,12 @@ def test_verify_does_not_touch_edits_not_on_disk_in_early_exit_branches(
 def test_verify_marks_suspect_when_a_run_crashed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "a.js").write_text("old\n", encoding="utf-8")
+    # Content must actually `require()` cleanly -- otherwise the smoke-check
+    # fallback (a real, deliberate oracle; see depfix.verify.smoke) would
+    # correctly REVERT this edit for failing to load, which is a different,
+    # more confident outcome than the "nothing could decide" SUSPECT this
+    # test means to exercise.
+    (tmp_path / "a.js").write_text("module.exports = 1;\n", encoding="utf-8")
     monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root: True)
     monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
     monkeypatch.setattr(
@@ -133,7 +138,7 @@ def test_verify_marks_suspect_when_a_run_crashed(
     )
     editor = _editor(tmp_path)
     verifier = Verifier(editor)
-    edits = [_edit("a.js")]
+    edits = [_edit("a.js", fixed="module.exports = 2;\n")]
 
     report = verifier.verify(edits)
 
@@ -145,7 +150,8 @@ def test_verify_marks_suspect_when_a_run_crashed(
 def test_verify_marks_suspect_when_either_run_used_fallback_parser(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "a.js").write_text("old\n", encoding="utf-8")
+    # See the loadability note in test_verify_marks_suspect_when_a_run_crashed.
+    (tmp_path / "a.js").write_text("module.exports = 1;\n", encoding="utf-8")
     monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root: True)
     monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
 
@@ -159,7 +165,7 @@ def test_verify_marks_suspect_when_either_run_used_fallback_parser(
     monkeypatch.setattr("depfix.verify.verifier.run_tests", fake_run_tests)
     editor = _editor(tmp_path)
     verifier = Verifier(editor)
-    edits = [_edit("a.js")]
+    edits = [_edit("a.js", fixed="module.exports = 2;\n")]
 
     report = verifier.verify(edits)
 

@@ -78,6 +78,16 @@ def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> 
     return argv
 
 
+def build_install_argv(root: str | Path, *, ignore_scripts: bool, package_manager: str | None = None) -> list[str]:
+    """Public entry point for the install command :func:`install_dependencies`
+    would run for ``root``, for callers (e.g. :mod:`depfix.codemods.lockfile`)
+    that need to regenerate a lockfile without duplicating the detection
+    logic and without reaching into this module's private helpers."""
+    root = Path(root)
+    manager = package_manager or detect_package_manager(root)
+    return _install_argv(manager, root, ignore_scripts=ignore_scripts)
+
+
 def install_dependencies(
     root: str | Path,
     *,

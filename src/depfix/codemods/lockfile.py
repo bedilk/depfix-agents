@@ -71,7 +71,12 @@ def build_manifest_bumps(root: Path, change: BreakingChange) -> list[ManifestBum
             old_major = _major(current)
             new_range = _bump_range(current, new_major)
             if old_major is None or old_major >= new_major or new_range is None:
-                break
+                # This section's pin isn't bumpable (unparseable, already
+                # current, or no rewritable range) -- a *different* section
+                # (e.g. peerDependencies vs dependencies) may still have a
+                # bumpable pin for the same package, so keep looking rather
+                # than abandoning the whole manifest.
+                continue
             dependencies[change.package] = new_range
             indent = 4 if "\n    \"" in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
@@ -84,13 +89,14 @@ def build_manifest_bumps(root: Path, change: BreakingChange) -> list[ManifestBum
 def try_regenerate_lockfile(root: Path, *, timeout: float = 120.0,
                             ignore_scripts: bool = True, max_output_bytes: int = 2_000_000) -> tuple[bool, str]:
     """Refresh a lockfile in a disposable checkout, without lifecycle scripts."""
+    import shutil
+
     from depfix.scanners.workspace import find_workspace_root
-    from depfix.verify.manager import _install_argv, _which, detect_package_manager
+    from depfix.verify.manager import build_install_argv
     from depfix.verify.sandbox import run_sandboxed
     install_root = find_workspace_root(root)
-    manager = detect_package_manager(install_root)
-    argv = _install_argv(manager, install_root, ignore_scripts=ignore_scripts)
-    if _which(argv[0]) is None:
+    argv = build_install_argv(install_root, ignore_scripts=ignore_scripts)
+    if shutil.which(argv[0]) is None:
         return False, f"{argv[0]} not on PATH"
     result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)
     return (True, f"lockfile regenerated via `{' '.join(argv)}`") if result.ok else (

@@ -255,6 +255,16 @@ def _run_once(
         bumped_any = False
         for bump in build_manifest_bumps(checkout.path, change):
             edit = editor.write_fix(bump.manifest_relpath, bump.fixed_content, confidence=1.0, usages_fixed=0)
+            if not edit.changed:
+                # write_fix declined (e.g. identical content, encoding error,
+                # or an I/O failure) -- do not report an untouched/failed
+                # manifest as a kept, on-disk fix.
+                result = dataclasses.replace(
+                    result, codemod_notes=(*result.codemod_notes,
+                        f"manifest bump for {bump.manifest_relpath} was not written: "
+                        f"{edit.error_message or 'no change on disk'}")
+                )
+                continue
             edit = dataclasses.replace(
                 edit, verdict=EditVerdict.KEPT, origin=EditOrigin.CODEMOD,
                 codemod_id="manifest.version-bump",
