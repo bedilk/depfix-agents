@@ -89,6 +89,19 @@ def test_build_scan_target_ignores_prose_old_api() -> None:
     assert target.symbols == ()
 
 
+def test_spec_diff_hint_is_qualified_into_the_scanner_namespace() -> None:
+    """Provider-less SDK paths from an OpenAPI diff must match scanner output."""
+    change = BreakingChange(
+        package="openai", old_version="7.17.0", new_version="7.19.0",
+        old_api="POST /v1/responses (connector_id)", new_api="",
+        description="d", migration_guide="", kind=ChangeKind.FIELD_REMOVED,
+        source=ClassificationSource.SPEC_DIFF, provider_id="openai",
+        call_site_hints=["responses.create"],
+    )
+
+    assert build_scan_target(_provider(), change).symbols == ("openai.responses.create",)
+
+
 # -- _current_commit_sha ---------------------------------------------------------
 
 
@@ -148,6 +161,26 @@ def test_scan_path_reports_blank_commit_for_non_repo_directory(tmp_path: Path) -
     assert result.commit_sha == ""
     method_sites = [s for s in result.call_sites if s.kind == CallSiteKind.METHOD_CALL]
     assert len(method_sites) == 1
+
+
+def test_spec_diff_narrowed_scan_finds_a_real_call_site(tmp_path: Path) -> None:
+    (tmp_path / "index.js").write_text(
+        'const OpenAI = require("openai");\n'
+        "const client = new OpenAI();\n"
+        "client.responses.create({});\n",
+        encoding="utf-8",
+    )
+    change = BreakingChange(
+        package="openai", old_version="7.17.0", new_version="7.19.0",
+        old_api="POST /v1/responses (connector_id)", new_api="openai.responses.create",
+        description="d", migration_guide="", kind=ChangeKind.PARAM_REMOVED,
+        source=ClassificationSource.SPEC_DIFF, provider_id="openai",
+        call_site_hints=["responses.create"],
+    )
+
+    result = scan_path(tmp_path, build_scan_target(_provider(), change))
+
+    assert [site.symbol for site in result.actionable_sites] == ["openai.responses.create"]
 
 
 def test_scan_path_reports_real_commit_when_path_is_a_repo_root(tmp_path: Path) -> None:

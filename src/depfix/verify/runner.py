@@ -12,6 +12,7 @@ migrating to vitest, or vice versa.
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from depfix.verify.manager import detect_package_manager
 from depfix.verify.models import TestFramework, TestRunResult
 from depfix.verify.parsers import parse_output
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, run_sandboxed
+
+logger = logging.getLogger(__name__)
 
 #: npm's placeholder for a package with no real test script -- running it
 #: always exits non-zero and would otherwise look like "every test failed".
@@ -145,6 +148,7 @@ def run_tests(
             manager, framework, out_path,
             skip_reporter_args=_script_already_configures_reporter(effective_cwd, framework),
         )
+        logger.info("running tests: %s (framework=%s)", " ".join(argv), framework.value)
 
         # CI=1 stops Jest/Vitest/Mocha from defaulting to interactive watch
         # mode when stdin isn't a TTY, which would otherwise hang until the

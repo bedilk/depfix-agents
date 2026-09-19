@@ -187,7 +187,12 @@ def _legacy_schema_revision(engine: Engine) -> str | None:
     if "escalated" not in fix_run_columns:
         return "0004"
     pr_columns = {column["name"] for column in inspector.get_columns("pull_request")}
-    return "0006" if "state" in pr_columns else "0005"
+    if "state" not in pr_columns:
+        return "0005"
+    breaking_change_columns = {
+        column["name"] for column in inspector.get_columns("breaking_change")
+    }
+    return "0007" if "severity" in breaking_change_columns else "0006"
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:

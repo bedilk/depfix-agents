@@ -10,6 +10,7 @@ import httpx
 
 from depfix.config import get_settings
 from depfix.registry.client import NpmRegistryClient
+from depfix.registry.pypi_client import PypiRegistryClient
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
 from depfix.sources.changelog_html import ChangelogHtmlSource
 from depfix.sources.fixture_change import FixtureChangeSource
@@ -18,6 +19,7 @@ from depfix.sources.http import build_http_client
 from depfix.sources.models import SourceKind
 from depfix.sources.npm_dist_tag import NpmDistTagSource
 from depfix.sources.openapi_spec import OpenApiSpecSource
+from depfix.sources.pypi_dist_tag import PypiDistTagSource
 
 
 class FeedLike(Protocol):
@@ -42,6 +44,7 @@ class SourceDeps:
 
     http: httpx.Client
     npm: NpmRegistryClient
+    pypi: PypiRegistryClient
     spec_cache_dir: Path
     max_spec_bytes: int
     github_api_url: str
@@ -52,6 +55,7 @@ class SourceDeps:
         return cls(
             http=build_http_client(),
             npm=NpmRegistryClient(),
+            pypi=PypiRegistryClient(),
             spec_cache_dir=Path(settings.spec_cache_dir),
             max_spec_bytes=settings.max_spec_bytes,
             github_api_url=settings.github_api_url,
@@ -60,6 +64,7 @@ class SourceDeps:
     def close(self) -> None:
         self.http.close()
         self.npm.close()
+        self.pypi.close()
 
     def __enter__(self) -> SourceDeps:
         return self
@@ -74,6 +79,14 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
             provider_id,
             feed.config,
             deps.npm,
+            http=deps.http,
+            github_api_url=deps.github_api_url,
+        )
+    if feed.kind is SourceKind.PYPI_DIST_TAG:
+        return PypiDistTagSource(
+            provider_id,
+            feed.config,
+            deps.pypi,
             http=deps.http,
             github_api_url=deps.github_api_url,
         )

@@ -9,10 +9,13 @@ a different dependency tree than CI would have used.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, SandboxResult, run_sandboxed
+
+logger = logging.getLogger(__name__)
 
 #: Ordered (lockfile, package_manager) pairs -- first match wins. Order
 #: matters only in the pathological case where multiple lockfiles coexist
@@ -59,7 +62,8 @@ def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> 
 
     if package_manager == "bun":
         argv = ["bun", "install"]
-        if has_lockfile: argv.append("--frozen-lockfile")
+        if has_lockfile:
+            argv.append("--frozen-lockfile")
     elif package_manager == "npm":
         argv = ["npm", "ci"] if has_lockfile else ["npm", "install"]
     elif package_manager == "yarn":
@@ -125,6 +129,7 @@ def install_dependencies(
     if _which(argv[0]) is None:
         return InstallResult(package_manager=manager, skipped_reason=f"{argv[0]} not found on PATH")
 
+    logger.info("installing dependencies: %s (cwd=%s)", " ".join(argv), install_root)
     result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)
     return InstallResult(package_manager=manager, sandbox=result)
 

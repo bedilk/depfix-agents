@@ -114,11 +114,24 @@ class EvalReport:
         return [c for c in self.cases if not c.skipped]
 
     @property
+    def skipped_cases(self) -> list[CaseResult]:
+        return [c for c in self.cases if c.skipped]
+
+    @property
     def pass_rate(self) -> float:
         scored = self.scored_cases
         if not scored:
             return 1.0
         return sum(1 for c in scored if c.passed) / len(scored)
+
+    @property
+    def summary_line(self) -> str:
+        scored = self.scored_cases
+        skipped = self.skipped_cases
+        text = f"pass rate: {self.pass_rate:.0%} ({sum(case.passed for case in scored)}/{len(scored)} scored)"
+        if skipped:
+            text += f", {len(skipped)} skipped of {len(self.cases)} total"
+        return text
 
     @property
     def total_cost(self) -> float:

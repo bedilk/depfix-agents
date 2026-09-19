@@ -14,7 +14,7 @@ Two support tiers, by design rather than accident:
   scan, LLM fix, syntax validation, install + real-test-suite verification.
 - ``fix_supported=False`` (the rest of the top-10): detection, manifest
   dependency scanning, and import-level call-site scanning -- enough for
-  ``depfix scan`` to answer "is this repo affected", while ``depfix fix``
+  ``depfix scan`` to answer "is this repo affected", while ``depfix plan``
   declines with an honest message instead of generating unverifiable edits.
 
 A spec is data plus a few small callables. Resist the urge to grow this

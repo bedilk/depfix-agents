@@ -13,12 +13,13 @@ from dataclasses import dataclass
 
 from depfix.agent import FixAgent, make_fix_strategy
 from depfix.agent.tools import FixToolset
-from depfix.apply.models import FileEdit
+from depfix.apply.models import EditOrigin, FileEdit
 from depfix.apply.workspace import WorkspaceEditor
 from depfix.classify.llm import GeminiCompleter, LLMCompleter, OllamaCompleter
 from depfix.clone import Checkout
+from depfix.codemods import CodemodRegistry
 from depfix.config import Settings
-from depfix.core.models import BreakingChange
+from depfix.core.models import BreakingChange, ChangeKind
 from depfix.core.pipeline import FixPipeline, FixPipelineResult
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
@@ -139,6 +140,12 @@ def run_fix_for_change(
     from depfix.ecosystems import get as get_ecosystem
     from depfix.scanners.repo import detect_repo_ecosystem
 
+    # Dependency drift is not a source-code migration.  It therefore has no
+    # call sites to hand to an LLM: make a deterministic manifest edit, then
+    # use the same verification and commit policy as every other fix.
+    if change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP:
+        return _run_dependency_drift(checkout, scan_result, change, settings, repo_config)
+
     ecosystem = detect_repo_ecosystem(checkout.path)
     if ecosystem == "typescript":
         ecosystem = "javascript"
@@ -216,6 +223,150 @@ def run_fix_for_change(
         committable=[],
         verify_required=verify_required,
         escalated=True,
+    )
+
+
+def _run_dependency_drift(
+    checkout: Checkout,
+    scan_result: RepoScanResult,
+    change: BreakingChange,
+    settings: Settings,
+    repo_config: RepoConfig,
+) -> FixServiceResult:
+    """Apply one safe manifest-only dependency update behind the service seam."""
+    from depfix.codemods.lockfile import dependency_drift_policy
+    from depfix.scanners.repo import detect_repo_ecosystem
+
+    verify_required = repo_config.verify and settings.verify_enabled
+    policy = dependency_drift_policy(change)
+    ecosystem = detect_repo_ecosystem(checkout.path)
+    if ecosystem == "typescript":
+        ecosystem = "javascript"
+
+    def report_only(note: str) -> FixServiceResult:
+        result = FixPipelineResult(
+            repo_full_name=scan_result.repo_full_name, breaking_change=change,
+            files_scanned=scan_result.files_scanned, files_affected=0, edits=(),
+            total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+            codemod_notes=(note,),
+        )
+        return FixServiceResult(result, [], verify_required)
+
+    if policy != "automatic":
+        return report_only(
+            "major or unparseable dependency drift requires a vetted API migration; "
+            "recorded for review but not applied automatically."
+        )
+
+    if ecosystem == "javascript":
+        from depfix.codemods.lockfile import build_dependency_drift_plan
+
+        plan = build_dependency_drift_plan(checkout.path, change)
+        drift_bumps = [
+            (
+                bump.manifest_relpath, bump.fixed_content, bump.note,
+                f"Registry drift: {bump.package} {bump.old_range} -> {bump.new_range} "
+                f"in {bump.manifest_relpath}.",
+            )
+            for bump in plan.bumps
+        ]
+    elif ecosystem == "python":
+        from depfix.ecosystems.pypi_manifests import build_pypi_dependency_drift_bumps
+
+        drift_bumps = [
+            (
+                bump.manifest_relpath, bump.fixed_content, bump.note,
+                f"Registry drift: {bump.package} {bump.old_spec} -> {bump.new_spec} "
+                f"in {bump.manifest_relpath}.",
+            )
+            for bump in build_pypi_dependency_drift_bumps(checkout.path, change)
+        ]
+    else:
+        from depfix.ecosystems import get as get_ecosystem
+
+        spec = get_ecosystem(ecosystem)
+        pretty = spec.display_name if spec is not None else (
+            ecosystem if ecosystem != "unknown" else "this repository's"
+        )
+        return report_only(
+            f"dependency drift detected for {pretty}; automatic manifest writers are "
+            "currently available for npm and PyPI only. This drift is reported for review "
+            "until a manifest, lockfile, and verification adapter exists for this ecosystem."
+        )
+
+    editor = WorkspaceEditor(checkout)
+    edits: list[FileEdit] = []
+    notes: list[str] = plan.declines if ecosystem == "javascript" else []
+    for relpath, fixed_content, note, trace in drift_bumps:
+        edit = editor.write_fix(
+            relpath, fixed_content, confidence=1.0,
+            origin=EditOrigin.CODEMOD, codemod_id="manifest.dependency-drift",
+        )
+        if not edit.changed:
+            notes.append(f"manifest drift update not written: {relpath}")
+            continue
+        edits.append(dataclasses.replace(edit, derivation_trace=trace))
+        notes.append(note)
+
+    verification = None
+    if edits and verify_required:
+        verifier = Verifier(
+            editor, install_timeout=settings.verify_install_timeout,
+            test_timeout=settings.verify_test_timeout,
+            ignore_scripts=settings.verify_ignore_scripts,
+            max_output_bytes=settings.verify_max_output_bytes,
+            typecheck_enabled=settings.verify_typecheck_enabled,
+            typecheck_timeout=settings.verify_typecheck_timeout,
+            ecosystem=ecosystem,
+        )
+        verification = verifier.verify(edits, change=change)
+        edits = list(verification.edits)
+
+    # Refresh only after verification has kept the manifest edit. Both uv
+    # and Poetry lock without installing the project; a failed refresh stays
+    # an explicit note rather than making the manifest change unsafe.
+    if (
+        ecosystem == "python"
+        and settings.lockfile_regenerate
+        and checkout.is_temporary
+        and any(edit.is_on_disk for edit in edits)
+    ):
+        from depfix.ecosystems.python_lockfile import (
+            python_lockfile_paths,
+            try_refresh_python_lockfile,
+        )
+
+        ok, message = try_refresh_python_lockfile(
+            checkout.path, timeout=settings.verify_install_timeout,
+        )
+        notes.append(message)
+        if ok:
+            for lockfile in python_lockfile_paths(checkout.path):
+                relpath = lockfile.relative_to(checkout.path).as_posix()
+                try:
+                    content = lockfile.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                lock_edit = editor.write_fix(
+                    relpath, content, confidence=1.0,
+                    origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                )
+                if not lock_edit.changed:
+                    continue
+                lock_edit = dataclasses.replace(
+                    lock_edit,
+                    derivation_trace=f"Lockfile refreshed after manifest drift: {message}.",
+                )
+                edits.append(lock_edit)
+
+    result = FixPipelineResult(
+        repo_full_name=scan_result.repo_full_name, breaking_change=change,
+        files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),
+        total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+        verification=verification, codemod_notes=tuple(notes),
+    )
+    return FixServiceResult(
+        result, committable_edits(result, allow_unverified=not verify_required), verify_required,
     )
 
 

@@ -23,7 +23,7 @@ from depfix.gh import GitHubAppAuth
 from depfix.providers.models import ProviderSpec
 from depfix.scanners.callsites import CallSiteScanner
 from depfix.scanners.manifest import scan_manifests
-from depfix.scanners.models import RepoScanResult, ScanTarget
+from depfix.scanners.models import DeclaredDependency, RepoScanResult, ScanTarget
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = No
     removed v3 moderations endpoint" avoids flooding the report with every
     other unrelated call the repo makes against the same provider.
     """
-    symbols = _symbols_from_change(change) if change is not None else ()
+    symbols = _symbols_from_change(provider.id, change) if change is not None else ()
     return ScanTarget(
         provider_id=provider.id,
         sdk_packages=tuple(pkg.name for pkg in provider.sdk_packages),
@@ -58,7 +58,7 @@ def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = No
     )
 
 
-def _symbols_from_change(change: BreakingChange) -> tuple[str, ...]:
+def _symbols_from_change(provider_id: str, change: BreakingChange) -> tuple[str, ...]:
     """Mine the dotted symbols a change is actually about.
 
     ``call_site_hints`` is trusted as-is -- it exists specifically for this.
@@ -68,24 +68,45 @@ def _symbols_from_change(change: BreakingChange) -> tuple[str, ...]:
     ``(...)`` is stripped -- anything with whitespace or other punctuation
     left over is prose, not a symbol, and is dropped rather than guessed at.
     """
-    symbols: list[str] = list(change.call_site_hints)
+    symbols: list[str] = []
+
+    def add(raw: str, *, allow_bare: bool) -> None:
+        symbol = _qualify_symbol(provider_id, raw, allow_bare_identifier=allow_bare)
+        if symbol is not None and symbol not in symbols:
+            symbols.append(symbol)
+
+    for hint in change.call_site_hints:
+        add(hint, allow_bare=True)
 
     candidate = change.old_api.strip()
     if candidate.endswith(")"):
         candidate = candidate.split("(", 1)[0].strip()
-    if candidate and _looks_like_dotted_symbol(candidate) and candidate not in symbols:
-        symbols.append(candidate)
+    add(candidate, allow_bare=False)
 
     return tuple(symbols)
 
 
 _DOTTED_SYMBOL_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")
+_BARE_IDENTIFIER_RE = re.compile(r"[A-Za-z_]\w*")
 
 
 def _looks_like_dotted_symbol(text: str) -> bool:
     """Does ``text`` look like a bare dotted identifier chain, e.g.
     ``openai.moderations.create`` -- no whitespace, no stray punctuation?"""
     return bool(_DOTTED_SYMBOL_RE.fullmatch(text))
+
+
+def _qualify_symbol(provider_id: str, raw: str, *, allow_bare_identifier: bool) -> str | None:
+    """Return a scanner-namespace symbol or reject free-form prose."""
+    text = raw.strip()
+    if not text:
+        return None
+    if _looks_like_dotted_symbol(text):
+        head = text.split(".", 1)[0]
+        return text if not provider_id or head == provider_id else f"{provider_id}.{text}"
+    if allow_bare_identifier and provider_id and _BARE_IDENTIFIER_RE.fullmatch(text):
+        return f"{provider_id}.{text}"
+    return None
 
 
 def _current_commit_sha(path: Path) -> str:
@@ -156,6 +177,8 @@ def scan_checkout(
     *,
     repo_full_name: str = "",
     scanner: CallSiteScanner | None = None,
+    change: BreakingChange | None = None,
+    judge: object | None = None,
 ) -> RepoScanResult:
     """Scan an already-acquired checkout for manifests + call sites.
 
@@ -173,34 +196,53 @@ def scan_checkout(
     """
     ecosystem_id = ecosystems_registry.detect(checkout.path)
     spec = ecosystems_registry.get(ecosystem_id)
+    dependencies: list[DeclaredDependency] = []
 
     if spec is not None and spec.id != "javascript":
         from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
 
         call_site_result = GenericImportScanner(spec).scan(checkout.path, target)
-        manifest_matches: list[str] = []
         if spec.scan_dependencies is not None:
             packages = packages_for_spec(target, spec)
             for declaration in spec.scan_dependencies(checkout.path, packages):
-                manifest_matches.append(
-                    f"{declaration.package}@"
-                    f"{declaration.resolved_version or declaration.declared_version or '?'} "
-                    f"({declaration.source}, {declaration.manifest_path})"
+                dependencies.append(
+                    DeclaredDependency(
+                        package=declaration.package,
+                        manifest_path=declaration.manifest_path,
+                        declared_range=declaration.declared_version,
+                        resolved_version=declaration.resolved_version,
+                        source=declaration.source,
+                    )
                 )
     else:
         manifest_scan = scan_manifests(checkout.path, _npm_package_names(target))
         call_site_result = (scanner or CallSiteScanner()).scan(checkout.path, target)
-        manifest_matches = [
-            f"{m.package}@{m.resolved_version or m.declared_range or '?'} "
-            f"({m.source}, {m.manifest_path})"
-            for m in manifest_scan.matches
+        dependencies = [
+            DeclaredDependency(
+                package=match.package,
+                manifest_path=match.manifest_path,
+                declared_range=match.declared_range,
+                resolved_version=match.resolved_version,
+                source=match.source,
+            )
+            for match in manifest_scan.matches
         ]
+
+    if judge is not None and change is not None and call_site_result.call_sites:
+        call_site_result.call_sites = judge.judge(change, call_site_result.call_sites, checkout.path)
+
+    manifest_matches = [
+        f"{dependency.package}@{dependency.resolved_version or dependency.declared_range or '?'} "
+        f"({dependency.source}, {dependency.manifest_path})"
+        for dependency in dependencies
+    ]
 
     return RepoScanResult(
         repo_full_name=repo_full_name,
         commit_sha=_current_commit_sha(checkout.path),
         call_sites=call_site_result.call_sites,
         manifest_matches=manifest_matches,
+        dependencies=dependencies,
         files_scanned=call_site_result.files_scanned,
         errors=call_site_result.errors,
     )
@@ -212,10 +254,12 @@ def scan_path(
     *,
     repo_full_name: str = "",
     scanner: CallSiteScanner | None = None,
+    change: BreakingChange | None = None,
+    judge: object | None = None,
 ) -> RepoScanResult:
     """Scan a local directory directly, with no clone/GitHub App involved."""
     checkout = CloneService().local(path)
-    return scan_checkout(checkout, target, repo_full_name=repo_full_name, scanner=scanner)
+    return scan_checkout(checkout, target, repo_full_name=repo_full_name, scanner=scanner, change=change, judge=judge)
 
 
 def scan_repo(
@@ -227,6 +271,8 @@ def scan_repo(
     clone_service: CloneService,
     ref: str | None = None,
     scanner: CallSiteScanner | None = None,
+    change: BreakingChange | None = None,
+    judge: object | None = None,
 ) -> RepoScanResult:
     """Resolve the App installation for ``owner/repo``, mint a
     least-privilege token, shallow-clone, scan, and clean up -- always,
@@ -238,6 +284,6 @@ def scan_repo(
 
     checkout = clone_service.clone(owner, repo, ref=resolved_ref, token=token.token)
     try:
-        return scan_checkout(checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner)
+        return scan_checkout(checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner, change=change, judge=judge)
     finally:
         clone_service.cleanup(checkout)

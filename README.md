@@ -7,14 +7,14 @@ When a package ships a breaking change, `depfix`:
 1. **Detects** usages of the affected API across your codebase
 2. **Generates** fixes using Google Gemini (or a local Ollama model)
 3. **Validates** the fixes for syntax correctness (via Node.js)
-4. **Verifies** kept fixes by running the target repo's own test suite before/after (needs npm; `depfix fix` only)
+4. **Verifies** kept fixes by running the target repo's own test suite before/after during `plan` and `apply`
 5. **Outputs** unified diffs that can be applied as patches
 
 ## Requirements
 
 - Python **3.11+**
 - Node.js **20+** (used to syntax-check generated JS/TS fixes)
-- npm (used by `depfix fix` to install a target repo's dependencies and run its real test
+- npm (used by `depfix plan`/`apply` to install a target repo's dependencies and run its real test
   suite when verifying a fix; not needed for `depfix scan`/`depfix run`'s syntax-only checks)
 - A Google Generative AI API key ([get one here](https://aistudio.google.com/app/apikey)), or a
   local [Ollama](https://ollama.com/) install for `--llm-provider ollama`
@@ -40,10 +40,17 @@ depfix --help
 depfix run --codebase ./tests/fixtures/openai_v3_project --change-file my_change.json --show-diffs
 ```
 
-## Watching providers
+## Provider detection
 
-`depfix watch` polls every feed declared in `providers.yaml` — npm dist-tags,
-GitHub releases, and OpenAPI specs today; changelogs and RSS are declared but
+`depfix scan --repo OWNER/REPO --provider ID` is the normal end-to-end
+inspection command. Before it clones and scans the repository, it polls that
+provider's feeds and classifies new events. It then selects the newest relevant
+change, finds the affected SDK call sites, and runs the deterministic
+evaluation corpus last.
+
+`depfix watch` remains available for scheduled fleet-wide polling — it polls
+every feed declared in `providers.yaml` — npm dist-tags,
+PyPI versions, GitHub releases, and OpenAPI specs today; changelogs and RSS are declared but
 not yet implemented — and records changes in the configured database. Local
 commands use a persistent `depfix.db` SQLite file by default; set
 `DATABASE_URL` to Postgres for shared or concurrent deployments. Like the old poller it
@@ -82,13 +89,22 @@ Schedule the watcher with a crontab entry:
 
 ## Classifying detected changes
 
-`depfix classify` turns unclassified `change_event` rows (written by
-`depfix watch`) into structured `BreakingChange` rows. Events carrying a
+The scan workflow classifies its provider's unclassified `change_event` rows
+automatically. `depfix classify` remains available for bulk/backfill work.
+It turns unclassified events (normally written by `depfix watch`) into
+structured `BreakingChange` rows. Events carrying a
 structural OpenAPI diff (`spec_changes`) are classified deterministically —
 no LLM, no hallucination risk, always `confidence=1.0`. Events with only
 prose release notes are classified by an LLM, gated behind a verbatim-quote
 anti-hallucination check; a proposed change is dropped outright if its
 `evidence` can't be found in the source text.
+
+An npm dist-tag move is also recorded deterministically as **dependency
+drift**, even when there are no release notes. Drift is distinct from an API
+migration: a same-major patch/minor update can be planned as a manifest-only
+change and verified without an LLM; a major or unparseable update is reported
+but requires a vetted, provider-specific migration before `apply` can open a
+PR.
 
 ```bash
 depfix classify                 # classify pending events (LLM if configured)
@@ -115,6 +131,12 @@ depfix run --codebase ./my-app --from-event 42 --show-diffs
 
 ## Evaluating the pipeline
 
+Every `scan` ends by running the deterministic evaluation after the repository
+scan. It scores Depfix's scanner/classifier/fixer behavior against a YAML
+corpus; it does not claim to know undiscovered call sites in the repository
+just scanned. `depfix eval` remains available when you need its advanced
+corpus, reporting, comparison, or LLM options.
+
 `depfix eval` scores the classifier and fixer against a YAML corpus
 (`src/depfix/evals/corpus/`). Each case is tagged `verified: true|false` —
 unverified cases still run but are reported separately, so a passing eval
@@ -131,7 +153,8 @@ depfix eval --compare report.json        # fail on any case that regressed pass-
 
 ## Scanning a repo for call sites
 
-`depfix scan` finds usages of a provider's SDK across a codebase — either a
+`depfix scan` first detects and classifies provider changes, then finds usages
+of that provider's SDK across a codebase — either a
 local directory or a remote repo cloned on the fly via a GitHub App
 installation — and reports/persists the call sites it finds, with a
 confidence level (`HIGH`/`MEDIUM`/`LOW`) reflecting how directly each usage
@@ -150,6 +173,9 @@ depfix scan --path ./my-app --provider openai --from-event 42
 
 # Scan a remote repo by cloning it via the GitHub App (needs GITHUB_APP_ID +
 # a private key configured -- see below).
+depfix scan --repo acme/widgets --provider stripe
+
+# A normal scan always includes the deterministic regression corpus.
 depfix scan --repo acme/widgets --provider stripe
 
 # See what repos the App installation(s) can see.
@@ -195,7 +221,19 @@ depfix understands the top-10 language ecosystems at two honest tiers
 | Tier | Ecosystems | What you get |
 | --- | --- | --- |
 | **Fix + verify** | JavaScript/TypeScript (npm), Python (PyPI) | Full pipeline: call-site scan, LLM fix, syntax validation, dependency install + the repo's own test suite run before/after each edit. Python installs into a throwaway in-checkout `.depfix-venv` and runs pytest with a JUnit reporter. |
-| **Scan-only** | Java, Kotlin, Go, Rust, Ruby, PHP, C#/.NET, Swift | Repo detection, SDK dependency-declaration scanning across each ecosystem's manifests/lockfiles (go.mod, Cargo.toml/lock, Gemfile/lock, composer.json/lock, pom.xml/gradle, csproj, Package.swift/resolved, requirements/pyproject/poetry), and import-level call-site flagging. `depfix fix` declines with an explicit message instead of generating an edit nobody can verify locally. |
+| **Scan-only** | Java, Kotlin, Go, Rust, Ruby, PHP, C#/.NET, Swift | Repo detection, SDK dependency-declaration scanning across each ecosystem's manifests/lockfiles (go.mod, Cargo.toml/lock, Gemfile/lock, composer.json/lock, pom.xml/gradle, csproj, Package.swift/resolved, requirements/pyproject/poetry), and import-level call-site flagging. `plan` reports unsupported ecosystems rather than generating an edit nobody can verify locally. |
+
+Dependency-drift automation is end-to-end for npm and PyPI: `depfix watch`
+discovers a registry version move, `classify` records it deterministically,
+and a same-major patch/minor drift becomes a verified manifest-only change.
+With `LOCKFILE_REGENERATE=true`, npm and Poetry, uv, and Pipenv projects also
+refresh their existing lockfile. pip-tools is deliberately not auto-refreshed:
+its `requirements.txt` is generated from `requirements.in`, so Depfix reports
+the required manual `requirements.in` change and `pip-compile` step rather
+than risking a reverted verified bump. The remaining scan-only ecosystems stay detect/report-only
+until their registry adapters, manifest writers, lockfile refreshers, and
+verifiers are implemented. Depfix says this explicitly; it will not
+manufacture a cross-ecosystem version change.
 
 A provider declares which registries its SDKs live in per package
 (`providers.yaml` → `sdk_packages: [{name: stripe, ecosystem: npm}, {name:
@@ -205,97 +243,20 @@ patterns derived mechanically from the package name (Python modules, Go
 module paths, Maven group ids) report HIGH, convention-based namespace
 guesses (Composer, NuGet, SwiftPM) report MEDIUM.
 
-## Fixing breaking changes
-
-`depfix fix` scans for call sites, generates a fix for each one, writes kept
-edits to a disposable copy of the checkout (a local `--path` is never
-mutated in place), and -- unless `--no-verify` is passed -- installs the
-target repo's own dependencies and runs its real test suite before and after
-each edit to decide whether to keep or revert it.
-
-```bash
-# Fix a local checkout, printing diffs instead of just a summary.
-depfix fix --path ./my-app --provider openai --change-file my_change.json --show-diffs
-
-# Fix straight from a classified breaking_change row (see `depfix classify`).
-depfix fix --path ./my-app --provider openai --from-event 42
-
-# Fix a remote repo cloned via the GitHub App, writing .patch files locally.
-depfix fix --repo acme/widgets --provider openai --from-event 42 --output ./patches
-
-# Skip real test-suite verification (e.g. no npm on PATH, or the repo has no tests).
-depfix fix --path ./my-app --provider openai --change-file my_change.json --no-verify
-
-# Use a local Ollama model instead of Gemini.
-depfix fix --path ./my-app --provider openai --change-file my_change.json \
-    --llm-provider ollama --ollama-model qwen2.5-coder:7b
-
-# Use a larger local coding model (roughly a 19 GB download).
-ollama pull qwen3-coder:30b
-LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3-coder:30b depfix fix --path ./my-app \
-    --provider openai --change-file my_change.json
-
-# Retry SUSPECT/REVERTED edits up to 3 times, feeding each concrete
-# failure (syntax error or failing test) back to the LLM.
-depfix fix --path ./my-app --provider openai --change-file my_change.json --max-retries 3
-
-# Disable the retry loop entirely.
-depfix fix --path ./my-app --provider openai --change-file my_change.json --no-retry
-
-# Fix a remote repo and open a PR with the KEPT (test-confirmed) edits.
-depfix fix --repo acme/widgets --provider openai --from-event 42 --open-pr
-
-# Open the PR as a draft, against a specific base branch.
-depfix fix --repo acme/widgets --provider openai --from-event 42 \
-    --open-pr --draft-pr --base-branch develop
-```
-
-Each edit ends up with a verdict: `KEPT` (written, and confirmed clean or
-unverified), `REVERTED` (written, then rolled back because verification
-attributed a new test failure to it), `SUSPECT` (written, but not
-confirmed clean -- either it failed the syntax/sanity check, or
-verification couldn't confirm or deny it: no test script, install failed,
-or a test-output format it couldn't parse), or `SKIPPED` (never written --
-e.g. fix generation failed, or the fix was identical to the original).
-Unless `--no-save` is passed, the run (and every edit + baseline/after-fix
-test result) is persisted to the `fix_run`/`file_fix`/`test_run` tables.
-
-When verification is enabled, `SUSPECT`/`REVERTED` edits are retried up to
-`--max-retries` times (default: `RETRY_MAX_ROUNDS` env, else 2), each round
-feeding the concrete syntax error or attributed failing test back to the
-LLM before re-verifying the full batch; `--no-retry` disables this
-regardless of `--max-retries`.
-
-`--open-pr` (remote repos only, and only once verification has actually
-run) pushes the `KEPT` edits to a deterministic branch
-(`depfix/<dedupe-key>`) via the GitHub Git Data API and opens a PR whose
-body links back to the breaking change's description, migration guide,
-and evidence. Re-running with the same breaking change reuses the same
-branch and PR rather than piling up duplicates. `--draft-pr` opens it as a
-draft; `--base-branch` overrides the repo's default branch. Unless
-`--no-save` is passed, the PR is also persisted to the `pull_request`
-table.
-
-## Running the fleet orchestrator
-
-For the safe beta path—dry run, full verification without a PR, draft PRs,
-then live—see [repository onboarding](docs/onboarding.md).
-
 ## Terraform-style workflow
 
-Use the following workflow for an explicit, reviewable run.  `init` is
-read-only: it validates the GitHub App can read the selected repository,
-validates its `.depfix.yml`, dry-polls provider feeds without saving events,
-and can scan a supplied known breaking change without calling an LLM. `plan`
-runs the actual scan -> generate -> verify workflow in a disposable checkout,
+Use the following workflow for an explicit, reviewable run. `init` initializes
+the local database, loads the provider configuration, and checks the configured
+GitHub App, LLM choice, and basic `git`/Node/npm availability. `plan` runs the
+actual scan -> generate -> verify workflow in a disposable checkout,
 but writes no database state, branch, or PR. When it has verified committable
 edits, it writes an immutable plan artifact containing the exact diffs and base
 commit SHA. `apply --plan-file` consumes that exact artifact: it does not call
 the LLM again and refuses a stale repository/file base.
 
 ```bash
-# Check one opted-in repository and scan a known migration without changing state.
-depfix init acme/widgets --provider openai --change-file changes/openai-v3-to-v4.json
+# Prepare the local database and integrations once per machine or environment.
+depfix init
 
 # Review the verified proposal. This cannot create a PR. It prints a path
 # such as output/plans/<run-id>-<change>.json.
@@ -324,42 +285,9 @@ must be corrected/replanned before it can be applied.
 
 `apply` still honours the target repository's `.depfix.yml`: `enabled`,
 provider/path filters, verification policy, and `open_pr`/`draft_pr` settings
-remain safety gates.  `pipeline` remains available for unattended fleet/cron
-runs; `plan` and `apply` are its human-operated counterparts.
-
-`depfix pipeline` is the Week 6 unattended entrypoint: it runs the same
-scan -> fix -> verify -> PR pipeline as `depfix fix`, but across every repo
-in a batch, gated by each repo's own opt-in `.depfix.yml` (copy
-[`.depfix.yml.example`](.depfix.yml.example) into a target repo's root to
-enable it) and an idempotency ledger (`change_attempt` table) so cron-driven
-reruns never reopen a PR or reprocess an already-terminal outcome.
-
-```bash
-# Process every repo visible to the configured GitHub App installation(s),
-# against every classified breaking_change row in the database.
-depfix pipeline
-
-# Narrow to specific repos and/or a specific provider.
-depfix pipeline --repo acme/widgets --repo acme/gizmos --provider openai
-
-# Narrow to specific breaking changes instead of the full classified backlog.
-depfix pipeline --from-event 42 --from-event 43
-
-# Bypass bookkeeping skips (already-terminal, max attempts, cooldown, max
-# open PRs, max changes per run) for a manual re-run -- a repo's own
-# .depfix.yml (enabled/ignore) is never bypassed, even with --force.
-depfix pipeline --force
-```
-
-A repo with no `.depfix.yml` at all is skipped entirely
-(`no_repo_config`) -- the orchestrator never acts on a repo that hasn't
-explicitly opted in. Within an opted-in repo, each `(repo, change)` pair is
-independently gated by `orchestrator.policy.decide()`: tenant instructions
-(`enabled: false`, `ignore`) are checked first and are never bypassable;
-then capability (`providers` filter, known provider ids); then bookkeeping
-(already-terminal ledger status, max attempts, retry cooldown, max open
-PRs, max changes per run), which *is* bypassable with `--force`. One bad
-repo, or one bad change within a repo, never aborts the rest of the batch.
+remain safety gates. For every named repository, the command itself is the
+explicit opt-in; the configuration-file gate protects only automatic fleet
+discovery.
 
 ## Common tasks
 
@@ -377,9 +305,8 @@ make eval-full            # depfix eval with LLM-backed cases included
 make eval-compare         # depfix eval --compare against the last saved report
 make classify             # depfix classify
 make scan ARGS="--path ./my-app --provider openai --no-save"
-make fix ARGS="--path ./my-app --provider openai --change-file change.json"
 make repos                 # depfix repos
-make pipeline ARGS="--repo acme/widgets --force"  # depfix pipeline
+make run ARGS="plan acme/widgets --provider openai"
 make docker-up            # postgres + redis + app via docker compose
 ```
 
@@ -402,7 +329,7 @@ dependency-fix-agent/
 │   ├── gh/                   # GitHub App auth, branch/commit + PR creation (Git Data API)
 │   ├── clone/                 # shallow-clone / local-copy checkout service
 │   ├── repoconfig/            # per-repo opt-in `.depfix.yml` loader/models
-│   ├── orchestrator/          # Week 6 fleet orchestrator: policy + runner (`depfix pipeline`)
+│   ├── orchestrator/          # plan/apply policy + runner
 │   ├── api/                  # (placeholder) HTTP surface
 │   ├── workers/              # (placeholder) background jobs
 │   ├── registry/             # npm registry HTTP client
@@ -445,18 +372,18 @@ All configuration is read from environment variables (or a local `.env` file). S
 | `CLONE_MAX_REPO_MB` | `500`               | Reject a clone once its working tree exceeds this size |
 | `SCAN_MAX_FILES`  | `20000`              | Hard cap on files scanned per repo       |
 | `FIX_VALIDATE_SYNTAX` | `true`           | Run syntax/sanity checks before writing an edit to disk |
-| `VERIFY_ENABLED`  | `true`               | Whether `depfix fix` runs the repo's own test suite to confirm each edit |
+| `VERIFY_ENABLED`  | `true`               | Whether `depfix plan`/`apply` runs the repo's own test suite to confirm each edit |
 | `VERIFY_INSTALL_TIMEOUT` | `300`         | Wall-clock cap (seconds) for the dependency install step |
 | `VERIFY_TEST_TIMEOUT` | `300`            | Wall-clock cap (seconds) for one baseline or after-fix test run |
 | `VERIFY_IGNORE_SCRIPTS` | `true`         | Pass `--ignore-scripts` to the install command |
 | `VERIFY_MAX_OUTPUT_BYTES` | `2000000`    | Truncate captured install/test output past this size |
-| `RETRY_MAX_ROUNDS` | `2`                 | Bounded re-attempts for SUSPECT/REVERTED edits (`depfix fix --max-retries`/`--no-retry`) |
+| `RETRY_MAX_ROUNDS` | `2`                 | Bounded re-attempts for SUSPECT/REVERTED edits |
 | `REPO_CONFIG_FILENAME` | `.depfix.yml`   | Per-repo opt-in pipeline config file the orchestrator looks for at the repo root |
 | `PIPELINE_REQUIRE_CONFIG_FILE` | `true`  | Refuse to touch a repo with no `REPO_CONFIG_FILENAME` at all |
 | `PIPELINE_MAX_OPEN_PRS` | `5`            | Per-repo cap on simultaneously open depfix-authored PRs |
 | `PIPELINE_MAX_ATTEMPTS` | `3`            | Per-(repo, change) cap on non-terminal orchestrator attempts before giving up |
 | `PIPELINE_RETRY_COOLDOWN_HOURS` | `6.0`  | Minimum time between two orchestrator attempts at the same (repo, change) |
-| `PIPELINE_MAX_CHANGES_PER_REPO` | `3`    | Hard cap on distinct breaking changes processed per repo per `depfix pipeline` run |
+| `PIPELINE_MAX_CHANGES_PER_REPO` | `3`    | Hard cap on distinct breaking changes processed per `plan`/`apply` run |
 | `LOG_LEVEL`       | `INFO`               | Root logging level                       |
 | `SENTRY_DSN`      | unset                | Sentry DSN for error reporting           |
 
@@ -489,7 +416,7 @@ docker compose exec app depfix --help
 
 The compose stack starts Postgres and Redis alongside the app container. The image
 uses a multi-stage build with a non-root runtime user and includes Node.js + npm --
-required not just for the JS syntax validator, but for `depfix fix`'s verification
+required not just for the JS syntax validator, but for `depfix plan`/`apply` verification
 step, which installs a target repo's real dependencies and runs its real test suite.
 Debian's `nodejs` apt package doesn't bundle npm (and its separate `npm` package pulls
 in ~300 unrelated JS library packages), so the runtime stage installs the upstream

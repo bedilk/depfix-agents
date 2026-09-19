@@ -81,6 +81,7 @@ def _fake_deps() -> SourceDeps:
     return SourceDeps(
         http=object(),  # type: ignore[arg-type]
         npm=object(),  # type: ignore[arg-type]
+        pypi=object(),  # type: ignore[arg-type]
         spec_cache_dir=Path("/tmp/depfix-test-cache"),
         max_spec_bytes=1024,
         github_api_url="https://example.invalid",

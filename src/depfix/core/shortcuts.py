@@ -11,6 +11,7 @@ import logging
 
 from sqlalchemy import select
 
+from depfix.catalog import canonical_providers_file
 from depfix.classify import Classifier, breaking_change_from_row, classify_pending
 from depfix.core.models import BreakingChange
 from depfix.providers.loader import load_providers_file
@@ -21,12 +22,18 @@ from depfix.watcher.runner import Watcher
 logger = logging.getLogger(__name__)
 
 
-def ensure_changes_detected(provider_id: str, *, providers_file: str) -> int:
-    """Persist and deterministically classify new events for one provider.
+def ensure_changes_detected(
+    provider_id: str,
+    *,
+    providers_file: str,
+    completer: object | None = None,
+    min_confidence: float = 0.5,
+) -> int:
+    """Persist one provider's new or canonical historical migrations.
 
-    Release-note-only events remain pending for the explicit ``classify``
-    command with an LLM configured. This shortcut never sends provider prose
-    to an LLM as a side effect of scanning or planning.
+    Upstream feeds always run first. If they emit nothing and there is no
+    classified record yet, a bundled catalog supplies known historical SDK
+    migrations that a first poll cannot observe.
     """
     providers = load_providers_file(providers_file)
     target = [provider for provider in providers if provider.id == provider_id]
@@ -45,9 +52,54 @@ def ensure_changes_detected(provider_id: str, *, providers_file: str) -> int:
     )
 
     with session_scope() as session:
-        summary = classify_pending(session, Classifier(None), provider_id=provider_id)
+        summary = classify_pending(
+            session,
+            Classifier(completer, min_confidence=min_confidence),
+            provider_id=provider_id,
+        )
     logger.info(
         "classify: %d processed, %d breaking change(s) created for %s",
+        summary.events_processed,
+        summary.changes_created,
+        provider_id,
+    )
+    if summary.changes_created:
+        return summary.changes_created
+
+    with session_scope() as session:
+        existing = session.scalar(
+            select(BreakingChangeRow.id)
+            .where(BreakingChangeRow.provider_id == provider_id)
+            .limit(1)
+        )
+    if existing is not None:
+        return 0
+
+    catalog_file = canonical_providers_file()
+    if catalog_file is None:
+        return 0
+    catalog_providers = load_providers_file(catalog_file)
+    catalog_target = [provider for provider in catalog_providers if provider.id == provider_id]
+    if not catalog_target:
+        return 0
+
+    logger.info("upstream feeds found no new events for %s; using migration catalog", provider_id)
+    with SourceDeps.from_settings() as deps:
+        outcome = Watcher(deps=deps, dry_run=False).run_once(catalog_target)
+    logger.info(
+        "catalog watch: %d feed(s), %d event(s) for %s",
+        outcome.feeds_polled,
+        len(outcome.events),
+        provider_id,
+    )
+    with session_scope() as session:
+        summary = classify_pending(
+            session,
+            Classifier(completer, min_confidence=min_confidence),
+            provider_id=provider_id,
+        )
+    logger.info(
+        "catalog classify: %d processed, %d breaking change(s) created for %s",
         summary.events_processed,
         summary.changes_created,
         provider_id,
@@ -68,3 +120,15 @@ def latest_change_for_provider(provider_id: str) -> tuple[BreakingChange | None,
         if row is None:
             return None, None
         return breaking_change_from_row(row), row.id
+
+
+def all_changes_for_provider(provider_id: str) -> list[BreakingChange]:
+    """Return every classified migration for one provider, newest first."""
+    init_schema()
+    with session_scope() as session:
+        rows = session.scalars(
+            select(BreakingChangeRow)
+            .where(BreakingChangeRow.provider_id == provider_id)
+            .order_by(BreakingChangeRow.created_at.desc())
+        ).all()
+        return [breaking_change_from_row(row) for row in rows]

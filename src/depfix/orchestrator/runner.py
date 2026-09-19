@@ -54,7 +54,7 @@ from depfix.apply.workspace import WorkspaceEditor
 from depfix.clone import Checkout, CloneService
 from depfix.config import Settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
-from depfix.core.models import BreakingChange
+from depfix.core.models import BreakingChange, ChangeKind
 from depfix.core.pipeline import FixPipelineResult
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
@@ -89,12 +89,16 @@ from depfix.storage import (
     record_fix_run,
     record_pull_request,
     session_scope,
-    touch_no_call_sites,
+    touch_recheck_on_change,
 )
 from depfix.storage.lock import advisory_lock
 from depfix.verify.confidence import ConfidenceTier
 
 logger = logging.getLogger(__name__)
+
+_NO_WORK_STATUSES = frozenset(
+    {AttemptStatus.NO_CALL_SITES, AttemptStatus.VERSION_NOT_AFFECTED}
+)
 
 
 class Orchestrator:
@@ -253,6 +257,7 @@ class Orchestrator:
             )
         except GitHubAppError as exc:
             return RepoOutcome(repo_full_name=repo_full_name, error=str(exc))
+        logger.info("repo %s: base=%s sha=%s", repo_full_name, base_branch, current_ref_sha[:12])
         open_pr_count = sum(1 for pr in open_prs if pr.head_branch.startswith(BRANCH_PREFIX))
 
         with session_scope() as session:
@@ -274,6 +279,11 @@ class Orchestrator:
             if self._budget.expired:
                 stopped_early = True
                 break
+
+            logger.info(
+                "considering %s: %s %s -> %s",
+                change.dedupe_key[:12], change.package, change.old_api, change.replacement,
+            )
 
             attempt = attempts.get(change.dedupe_key)
             skip = decide_with_detail(
@@ -299,7 +309,6 @@ class Orchestrator:
                 )
                 continue
 
-            changes_processed += 1
             # One transaction per change -- a failure (or crash) while
             # processing this change commits or rolls back only this
             # change's own ledger write, never a prior change's already
@@ -319,6 +328,8 @@ class Orchestrator:
                 )
             change_outcomes.append(change_outcome)
             self._budget.record_cost(change_outcome.cost_usd)
+            if change_outcome.attempt_status not in _NO_WORK_STATUSES:
+                changes_processed += 1
             if change_outcome.attempt_status == AttemptStatus.PR_OPENED:
                 open_pr_count += 1
 
@@ -417,13 +428,39 @@ class Orchestrator:
                 ],
             )
             suppressed_call_sites = before_actionable - len(scan_result.actionable_sites)
+            logger.info(
+                "scan: %d file(s), %d actionable call site(s)%s",
+                scan_result.files_scanned,
+                len(scan_result.actionable_sites),
+                f", {suppressed_call_sites} path-suppressed" if suppressed_call_sites else "",
+            )
 
-            if not scan_result.actionable_sites:
+            from depfix.scanners.applicability import change_applies
+
+            applicability = change_applies(scan_result.dependencies, change)
+            if applicability.blocks:
+                logger.info("%s does not apply to %s: %s", change.dedupe_key[:12], repo_full_name, applicability.reason)
                 if not self._dry_run:
-                    touch_no_call_sites(
+                    touch_recheck_on_change(
                         session,
                         repo_id=repo_full_name,
                         dedupe_key=change.dedupe_key,
+                        status=AttemptStatus.VERSION_NOT_AFFECTED,
+                        ref_sha=current_ref_sha,
+                    )
+                outcome.attempt_status = AttemptStatus.VERSION_NOT_AFFECTED
+                outcome.detail = applicability.reason
+                outcome.suppressed_call_sites = suppressed_call_sites
+                outcome.planned = self._dry_run
+                return outcome
+
+            if not scan_result.actionable_sites and change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
+                if not self._dry_run:
+                    touch_recheck_on_change(
+                        session,
+                        repo_id=repo_full_name,
+                        dedupe_key=change.dedupe_key,
+                        status=AttemptStatus.NO_CALL_SITES,
                         ref_sha=current_ref_sha,
                     )
                 outcome.attempt_status = AttemptStatus.NO_CALL_SITES
@@ -456,6 +493,7 @@ class Orchestrator:
                         ignore_scripts=self._settings.verify_ignore_scripts,
                         max_output_bytes=self._settings.verify_max_output_bytes,
                         ecosystem=impact_ecosystem,
+                        max_seconds=self._settings.impact_check_max_seconds or None,
                     )
                     outcome.impact_summary = impact.summary()
                 except Exception:
@@ -472,10 +510,16 @@ class Orchestrator:
                 plan_digest = artifact.digest
                 fix_service_result = self._apply_plan_artifact(checkout, scan_result, change, artifact)
             else:
+                logger.info("generating and verifying a fix for %s", change.dedupe_key[:12])
                 fix_service_result = self._run_fix_pipeline(checkout, scan_result, change, repo_config)
             fix_result = fix_service_result.pipeline_result
             outcome.cost_usd = fix_result.total_cost
             outcome.suppressed_call_sites = suppressed_call_sites
+            from depfix.verify.severity import severity_from_verification
+
+            outcome.severity, outcome.severity_evidence = severity_from_verification(
+                change, fix_result.verification, scan_result.actionable_sites
+            )
 
             committable = fix_service_result.committable
             if self._dry_run:

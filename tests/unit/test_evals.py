@@ -89,6 +89,12 @@ def test_load_corpus_dir_loads_real_shipped_corpus() -> None:
     assert all(isinstance(c.verified, bool) for c in cases)
 
 
+def test_eval_summary_distinguishes_scored_and_skipped_cases() -> None:
+    report = EvalReport(cases=[_result("pass", True), _result("skip", True, skipped=True)])
+
+    assert report.summary_line == "pass rate: 100% (1/1 scored), 1 skipped of 2 total"
+
+
 # --- scoring: classification --------------------------------------------------
 
 

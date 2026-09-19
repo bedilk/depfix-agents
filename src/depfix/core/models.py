@@ -51,6 +51,9 @@ class ChangeKind(StrEnum):
     API_VERSION_BUMP = "api_version_bump"
     AUTH_CHANGED = "auth_changed"
     ERROR_SHAPE_CHANGED = "error_shape_changed"
+    #: A registry reported a newer SDK version.  Unlike an API migration,
+    #: this is a manifest-level fact and may have no source call site.
+    DEPENDENCY_VERSION_BUMP = "dependency_version_bump"
     UNKNOWN = "unknown"
 
 
@@ -71,7 +74,9 @@ class ClassificationSource(StrEnum):
 
     SPEC_DIFF = "spec_diff"  # deterministic OpenAPI diff — confidence always 1.0
     RELEASE_NOTES = "release_notes"  # LLM-derived from prose — confidence < 1.0
+    LLM_SYNTHESIS = "llm_synthesis"  # grounded structural-diff migration spec
     MANUAL = "manual"  # hand-written (eval corpus, CLI --change-file)
+    REGISTRY = "registry"  # deterministic package-registry version movement
 
 
 @dataclass

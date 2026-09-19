@@ -15,22 +15,14 @@ Subcommands
   YAML corpus in ``evals/corpus``.
 * ``depfix scan (--repo OWNER/NAME | --path DIR) --provider ID`` — find SDK
   call sites in a local checkout or a repo cloned via the GitHub App.
-* ``depfix fix (--repo OWNER/NAME | --path DIR) --provider ID (--change-file
-  ... | --from-event ID)`` — scan, generate + write fixes for every
-  actionable call site, and (unless ``--no-verify``) confirm each one
-  against the repo's own test suite.
 * ``depfix repos`` — list repos visible to the configured GitHub App
-  installation(s), useful before pointing ``scan``/``fix`` at one.
-* ``depfix init [OWNER/NAME ...]`` — validate GitHub App/repo configuration,
-  dry-poll change feeds, and optionally scan known breaking changes.
-* ``depfix plan [OWNER/NAME ...]`` — run the fleet pipeline read-only and
+  installation(s), useful before pointing ``scan`` at one.
+* ``depfix init`` — initialize the local database and run the full machine,
+  integration, and toolchain preflight diagnostic.
+* ``depfix plan [OWNER/NAME ...]`` — run the repository workflow read-only and
   report the verified edits that would be proposed.
-* ``depfix apply [OWNER/NAME ...]`` — run the live fleet pipeline and open
+* ``depfix apply [OWNER/NAME ...]`` — run the live repository workflow and open
   pull requests for verified edits.
-* ``depfix pipeline [--repo OWNER/NAME ...]`` — the Week 6 fleet
-  orchestrator: unattended scan -> fix -> verify -> PR across every repo's
-  own opt-in ``.depfix.yml``, gated by the idempotency ledger so cron
-  reruns never reopen a PR or reprocess a terminal outcome.
 
 When invoked without a subcommand (e.g. ``depfix --codebase X``), ``run`` is
 assumed for backwards compatibility with the Day 1-2 CLI.
@@ -41,7 +33,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import shutil
 import sys
 from collections import Counter
 from dataclasses import replace
@@ -69,7 +60,11 @@ from depfix.config import Settings, get_settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import AgentResult, BreakingChange, ChangeKind, ClassificationSource
 from depfix.core.pipeline import FixPipelineResult
-from depfix.core.shortcuts import ensure_changes_detected, latest_change_for_provider
+from depfix.core.shortcuts import (
+    all_changes_for_provider,
+    ensure_changes_detected,
+    latest_change_for_provider,
+)
 from depfix.evals import (
     CorpusError,
     EvalCategory,
@@ -108,6 +103,7 @@ from depfix.scanners import (
     scan_path,
     scan_repo,
 )
+from depfix.severity import Severity as ChangeSeverity
 from depfix.sources.factory import SourceDeps
 from depfix.sources.models import Severity
 from depfix.storage import (
@@ -125,7 +121,7 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 _RUN_COMMANDS = {
-    "run", "watch", "classify", "eval", "scan", "fix", "repos", "pipeline", "init", "plan", "apply", "doctor", "status", "pr"
+    "run", "watch", "classify", "eval", "scan", "repos", "init", "plan", "apply", "status", "pr"
 }
 _TOP_LEVEL_FLAGS = {"-h", "--help", "--log-level", "--log-format"}
 
@@ -436,6 +432,15 @@ _CONFIDENCE_STYLE = {
     MatchConfidence.LOW: "[dim]low[/dim]",
 }
 
+_SEVERITY_COLOR = {
+    ChangeSeverity.CRITICAL: "red bold", ChangeSeverity.HIGH: "red",
+    ChangeSeverity.MEDIUM: "yellow", ChangeSeverity.LOW: "dim", ChangeSeverity.NONE: "dim",
+}
+
+
+def _severity_style(severity: ChangeSeverity) -> str:
+    return f"[{_SEVERITY_COLOR[severity]}]{severity.value}[/{_SEVERITY_COLOR[severity]}]"
+
 
 def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
     sites = result.call_sites if show_low else result.actionable_sites
@@ -461,6 +466,9 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
         f"({len(result.actionable_sites)} actionable)  "
         f"[dim]commit:[/dim] {result.commit_sha or '?'}\n"
     )
+    if result.severity is not None:
+        evidence = result.severity_evidence.value if result.severity_evidence else "unknown"
+        console.print(f"[dim]severity:[/dim] {_severity_style(result.severity)} [dim](predicted, {evidence})[/dim]")
 
     if result.manifest_matches:
         console.print("[bold]Manifest matches:[/bold]")
@@ -686,7 +694,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if change is None and not args.old_api:
         console.print(f"[dim]Detecting changes for {provider.id}...[/dim]")
         try:
-            created = ensure_changes_detected(provider.id, providers_file=providers_file)
+            created = ensure_changes_detected(
+                provider.id,
+                providers_file=providers_file,
+                completer=_build_completer(settings),
+                min_confidence=settings.classify_min_confidence,
+            )
             if created:
                 console.print(f"[green]{created} new breaking change(s) classified[/green]")
             change, _change_id = latest_change_for_provider(provider.id)
@@ -699,7 +712,11 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                     f"({change.old_version} → {change.new_version})"
                 )
 
-    target = build_scan_target(provider, change)
+    # A bare provider scan is a discovery view: show all provider usage even
+    # when automatic detection also found one particular migration. Explicit
+    # change selection remains deliberately narrow for focused investigation.
+    scan_change = change if (args.change_file or args.from_event is not None) else None
+    target = build_scan_target(provider, scan_change)
     if args.old_api:
         if change is not None:
             console.print(
@@ -710,6 +727,15 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     scanner = CallSiteScanner(
         max_file_bytes=settings.scan_max_file_bytes, max_files=settings.scan_max_files
     )
+    judge = None
+    if settings.scan_llm_judge_enabled and scan_change is not None:
+        completer = _build_completer(settings)
+        if completer is not None:
+            from depfix.scanners.judge import LLMCallSiteJudge
+
+            judge = LLMCallSiteJudge(
+                completer, max_candidates=settings.scan_llm_judge_max_candidates
+            )
 
     _print_header()
 
@@ -718,7 +744,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     try:
         if local_path:
             repo_full_name = str(Path(local_path).resolve())
-            result = scan_path(local_path, target, repo_full_name=repo_full_name, scanner=scanner)
+            result = scan_path(
+                local_path, target, repo_full_name=repo_full_name, scanner=scanner,
+                change=scan_change, judge=judge,
+            )
         else:
             assert remote_repo is not None
             owner, name = remote_repo.split("/", 1)
@@ -743,6 +772,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 clone_service=clone_service,
                 ref=args.ref,
                 scanner=scanner,
+                change=scan_change,
+                judge=judge,
             )
     except (CloneError, GitHubAppError, FileNotFoundError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
@@ -751,6 +782,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         if gh_auth is not None:
             gh_auth.close()
 
+    if change is not None:
+        from depfix.scanners.severity import severity_from_scan
+
+        result.severity, result.severity_evidence = severity_from_scan(change, result.call_sites)
     _print_scan_result(result, show_low=args.show_low)
 
     if not args.no_save:
@@ -763,10 +798,20 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 name=name or Path(local_path).name,
                 result=result,
                 provider_id=provider.id,
+                change=change,
             )
         console.print(f"[dim]saved scan to database ({repo_full_name})[/dim]\n")
 
-    return 0
+    console.print("[dim]Evaluating depfix's deterministic regression corpus...[/dim]")
+    evaluation_args = argparse.Namespace(
+        corpus_dir=None,
+        category=None,
+        no_llm=True,
+        fail_under=1.0,
+        save=None,
+        compare=None,
+    )
+    return _cmd_eval(evaluation_args)
 
 
 _VERDICT_STYLE = {
@@ -1019,7 +1064,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
         scan_result = scan_checkout(
             checkout, target, repo_full_name=repo_full_name, scanner=scanner
         )
-        if not scan_result.actionable_sites:
+        if not scan_result.actionable_sites and breaking.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
             console.print("[yellow]No actionable call sites found for this change.[/yellow]")
             return 0
 
@@ -1154,10 +1199,13 @@ def _cmd_repos(args: argparse.Namespace) -> int:
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    """Initialize the local database, provider configuration, and tool checks."""
+    """Initialize local state, then run the complete preflight diagnostic."""
+    from depfix.doctor import CheckStatus, run_checks, worst_status
+
     settings = get_settings()
+    if args.providers_file:
+        settings.providers_file = args.providers_file
     _print_header()
-    exit_code = 0
 
     console.print("[dim]Initializing database...[/dim]")
     try:
@@ -1165,60 +1213,25 @@ def _cmd_init(args: argparse.Namespace) -> int:
         console.print(f"  [green]✓[/green] database ready ({get_engine().dialect.name})")
     except Exception as exc:
         console.print(f"  [red]✗[/red] database failed: {exc}")
-        exit_code = 1
+        return 1
 
-    providers_file = args.providers_file or settings.providers_file
-    try:
-        providers = load_providers_file(providers_file)
-        enabled = sum(provider.enabled for provider in providers)
-        console.print(
-            f"  [green]✓[/green] {len(providers)} provider(s) loaded from {providers_file} "
-            f"({enabled} enabled)"
-        )
-    except (FileNotFoundError, ProviderConfigError) as exc:
-        console.print(f"  [red]✗[/red] providers: {exc}")
-        exit_code = 1
+    checks = run_checks(settings, skip_network=args.offline)
+    styles = {
+        CheckStatus.OK: "[green]OK[/green]",
+        CheckStatus.WARN: "[yellow]WARN[/yellow]",
+        CheckStatus.FAIL: "[red]FAIL[/red]",
+    }
+    for check in checks:
+        console.print(f"{styles[check.status]:<18} {check.name:<24} {check.detail}")
+        if check.hint and check.status is not CheckStatus.OK:
+            console.print(f"  [dim]{check.hint}[/dim]")
 
-    gh_auth = _build_gh_auth(settings)
-    if gh_auth is not None:
-        try:
-            installations = gh_auth.list_installations()
-            accounts = ", ".join(installation.account_login for installation in installations[:5])
-            console.print(
-                f"  [green]✓[/green] GitHub App authenticated "
-                f"({len(installations)} installation(s): {accounts})"
-            )
-        except GitHubAppError as exc:
-            console.print(f"  [yellow]![/yellow] GitHub App: {exc}")
-            exit_code = 1
-        finally:
-            gh_auth.close()
-    else:
-        console.print(
-            "  [yellow]![/yellow] GitHub App not configured "
-            "(set GITHUB_APP_ID and a private key for --repo commands)"
-        )
-
-    if settings.llm_provider == "gemini":
-        if settings.google_api_key:
-            console.print(f"  [green]✓[/green] LLM ready (gemini, model={settings.gemini_model})")
-        else:
-            console.print("  [yellow]![/yellow] GOOGLE_API_KEY not set")
-    else:
-        console.print(f"  [dim]i[/dim] LLM: ollama, model={settings.ollama_model}")
-
-    for binary in ("git", "node", "npm"):
-        if shutil.which(binary):
-            console.print(f"  [green]✓[/green] {binary}")
-        else:
-            console.print(f"  [yellow]![/yellow] {binary} not on PATH")
-
-    if exit_code == 0:
+    if worst_status(checks) is not CheckStatus.FAIL:
         console.print("\n[bold green]depfix is ready.[/bold green]")
         console.print("[dim]Next:[/dim] depfix scan --repo OWNER/NAME --provider ID")
-    else:
-        console.print("\n[yellow]Some checks failed. Fix the issues above and re-run.[/yellow]")
-    return exit_code
+        return 0
+    console.print("\n[yellow]Some checks failed. Fix the issues above and re-run.[/yellow]")
+    return 1
 
 
 def _cmd_pipeline(args: argparse.Namespace) -> int:
@@ -1233,6 +1246,13 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     from depfix.defaults import fill_pipeline_context, load_local_defaults
     fill_pipeline_context(args, load_local_defaults())
     _apply_model_overrides(args, settings)
+
+    # A repository named directly on the command line is an explicit opt-in.
+    # The repo-config gate remains for unattended, fleet-wide discovery.
+    has_explicit_repos = bool(getattr(args, "repos", None) or getattr(args, "repo", None))
+    if has_explicit_repos:
+        settings.pipeline_require_config_file = False
+
     api_key = args.api_key or settings.google_api_key
     model = args.model or settings.gemini_model
     llm_provider = args.llm_provider or settings.llm_provider
@@ -1295,13 +1315,21 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                     console.print(
                         f"[green]{created} new breaking change(s) classified for {provider_id}[/green]"
                     )
-                resolved, _change_id = latest_change_for_provider(provider_id)
+                provider_changes = all_changes_for_provider(provider_id)
             except Exception as exc:
                 console.print(f"[yellow]Change detection for {provider_id} failed: {exc}[/yellow]")
                 continue
-            if resolved is not None:
-                changes.append(resolved)
-                console.print(f"[dim]Auto-selected:[/dim] {resolved.old_api} → {resolved.new_api}")
+            if provider_changes:
+                changes.extend(provider_changes)
+                console.print(
+                    f"[dim]Auto-selected {len(provider_changes)} change(s) for {provider_id}:[/dim]"
+                )
+                for change in provider_changes[:5]:
+                    console.print(f"[dim]  {change.old_api} → {change.new_api}[/dim]")
+                if len(provider_changes) > 5:
+                    console.print(
+                        f"[dim]  ... and {len(provider_changes) - 5} more[/dim]"
+                    )
     # `apply <repo>` may obtain its one change from the repo's canonical
     # plan artifact, so do not reject an empty database/change-file result
     # until plan discovery has had a chance to run.
@@ -1320,10 +1348,8 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
             gh_auth.close()
             return 2
     elif args.command == "apply" and len(repo_full_names) == 1 and not (args.from_event or args.change_file):
-        resolved_artifact = PlanArtifact.latest_for_repo(
-            repo_full_names[0], directory=settings.plan_dir
-        )
-        if resolved_artifact is None:
+        discovered = PlanArtifact.plans_for_repo(repo_full_names[0], directory=settings.plan_dir)
+        if not discovered:
             console.print(
                 f"[red]No plan artifact found for {repo_full_names[0]}.[/red]\n"
                 f"[dim]Run first:[/dim] "
@@ -1331,10 +1357,10 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
             )
             gh_auth.close()
             return 2
-        console.print(
-            f"[dim]Using latest plan for {repo_full_names[0]} "
-            f"({resolved_artifact.digest[:19]}...)[/dim]"
-        )
+        for artifact in discovered:
+            plan_artifacts[(artifact.repo_full_name, artifact.change_dedupe_key)] = artifact
+        changes = [artifact.change for artifact in discovered]
+        console.print(f"[dim]Applying {len(discovered)} reviewed plan(s) for {repo_full_names[0]}[/dim]")
 
     if resolved_artifact is not None:
         if args.command != "apply":
@@ -1438,6 +1464,13 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                     f"[dim]Apply with:[/dim] "
                     f"[bold]{change.plan_artifact.apply_command()}[/bold]"
                 )
+        rollup = outcome.rollup()
+        if rollup.prs_planned:
+            console.print(f"\n[bold]{rollup.prs_planned} PR(s) planned[/bold]  [dim]cost:[/dim] ${rollup.total_cost_usd:.4f}")
+            for severity, count in sorted(rollup.by_severity.items(), key=lambda item: item[0].rank, reverse=True):
+                console.print(f"  {_severity_style(severity)}: {count}")
+        else:
+            console.print("\n[dim]No PRs planned this run.[/dim]")
 
     if outcome.stopped_early:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
@@ -1480,13 +1513,16 @@ def _print_eval_report(report: EvalReport) -> None:
     for case in report.failures:
         console.print(f"  [red]FAIL[/red] {case.case_id}: {case.detail}")
 
-    rate_color = (
-        "green" if report.pass_rate == 1.0 else "yellow" if report.pass_rate >= 0.8 else "red"
-    )
     console.print(
-        f"\n[dim]pass rate:[/dim] [{rate_color}]{report.pass_rate:.0%}[/{rate_color}]  "
+        f"\n[dim]{report.summary_line}[/dim]  "
         f"[dim]cost:[/dim] ${report.total_cost:.4f}\n"
     )
+    skipped_categories = sorted({case.category.value for case in report.skipped_cases})
+    if skipped_categories:
+        console.print(
+            f"[yellow]Not measured this run: {', '.join(skipped_categories)} "
+            "(no LLM configured). The pass rate does not measure fix quality.[/yellow]"
+        )
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
@@ -1707,10 +1743,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(eval_p)
 
-    doctor_p = sub.add_parser("doctor", help="Read-only preflight checks")
-    doctor_p.add_argument("--offline", action="store_true", help="Skip network-dependent checks")
-    _add_command_logging_arguments(doctor_p)
-
     status_p = sub.add_parser("status", help="Show the orchestrator attempt ledger")
     status_p.add_argument("--repo", action="append", default=None, metavar="OWNER/NAME")
     status_p.add_argument("--status", default=None, help="Filter by attempt status")
@@ -1781,113 +1813,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(scan_p)
 
-    # -- fix --------------------------------------------------------------------
-    fix_p = sub.add_parser(
-        "fix", help="Generate, apply, and verify fixes for one breaking change"
-    )
-    fix_p.add_argument(
-        "--repo",
-        type=str,
-        default=None,
-        metavar="OWNER/NAME",
-        help="Remote repo to clone via the GitHub App and fix",
-    )
-    fix_p.add_argument(
-        "--path",
-        type=str,
-        default=None,
-        help="Local directory to fix instead of cloning. Never mutated in place -- "
-        "fixes are written to a disposable copy; see --output for the diffs.",
-    )
-    fix_p.add_argument(
-        "--ref",
-        type=str,
-        default=None,
-        help="Branch/tag/sha to clone (only with --repo; default: the repo's default branch)",
-    )
-    fix_p.add_argument(
-        "--provider", type=str, required=True, help="Provider id from providers.yaml to scan for"
-    )
-    fix_p.add_argument(
-        "--providers-file",
-        type=str,
-        default=None,
-        help="Path to providers.yaml (default: PROVIDERS_FILE env)",
-    )
-    fix_p.add_argument(
-        "--change-file",
-        type=str,
-        default=None,
-        help="Path to a JSON file with a single BreakingChange (see core.models.BreakingChange)",
-    )
-    fix_p.add_argument(
-        "--from-event",
-        type=int,
-        default=None,
-        metavar="ID",
-        help="breaking_change row id, as produced by `depfix classify`",
-    )
-    fix_p.add_argument(
-        "--output", "-o", type=str, default=None, help="Where to write .patch diffs"
-    )
-    fix_p.add_argument("--show-diffs", action="store_true", help="Print full diffs")
-    fix_p.add_argument(
-        "--api-key", type=str, default=None, help="Google API key (or set GOOGLE_API_KEY)"
-    )
-    fix_p.add_argument("--model", type=str, default=None, help="Gemini model name (overrides env)")
-    fix_p.add_argument(
-        "--llm-provider",
-        type=str,
-        choices=["gemini", "ollama"],
-        default=None,
-        help="LLM backend (default: LLM_PROVIDER env, else gemini)",
-    )
-    fix_p.add_argument(
-        "--ollama-model",
-        type=str,
-        default=None,
-        help="Ollama model tag when --llm-provider=ollama (default: qwen2.5-coder:7b)",
-    )
-    fix_p.add_argument(
-        "--no-verify",
-        action="store_true",
-        help="Skip running the repo's own test suite to confirm each edit",
-    )
-    fix_p.add_argument(
-        "--max-retries",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Bounded re-attempts for SUSPECT/REVERTED edits, feeding the concrete "
-        "failure back to the LLM (default: RETRY_MAX_ROUNDS env, else 2)",
-    )
-    fix_p.add_argument(
-        "--no-retry",
-        action="store_true",
-        help="Disable the retry loop entirely, regardless of --max-retries",
-    )
-    fix_p.add_argument(
-        "--no-save", action="store_true", help="Don't persist this fix run to the database"
-    )
-    fix_p.add_argument("--no-codemods", action="store_true")
-    fix_p.add_argument("--fallback-provider", choices=["gemini", "ollama"], default=None)
-    fix_p.add_argument("--fallback-model", default=None)
-    fix_p.add_argument(
-        "--open-pr",
-        action="store_true",
-        help="Push KEPT (test-confirmed) edits to a branch and open a PR (--repo only)",
-    )
-    fix_p.add_argument(
-        "--draft-pr", action="store_true", help="Open the PR (with --open-pr) as a draft"
-    )
-    fix_p.add_argument(
-        "--base-branch",
-        type=str,
-        default=None,
-        help="PR base branch (with --open-pr; default: the repo's default branch)",
-    )
-    _add_command_logging_arguments(fix_p)
-
     # -- repos --------------------------------------------------------------------
     repos_p = sub.add_parser(
         "repos", help="List repos visible to the configured GitHub App installation(s)"
@@ -1914,18 +1839,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(pr_list_p)
 
-    # -- pipeline -----------------------------------------------------------------
-    pipeline_p = sub.add_parser(
-        "pipeline",
-        help="Fleet orchestrator: scan -> fix -> verify -> PR across many repos, "
-        "gated by each repo's own .depfix.yml",
-    )
-    pipeline_p.add_argument(
+    # Shared workflow arguments. This parser is intentionally not registered
+    # as a command: plan/apply are the public seam for all edits and PRs.
+    workflow_p = argparse.ArgumentParser(add_help=False)
+    workflow_p.add_argument(
         "repos",
         nargs="*",
         help="OWNER/NAME; omit to use every repository visible to the GitHub App",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--repo",
         type=str,
         action="append",
@@ -1934,20 +1856,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Repo to process (repeatable). Default: every repo visible to the "
         "configured GitHub App installation(s)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--provider",
         type=str,
         action="append",
         default=None,
         help="Restrict to breaking changes from this provider id (repeatable)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--providers-file",
         type=str,
         default=None,
         help="Path to providers.yaml (default: PROVIDERS_FILE env)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--change-file",
         type=str,
         action="append",
@@ -1955,7 +1877,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a JSON file with a single BreakingChange (repeatable). Default: "
         "every classified breaking_change row in the database",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--from-event",
         type=int,
         action="append",
@@ -1963,61 +1885,61 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         help="breaking_change row id to include (repeatable)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--plan-file", default=None, metavar="PATH",
         help="For apply: consume this immutable plan artifact instead of calling the LLM again.",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--plan-output-dir", default="output/plans",
         help="For plan: directory for verified immutable plan artifacts.",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--limit",
         type=int,
         default=None,
         help="Cap the number of breaking_change rows loaded from the database "
         "(only applies when neither --change-file nor --from-event is given)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--api-key", type=str, default=None, help="Google API key (or set GOOGLE_API_KEY)"
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--model", type=str, default=None, help="Gemini model name (overrides env)"
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--llm-provider",
         type=str,
         choices=["gemini", "ollama"],
         default=None,
         help="LLM backend (default: LLM_PROVIDER env, else gemini)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--ollama-model",
         type=str,
         default=None,
         help="Ollama model tag when --llm-provider=ollama (default: qwen2.5-coder:7b)",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--force",
         action="store_true",
         help="Bypass bookkeeping skips (already-terminal, max attempts, cooldown, max "
         "open PRs, max changes per run) -- a repo's own .depfix.yml is never bypassed",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--dry-run",
         action="store_true",
         help="Run the real scan -> fix -> verify pipeline but write nothing: no ledger "
         "row, no branch commit, no PR. Reported outcomes are predictions (planned=True), "
         "the first rung of the onboarding rehearsal ladder before --no-pr and live.",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--no-pr",
         action="store_true",
         help="Fix and verify for real (real ledger writes) but never open a PR, "
         "regardless of what a repo's own .depfix.yml says -- the middle rung of the "
         "onboarding rehearsal ladder, between --dry-run and live.",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--max-duration",
         type=float,
         default=None,
@@ -2025,7 +1947,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stop cleanly between repos after this many minutes (default: "
         "PIPELINE_MAX_DURATION_MINUTES).",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--max-cost",
         type=float,
         default=None,
@@ -2033,43 +1955,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stop between changes once LLM spend reaches this USD amount (default: "
         "PIPELINE_MAX_COST_USD_PER_RUN).",
     )
-    pipeline_p.add_argument(
+    workflow_p.add_argument(
         "--no-lock",
         action="store_true",
         help="Proceed without the advisory lock; intended only for deliberate parallel runs.",
     )
-    pipeline_p.add_argument("--no-codemods", action="store_true")
-    pipeline_p.add_argument("--fallback-provider", choices=["gemini", "ollama"], default=None)
-    pipeline_p.add_argument("--fallback-model", default=None)
-    pipeline_p.add_argument(
+    workflow_p.add_argument("--no-codemods", action="store_true")
+    workflow_p.add_argument("--fallback-provider", choices=["gemini", "ollama"], default=None)
+    workflow_p.add_argument("--fallback-model", default=None)
+    workflow_p.add_argument(
         "--show-skips",
         action="store_true",
         help="Print a row for every skipped repo and change too, not just the ones "
         "actually processed.",
     )
-    _add_command_logging_arguments(pipeline_p)
+    _add_command_logging_arguments(workflow_p)
 
     # -- Terraform-style workflow ---------------------------------------------
-    # Keep these as thin aliases over the same parser/actions as `pipeline`.
-    # That prevents plan and apply from quietly drifting in safety, budget, or
-    # provider behaviour as the fleet orchestrator evolves.
+    # Keep plan and apply on one shared argument interface so their safety,
+    # budget, and provider behaviour cannot quietly drift.
     sub.add_parser(
         "plan",
-        parents=[pipeline_p],
+        parents=[workflow_p],
         add_help=False,
         help="Read-only scan -> fix -> verify preview; never writes DB state, branches, or PRs",
     )
     sub.add_parser(
         "apply",
-        parents=[pipeline_p],
+        parents=[workflow_p],
         add_help=False,
         help="Live scan -> fix -> verify -> PR run for opted-in repositories",
     )
 
     init_p = sub.add_parser(
-        "init", help="Initialize the local database, credentials, and toolchain"
+        "init", help="Initialize the local database and run preflight diagnostics"
     )
     init_p.add_argument("--providers-file", default=None, help="Path to providers.yaml")
+    init_p.add_argument("--offline", action="store_true", help="Skip GitHub App and LLM network checks")
     _add_command_logging_arguments(init_p)
 
     return p
@@ -2143,19 +2065,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"[dim]Apply with: git apply {output}/*.patch[/dim]"
         )
     return 0 if result.success_rate == 1.0 else 1
-
-
-def _cmd_doctor(args: argparse.Namespace) -> int:
-    from depfix.doctor import CheckStatus, run_checks, worst_status
-
-    checks = run_checks(get_settings(), skip_network=args.offline)
-    _print_header()
-    styles = {CheckStatus.OK: "[green]OK[/green]", CheckStatus.WARN: "[yellow]WARN[/yellow]", CheckStatus.FAIL: "[red]FAIL[/red]"}
-    for check in checks:
-        console.print(f"{styles[check.status]:<18} {check.name:<24} {check.detail}")
-        if check.hint and check.status is not CheckStatus.OK:
-            console.print(f"  [dim]{check.hint}[/dim]")
-    return 1 if worst_status(checks) is CheckStatus.FAIL else 0
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
@@ -2243,6 +2152,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
 _STATUS_STYLE_MAP = {
     "pr_opened": "green", "fixed_no_pr": "cyan", "no_call_sites": "dim",
+    "version_not_affected": "dim",
     "no_kept_edits": "yellow", "failed": "red", "ignored": "dim",
 }
 
@@ -2349,7 +2259,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Backwards compatibility: `depfix --codebase X` (no subcommand) → `run`.
     # But keep `-h` / `--help` at the top level so users discover subcommands.
-    needs_default = bool(raw) and raw[0] not in _RUN_COMMANDS and raw[0] not in _TOP_LEVEL_FLAGS
+    # Only a leading option can be the historical no-subcommand form
+    # (``depfix --codebase …``). A leading word must be a real command so a
+    # removed command is reported as such instead of being misread as `run`.
+    needs_default = bool(raw) and raw[0].startswith("-") and raw[0] not in _TOP_LEVEL_FLAGS
     if needs_default:
         raw = ["run", *raw]
 
@@ -2374,14 +2287,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_eval(args)
     if args.command == "scan":
         return _cmd_scan(args)
-    if args.command == "fix":
-        return _cmd_fix(args)
     if args.command == "repos":
         return _cmd_repos(args)
     if args.command == "init":
         return _cmd_init(args)
-    if args.command == "doctor":
-        return _cmd_doctor(args)
     if args.command == "status":
         return _cmd_status(args)
     if args.command == "pr":
@@ -2389,7 +2298,7 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_pr_list(args)
         console.print("[red]Error: pass `depfix pr list --repo OWNER/NAME`.[/red]")
         return 2
-    if args.command in {"pipeline", "plan", "apply"}:
+    if args.command in {"plan", "apply"}:
         return _cmd_pipeline(args)
     return _cmd_run(args)
 

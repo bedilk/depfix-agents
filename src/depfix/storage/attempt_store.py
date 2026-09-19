@@ -68,22 +68,24 @@ def record_change_attempt(
     return row
 
 
-def touch_no_call_sites(
-    session: Session, *, repo_id: str, dedupe_key: str, ref_sha: str
+def touch_recheck_on_change(
+    session: Session, *, repo_id: str, dedupe_key: str, status: AttemptStatus, ref_sha: str
 ) -> ChangeAttemptRow:
-    """Record (or refresh) a ``NO_CALL_SITES`` outcome without consuming
-    retry budget.
-
-    "This repo has no call sites for this change" is not a failure worth
-    counting against a per-change attempt cap -- it just means the next
-    check should wait for ``ref_sha`` to change (see
-    :attr:`ChangeAttemptRow.last_checked_ref_sha`) rather than re-scanning
-    on every cron tick.
-    """
+    """Record a ref-gated non-work outcome without consuming retry budget."""
     row = get_change_attempt(session, repo_id=repo_id, dedupe_key=dedupe_key)
     if row is None:
         row = ChangeAttemptRow(repo_id=repo_id, dedupe_key=dedupe_key, attempts_used=0)
         session.add(row)
-    row.status = AttemptStatus.NO_CALL_SITES.value
+    row.status = status.value
     row.last_checked_ref_sha = ref_sha
     return row
+
+
+def touch_no_call_sites(
+    session: Session, *, repo_id: str, dedupe_key: str, ref_sha: str
+) -> ChangeAttemptRow:
+    """Backwards-compatible ``NO_CALL_SITES`` shorthand."""
+    return touch_recheck_on_change(
+        session, repo_id=repo_id, dedupe_key=dedupe_key,
+        status=AttemptStatus.NO_CALL_SITES, ref_sha=ref_sha,
+    )

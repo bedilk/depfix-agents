@@ -39,12 +39,14 @@ class SkipReason(enum.StrEnum):
 
     # -- capability: can depfix act on this at all --------------------------
     UNKNOWN_PROVIDER = "unknown_provider"
+    NO_REPLACEMENT_API = "no_replacement_api"
 
     # -- bookkeeping: --force exists specifically to override these --------
     ALREADY_TERMINAL = "already_terminal"
     MAX_ATTEMPTS_REACHED = "max_attempts_reached"
     COOLDOWN_ACTIVE = "cooldown_active"
     NO_CALL_SITES_UNCHANGED = "no_call_sites_unchanged"
+    VERSION_UNCHANGED = "version_unchanged"
     MAX_OPEN_PRS_REACHED = "max_open_prs_reached"
     MAX_CHANGES_PER_RUN_REACHED = "max_changes_per_run_reached"
 
@@ -62,6 +64,12 @@ class SkipDetail:
         if self.resumes_at:
             parts.append(f"resumes at {self.resumes_at}")
         return " — ".join(parts)
+
+
+_REF_GATED: dict[str, SkipReason] = {
+    AttemptStatus.NO_CALL_SITES.value: SkipReason.NO_CALL_SITES_UNCHANGED,
+    AttemptStatus.VERSION_NOT_AFFECTED.value: SkipReason.VERSION_UNCHANGED,
+}
 
 
 def effective_max_changes_per_run(repo_config: RepoConfig, settings: Settings) -> int:
@@ -105,6 +113,8 @@ def decide(
     # -- capability: can we act on this at all ------------------------------
     if change.provider_id not in known_provider_ids:
         return SkipReason.UNKNOWN_PROVIDER
+    if not change.new_api.strip():
+        return SkipReason.NO_REPLACEMENT_API
 
     # -- bookkeeping: force-bypassable ---------------------------------------
     if not force:
@@ -112,13 +122,13 @@ def decide(
             return SkipReason.ALREADY_TERMINAL
         if attempt is not None and attempt.attempts_used >= settings.pipeline_max_attempts:
             return SkipReason.MAX_ATTEMPTS_REACHED
+        gated = _REF_GATED.get(attempt.status) if attempt is not None else None
         if (
-            attempt is not None
-            and attempt.status == AttemptStatus.NO_CALL_SITES.value
+            gated is not None
             and current_ref_sha
             and attempt.last_checked_ref_sha == current_ref_sha
         ):
-            return SkipReason.NO_CALL_SITES_UNCHANGED
+            return gated
         if attempt is not None and _cooldown_active(attempt, settings):
             return SkipReason.COOLDOWN_ACTIVE
         if open_pr_count >= settings.pipeline_max_open_prs:
@@ -163,6 +173,10 @@ def decide_with_detail(**kwargs: object) -> SkipDetail | None:
         message = "provider excluded by .depfix.yml"
     elif reason is SkipReason.UNKNOWN_PROVIDER:
         message = "provider is not configured"
+    elif reason is SkipReason.NO_REPLACEMENT_API:
+        message = "the API was removed with no replacement; needs a manual migration"
+    elif reason is SkipReason.VERSION_UNCHANGED:
+        message = "this repo is not on the affected version; will recheck when HEAD changes"
     return SkipDetail(reason, message, resumes_at)
 
 

@@ -1,6 +1,6 @@
 # Providers depfix watches. Each provider has N change feeds.
 #
-# Implemented feed kinds: npm_dist_tag, github_release, openapi_spec
+# Implemented feed kinds: npm_dist_tag, pypi_dist_tag, github_release, openapi_spec
 # Declared, not yet implemented (Week 2): changelog_file, changelog_html, rss
 #
 # Spec URLs move. If a poll reports `not_found` for an openapi_spec feed,
@@ -29,6 +29,9 @@ providers:
         package: openai
         dist_tag: latest
         github_repo: openai/openai-node
+      - kind: pypi_dist_tag
+        package: openai
+        github_repo: openai/openai-python
       - kind: github_release
         repo: openai/openai-node
       - kind: openapi_spec
@@ -58,6 +61,9 @@ providers:
         package: stripe
         dist_tag: latest
         github_repo: stripe/stripe-node
+      - kind: pypi_dist_tag
+        package: stripe
+        github_repo: stripe/stripe-python
       - kind: github_release
         repo: stripe/stripe-node
       - kind: openapi_spec
@@ -84,6 +90,9 @@ providers:
         package: "@anthropic-ai/sdk"
         dist_tag: latest
         github_repo: anthropics/anthropic-sdk-typescript
+      - kind: pypi_dist_tag
+        package: anthropic
+        github_repo: anthropics/anthropic-sdk-python
       - kind: github_release
         repo: anthropics/anthropic-sdk-typescript
 

@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     npm_registry_url: str = Field(default="https://registry.npmjs.org")
     npm_request_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
 
+    # --- PyPI registry (used by sources.pypi_dist_tag feeds) -----------------
+    pypi_registry_url: str = Field(default="https://pypi.org")
+    pypi_request_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
+
     # --- change sources (Week 1) ----------------------------------------------
     providers_file: str = Field(
         default="providers.yaml", description="YAML list of providers and their feeds"
@@ -148,6 +152,8 @@ class Settings(BaseSettings):
         description="Recall floor for the call_sites eval category. Per docs/plan.md, "
         "falling below this is the trigger to bring in tree-sitter instead of regex.",
     )
+    scan_llm_judge_enabled: bool = Field(default=False)
+    scan_llm_judge_max_candidates: int = Field(default=20, ge=1, le=100)
 
     # --- Fix generation + verification (Week 4) ----------------------------------
     fix_validate_syntax: bool = Field(
@@ -156,7 +162,7 @@ class Settings(BaseSettings):
     )
     verify_enabled: bool = Field(
         default=True,
-        description="Whether `depfix fix` runs the repo's own test suite to confirm "
+        description="Whether `depfix plan`/`apply` runs the repo's own test suite to confirm "
         "each edit. Off by default in CI-less environments where no runtime is available.",
     )
     verify_install_timeout: float = Field(
@@ -180,6 +186,11 @@ class Settings(BaseSettings):
         "to the post-change version, run the suite again, and report which tests newly "
         "fail. Confirms (or fails to confirm) that the detected breaking change actually "
         "breaks this repo, locally, before an LLM is ever asked for a fix.",
+    )
+    impact_check_max_seconds: float = Field(
+        default=600.0,
+        ge=0.0,
+        description="Total wall-clock budget for one plan-time impact check.",
     )
     verify_typecheck_timeout: float = Field(default=300.0, ge=1.0, le=1800.0)
     plan_dir: str = Field(default=".depfix/plans")
@@ -208,7 +219,7 @@ class Settings(BaseSettings):
         default=2,
         ge=0,
         le=5,
-        description="Bounded number of times `depfix fix` re-attempts a SUSPECT/REVERTED "
+        description="Bounded number of times `depfix plan`/`apply` re-attempts a SUSPECT/REVERTED "
         "edit by feeding its concrete failure back to the LLM. 0 disables retries.",
     )
 

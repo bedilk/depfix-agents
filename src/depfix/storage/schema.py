@@ -217,6 +217,8 @@ class BreakingChangeRow(Base):
     evidence: Mapped[str | None] = mapped_column(Text, default=None)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     call_site_hints: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    severity: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    severity_evidence: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -323,6 +325,8 @@ class CallSiteRow(Base):
     symbol: Mapped[str] = mapped_column(Text, nullable=False)
     provider_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     evidence: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    severity: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    severity_evidence: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
 
     repo_scan: Mapped[RepoScanRow] = relationship(back_populates="call_sites")
 
@@ -517,6 +521,7 @@ class AttemptStatus(enum.StrEnum):
     PR_OPENED = "pr_opened"
     FIXED_NO_PR = "fixed_no_pr"
     NO_CALL_SITES = "no_call_sites"
+    VERSION_NOT_AFFECTED = "version_not_affected"
     NO_KEPT_EDITS = "no_kept_edits"
     FAILED = "failed"
     IGNORED = "ignored"

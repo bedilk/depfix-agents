@@ -1,6 +1,6 @@
 
 
-"""Read-only preflight: is this machine actually able to run depfix?
+"""Preflight checks used by :command:`depfix init`.
 
 Every failure this checks for was first diagnosed the slow way -- by
 running the real pipeline, getting an unexplained ``no_kept_edits``, and
@@ -9,8 +9,9 @@ bisecting. The Node reporter check is the archetype: a Node version whose
 working test suite come back SUSPECT, and nothing in the failure pointed at
 the reporter. That is a two-second check, not a debugging session.
 
-Deliberately side-effect-free: no feeds are polled, no state advances, no
-tokens are written anywhere. ``depfix init`` is the write-side counterpart.
+The checks themselves are side-effect-free: no feeds are polled, no state
+advances, and no model tokens are written. ``depfix init`` initializes the
+local schema before running them.
 """
 
 from __future__ import annotations
@@ -227,7 +228,7 @@ def check_github_app(settings: Settings) -> list[Check]:
             _warn(
                 "github app",
                 "GITHUB_APP_ID not set",
-                "required for scan --repo / fix --repo / pipeline / plan / apply",
+                "required for scan --repo / plan / apply",
             )
         ]
     private_key = settings.github_app_private_key
@@ -251,7 +252,7 @@ def check_github_app(settings: Settings) -> list[Check]:
             )
         ]
 
-    # Imported lazily so `doctor` still reports every other check on a box
+    # Imported lazily so `init` still reports every other check on a box
     # with no App configured at all.
     from depfix.cli import _build_gh_auth
 
@@ -342,7 +343,7 @@ def check_clone_dir(settings: Settings) -> Check:
     directory = Path(settings.clone_dir) if settings.clone_dir else Path(tempfile.gettempdir())
     try:
         directory.mkdir(parents=True, exist_ok=True)
-        probe = directory / ".depfix-doctor-probe"
+        probe = directory / ".depfix-init-probe"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
     except OSError as exc:

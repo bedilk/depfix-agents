@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from depfix.core.models import BreakingChange
 from depfix.scanners.models import SCANNER_VERSION, RepoScanResult
 from depfix.storage.schema import CallSiteRow, RepoRow, RepoScanRow
 
@@ -55,6 +56,7 @@ def record_scan(
     provider_id: str = "",
     installation_id: int | None = None,
     default_branch: str | None = None,
+    change: BreakingChange | None = None,
 ) -> RepoScanRow:
     """Persist one :class:`RepoScanResult`, creating the parent ``repo`` row
     if this is the first scan of it.
@@ -63,6 +65,11 @@ def record_scan(
     LOW-confidence sites are reported-only for a fixer, but still useful for
     a human reviewing recall/precision, so they belong in the same table.
     """
+    from depfix.scanners.severity import severity_from_scan
+
+    scan_severity, scan_evidence = (
+        severity_from_scan(change, result.call_sites) if change is not None else (None, None)
+    )
     repo = upsert_repo(
         session,
         full_name=repo_full_name,
@@ -94,6 +101,8 @@ def record_scan(
             symbol=site.symbol,
             provider_id=site.provider_id,
             evidence=site.evidence,
+            severity=scan_severity.value if site.is_actionable and scan_severity else None,
+            severity_evidence=scan_evidence.value if site.is_actionable and scan_evidence else None,
         )
         for site in result.call_sites
     ]

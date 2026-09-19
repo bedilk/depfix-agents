@@ -72,7 +72,13 @@ where = ["src"]
 include = ["depfix*"]
 
 [tool.setuptools.package-data]
-depfix = ["py.typed", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
+depfix = [
+    "py.typed",
+    "migrations/*.py",
+    "migrations/*.mako",
+    "migrations/versions/*.py",
+    "catalog/*.yaml",
+]
 
 # ============================================================================
 #  Ruff: lint + format (replaces flake8 + black + isort)

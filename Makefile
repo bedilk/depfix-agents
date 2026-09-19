@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lock test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan fix repos pipeline migrate migration docker-build docker-up docker-down
+.PHONY: help install install-dev lock test test-unit test-integration lint format typecheck security clean run eval eval-full eval-compare classify scan repos migrate migration docker-build docker-up docker-down
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
@@ -63,14 +63,8 @@ classify:  ## Classify pending change events into breaking changes
 scan:  ## Scan a repo/path for provider call sites (pass ARGS="--repo owner/name --provider openai")
 	depfix scan $(ARGS)
 
-fix:  ## Generate, apply, and verify fixes (pass ARGS="--path ./my-app --provider openai --change-file change.json")
-	depfix fix $(ARGS)
-
 repos:  ## List repos visible to the GitHub App installation(s)
 	depfix repos $(ARGS)
-
-pipeline:  ## Fleet orchestrator: scan -> fix -> verify -> PR across many repos' own .depfix.yml
-	depfix pipeline $(ARGS)
 
 migrate:  ## Apply Alembic migrations up to head (URL comes from DATABASE_URL/.env, not alembic.ini)
 	alembic -c alembic.ini upgrade head

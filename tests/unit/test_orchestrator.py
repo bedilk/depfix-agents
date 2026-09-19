@@ -29,12 +29,31 @@ from depfix.config import Settings
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.gh import GitHubAppError, Installation, InstallationToken, branch_name_for
 from depfix.orchestrator import Orchestrator, SkipReason
+from depfix.orchestrator.plan import PlanArtifact, plan_path_for
 from depfix.providers.models import ProviderSpec, SdkPackage
 from depfix.storage import AttemptStatus, Base, ChangeAttemptRow, RepoRow
 from depfix.storage import db as db_module
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "openai_v3_project"
 BASE = "https://api.github.com"
+
+
+def test_plan_artifact_paths_are_unique_per_repo_change(tmp_path: Path) -> None:
+    change_a = _change(old_api="openai.createModeration()")
+    change_b = _change(old_api="openai.createChatCompletion()")
+    result_a = PlanArtifact("acme/widgets", "sha", change_a, ())
+    result_b = PlanArtifact("acme/widgets", "sha", change_b, ())
+
+    result_a.write_for_repo(tmp_path)
+    result_b.write_for_repo(tmp_path)
+
+    assert plan_path_for("acme/widgets", change_a.dedupe_key, tmp_path) != plan_path_for(
+        "acme/widgets", change_b.dedupe_key, tmp_path
+    )
+    assert {plan.change_dedupe_key for plan in PlanArtifact.plans_for_repo("acme/widgets", tmp_path)} == {
+        change_a.dedupe_key,
+        change_b.dedupe_key,
+    }
 
 
 # -- shared fixtures / fakes -----------------------------------------------------

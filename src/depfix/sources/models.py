@@ -28,6 +28,7 @@ class SourceKind(StrEnum):
     """
 
     NPM_DIST_TAG = "npm_dist_tag"
+    PYPI_DIST_TAG = "pypi_dist_tag"
     GITHUB_RELEASE = "github_release"
     OPENAPI_SPEC = "openapi_spec"
     # Explicit opt-in local feed for deterministic end-to-end tests.

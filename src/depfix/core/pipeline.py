@@ -153,6 +153,21 @@ class FixPipeline:
         edits = [batch_edits.get(usage.filepath) or self._fix_one(usage, breaking_change, editor)
                  for usage in file_usages]
 
+        # A migration changes both code and the SDK version. The verifier's
+        # install step must see the bumped manifest, otherwise migrated code
+        # is evaluated against the old SDK. This temporary bump is not a
+        # verification edit: fix_service creates the committable manifest
+        # edit after source edits are verified.
+        pre_verify_bumped: list[str] = []
+        if self._verifier is not None and any(edit.is_on_disk for edit in edits):
+            from depfix.codemods.lockfile import build_manifest_bumps
+
+            for bump in build_manifest_bumps(editor.checkout.path, breaking_change):
+                bump_edit = editor.write_fix(bump.manifest_relpath, bump.fixed_content)
+                if bump_edit.changed:
+                    pre_verify_bumped.append(bump.manifest_relpath)
+                    self._codemod_notes.append(f"pre-verify bump: {bump.note}")
+
         verification: VerificationReport | None = None
         if self._verifier is not None:
             verification = self._verifier.verify(edits, change=breaking_change)
@@ -172,6 +187,12 @@ class FixPipeline:
                     logger.info(
                         "retry loop used %d round(s) for %s", rounds_used, scan_result.repo_full_name
                     )
+
+        # Preserve the checkout's original manifest. fix_service will create
+        # the reviewed, committable manifest edit only after kept source edits
+        # establish that the migration is viable.
+        for relpath in pre_verify_bumped:
+            editor.revert(relpath)
 
         total_usages_fixed = sum(e.usages_fixed for e in edits if e.is_on_disk)
 

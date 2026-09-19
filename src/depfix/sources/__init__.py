@@ -22,6 +22,7 @@ from depfix.sources.models import (
 from depfix.sources.npm_dist_tag import NpmDistTagSource
 from depfix.sources.openapi_diff import diff_specs
 from depfix.sources.openapi_spec import OpenApiSpecSource
+from depfix.sources.pypi_dist_tag import PypiDistTagSource
 
 __all__ = [
     "ChangeEvent",
@@ -32,6 +33,7 @@ __all__ = [
     "GitHubReleaseSource",
     "NpmDistTagSource",
     "OpenApiSpecSource",
+    "PypiDistTagSource",
     "Severity",
     "SourceDeps",
     "SourceKind",

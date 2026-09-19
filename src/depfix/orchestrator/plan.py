@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +40,7 @@ from depfix.verify.confidence import ConfidenceTier
 ARTIFACT_VERSION = 2
 
 DEFAULT_PLAN_DIR = ".depfix/plans"
+logger = logging.getLogger(__name__)
 
 
 def _utcnow_iso() -> str:
@@ -50,15 +52,11 @@ def plan_slug(repo_full_name: str) -> str:
     return repo_full_name.replace("/", "__")
 
 
-def plan_path_for(repo_full_name: str, directory: str | Path = DEFAULT_PLAN_DIR) -> Path:
-    """The canonical path for ``repo_full_name``'s latest plan.
-
-    One path per repo, deliberately overwritten: the interesting artifact
-    is always "the plan I just reviewed", and a directory accumulating
-    run-id-stamped files is a directory in which the operator eventually
-    applies the wrong one.
-    """
-    return Path(directory) / f"{plan_slug(repo_full_name)}.json"
+def plan_path_for(
+    repo_full_name: str, change_dedupe_key: str, directory: str | Path = DEFAULT_PLAN_DIR
+) -> Path:
+    """Return the canonical path for one reviewed ``(repo, change)`` plan."""
+    return Path(directory) / f"{plan_slug(repo_full_name)}__{change_dedupe_key[:12]}.json"
 
 
 @dataclass(frozen=True)
@@ -142,7 +140,24 @@ class PlanArtifact:
         return path
 
     def write_for_repo(self, directory: str | Path = DEFAULT_PLAN_DIR) -> Path:
-        return self.write(plan_path_for(self.repo_full_name, directory))
+        return self.write(plan_path_for(self.repo_full_name, self.change_dedupe_key, directory))
+
+    @classmethod
+    def plans_for_repo(
+        cls, repo_full_name: str, directory: str | Path = DEFAULT_PLAN_DIR
+    ) -> list[PlanArtifact]:
+        """Return readable plans for a repo, newest first."""
+        directory = Path(directory)
+        if not directory.is_dir():
+            return []
+        plans: list[PlanArtifact] = []
+        prefix = f"{plan_slug(repo_full_name)}__"
+        for path in directory.glob(f"{prefix}*.json"):
+            try:
+                plans.append(cls.read(path))
+            except (OSError, ValueError, json.JSONDecodeError, KeyError, TypeError):
+                logger.warning("skipping unreadable plan artifact at %s", path)
+        return sorted(plans, key=lambda plan: plan.created_at, reverse=True)
 
     @classmethod
     def read(cls, path: str | Path) -> PlanArtifact:
@@ -170,10 +185,8 @@ class PlanArtifact:
         """The plan most recently written for ``repo_full_name``, or ``None``
         if there isn't one. Never raises for a missing file -- "no plan yet"
         is a normal state that ``apply`` reports as an actionable message."""
-        path = plan_path_for(repo_full_name, directory)
-        if not path.is_file():
-            return None
-        return cls.read(path)
+        plans = cls.plans_for_repo(repo_full_name, directory)
+        return plans[0] if plans else None
 
     def apply_command(self) -> str:
         """The exact next command to run -- printed at the end of ``plan``,

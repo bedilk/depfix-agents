@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from depfix.orchestrator.plan import PlanArtifact
 from depfix.orchestrator.policy import SkipReason
+from depfix.severity import EvidenceKind, Severity
 from depfix.storage.schema import AttemptStatus
 
 
@@ -47,6 +48,8 @@ class ChangeOutcome:
     #: One-line result of the plan-time impact check (see
     #: :mod:`depfix.verify.impact`); empty when the check didn't run.
     impact_summary: str = ""
+    severity: Severity | None = None
+    severity_evidence: EvidenceKind | None = None
 
     @property
     def skipped(self) -> bool:
@@ -55,6 +58,14 @@ class ChangeOutcome:
     @property
     def is_failure(self) -> bool:
         return self.attempt_status == AttemptStatus.FAILED
+
+
+@dataclass(frozen=True)
+class OrchestratorRollup:
+    prs_planned: int
+    by_severity: dict[Severity, int]
+    by_repo: dict[str, list[str]]
+    total_cost_usd: float
 
 
 @dataclass
@@ -132,3 +143,17 @@ class OrchestratorOutcome:
     @property
     def total_cost_usd(self) -> float:
         return sum(c.cost_usd for r in self.repos for c in r.changes)
+
+    def rollup(self) -> OrchestratorRollup:
+        by_severity: dict[Severity, int] = {}
+        by_repo: dict[str, list[str]] = {}
+        total_cost = 0.0
+        for repo in self.repos:
+            for change in repo.changes:
+                if change.plan_artifact is None:
+                    continue
+                severity = change.severity or Severity.NONE
+                by_severity[severity] = by_severity.get(severity, 0) + 1
+                by_repo.setdefault(repo.repo_full_name, []).append(change.dedupe_key[:12])
+                total_cost += change.cost_usd
+        return OrchestratorRollup(sum(by_severity.values()), by_severity, by_repo, total_cost)

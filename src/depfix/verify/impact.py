@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -92,6 +93,7 @@ def run_impact_check(
     ignore_scripts: bool = True,
     max_output_bytes: int = 2_000_000,
     ecosystem: str = "javascript",
+    max_seconds: float | None = None,
 ) -> ImpactReport:
     """Measure the change's real effect on this checkout's test suite.
 
@@ -100,6 +102,13 @@ def run_impact_check(
     working tree even transiently.
     """
     root = Path(checkout.path)
+    started = time.monotonic()
+
+    def budget_exhausted(phase: str) -> ImpactReport | None:
+        if max_seconds is None or time.monotonic() - started < max_seconds:
+            return None
+        logger.warning("impact check budget (%.0fs) exhausted before %s", max_seconds, phase)
+        return ImpactReport(ran=False, skipped_reason=f"budget of {max_seconds:.0f}s exhausted before {phase}")
     if not checkout.is_temporary:
         return ImpactReport(ran=False, skipped_reason="checkout is not disposable")
     if ecosystem not in ("javascript", "python"):
@@ -114,6 +123,7 @@ def run_impact_check(
             skipped_reason="no manifest pin found to bump to the new version",
         )
 
+    logger.info("impact check: installing current dependencies for %s", change.package)
     install = install_dependencies(
         root, timeout=install_timeout, ignore_scripts=ignore_scripts,
         max_output_bytes=max_output_bytes, ecosystem=ecosystem,
@@ -123,6 +133,9 @@ def run_impact_check(
             ran=False,
             skipped_reason=f"baseline install failed ({install.skipped_reason or 'install error'})",
         )
+    if (over := budget_exhausted("the baseline test run")) is not None:
+        return over
+    logger.info("impact check: running the baseline test suite")
     baseline = run_tests(
         root, timeout=test_timeout, max_output_bytes=max_output_bytes, ecosystem=ecosystem
     )
@@ -141,6 +154,9 @@ def run_impact_check(
                 timeout=install_timeout, ignore_scripts=ignore_scripts,
             )
 
+        if (over := budget_exhausted("the bumped install")) is not None:
+            return over
+        logger.info("impact check: bumping %s to %s and reinstalling", change.package, change.new_version)
         bumped_install = install_dependencies(
             root, timeout=install_timeout, ignore_scripts=ignore_scripts,
             max_output_bytes=max_output_bytes, ecosystem=ecosystem,
@@ -152,6 +168,9 @@ def run_impact_check(
                 install_failed_after_bump=True,
             )
 
+        if (over := budget_exhausted("the bumped test run")) is not None:
+            return over
+        logger.info("impact check: re-running the test suite on %s", change.new_version)
         bumped = run_tests(
             root, timeout=test_timeout, max_output_bytes=max_output_bytes, ecosystem=ecosystem
         )

@@ -13,6 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from depfix.core.models import FileUsage, Usage
+from depfix.severity import EvidenceKind, Severity
 
 SCANNER_VERSION = "4.0"
 
@@ -110,6 +111,17 @@ class ScanTarget:
     sdk_package_refs: tuple[tuple[str, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class DeclaredDependency:
+    """Version evidence for one SDK declaration found during a scan."""
+
+    package: str
+    manifest_path: str
+    declared_range: str | None
+    resolved_version: str | None
+    source: str
+
+
 @dataclass
 class RepoScanResult:
     """Everything found in one scan of one checkout."""
@@ -119,8 +131,11 @@ class RepoScanResult:
     scanner_version: str = SCANNER_VERSION
     call_sites: list[CallSite] = field(default_factory=list)
     manifest_matches: list[str] = field(default_factory=list)
+    dependencies: list[DeclaredDependency] = field(default_factory=list)
     files_scanned: int = 0
     errors: list[str] = field(default_factory=list)
+    severity: Severity | None = None
+    severity_evidence: EvidenceKind | None = None
 
     @property
     def actionable_sites(self) -> list[CallSite]:

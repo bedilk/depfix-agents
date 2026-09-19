@@ -171,6 +171,8 @@ def format_rejections(result: FixPipelineResult) -> str:
     edits"`` -- safe to put straight into a ``ChangeOutcome.detail``."""
     explanations = explain_rejections(result)
     if not explanations:
+        if result.codemod_notes:
+            return "no committable edits: " + " ".join(result.codemod_notes)
         return "no committable edits, and no edit reported a reason (this is a depfix bug)"
     header = f"no committable edits ({len(explanations)} file(s)):"
     return header + "\n" + "\n".join(e.render() for e in explanations)
