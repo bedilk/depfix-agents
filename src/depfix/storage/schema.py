@@ -224,6 +224,9 @@ class BreakingChangeRow(Base):
     )
 
     change_event: Mapped[ChangeEventRow] = relationship(back_populates="breaking_changes")
+    scan_matches: Mapped[list[ScanChangeMatchRow]] = relationship(
+        back_populates="breaking_change", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"BreakingChangeRow({self.package} {self.kind} {self.old_api!r})"
@@ -295,6 +298,9 @@ class RepoScanRow(Base):
     call_sites: Mapped[list[CallSiteRow]] = relationship(
         back_populates="repo_scan", cascade="all, delete-orphan"
     )
+    change_matches: Mapped[list[ScanChangeMatchRow]] = relationship(
+        back_populates="repo_scan", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"RepoScanRow({self.repo_id}@{self.commit_sha[:8]})"
@@ -332,6 +338,44 @@ class CallSiteRow(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"CallSiteRow({self.filepath}:{self.line_number} {self.symbol})"
+
+
+class ScanChangeMatchRow(Base):
+    """The decision made when one scan is compared with one upstream change.
+
+    ``repo_scan`` stores raw observations. This row stores the derived,
+    commit-specific decision that makes a change eligible for ``plan`` while
+    preserving why it was rejected or considered actionable.
+    """
+
+    __tablename__ = "repo_scan_change"
+    __table_args__ = (
+        UniqueConstraint(
+            "repo_scan_id", "breaking_change_id", name="uq_repo_scan_change_pair"
+        ),
+        Index("ix_repo_scan_change_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    repo_scan_id: Mapped[int] = mapped_column(
+        ForeignKey("repo_scan.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    breaking_change_id: Mapped[int] = mapped_column(
+        ForeignKey("breaking_change.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    matched_call_site_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    matched_symbols: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+    repo_scan: Mapped[RepoScanRow] = relationship(back_populates="change_matches")
+    breaking_change: Mapped[BreakingChangeRow] = relationship(back_populates="scan_matches")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"ScanChangeMatchRow({self.repo_scan_id}->{self.breaking_change_id} {self.status})"
 
 
 # ============================================================================

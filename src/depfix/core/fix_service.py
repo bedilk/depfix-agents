@@ -61,7 +61,11 @@ def build_fix_pipeline(
     from depfix.codemods import CodemodRegistry as _Registry
 
     verify_required = repo_config.verify and settings.verify_enabled
-    validator = validator_for_ecosystem(ecosystem, use_ast_validation=settings.fix_validate_syntax)
+    validator = validator_for_ecosystem(
+        ecosystem,
+        use_ast_validation=settings.fix_validate_syntax,
+        checkout_root=editor.checkout.path,
+    )
     effective_codemods = codemods
     if effective_codemods is None and settings.codemods_enabled:
         effective_codemods = _Registry()

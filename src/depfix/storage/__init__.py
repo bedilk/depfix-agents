@@ -23,6 +23,7 @@ from depfix.storage.schema import (
     PullRequestRow,
     RepoRow,
     RepoScanRow,
+    ScanChangeMatchRow,
     SpecChangeRow,
     TestRunRow,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "PullRequestRow",
     "RepoRow",
     "RepoScanRow",
+    "ScanChangeMatchRow",
     "SpecChangeRow",
     "TestRunRow",
     "attempts_for_repo",

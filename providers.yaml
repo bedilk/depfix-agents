@@ -408,3 +408,141 @@ providers:
         github_repo: algolia/algoliasearch-client-javascript
       - kind: github_release
         repo: algolia/algoliasearch-client-javascript
+
+  # Additional cross-ecosystem providers for broader drift and migration
+  # testing. Candidate repositories are documented in
+  # docs/research/additional-provider-test-repos.md.
+  - id: google-cloud
+    name: Google Cloud Client Libraries
+    api_version_scheme: semver
+    api_base_urls:
+      - https://storage.googleapis.com
+    sdk_packages:
+      - name: "@google-cloud/storage"
+        ecosystem: npm
+      - name: google-cloud-storage
+        ecosystem: pypi
+    call_site_anchors:
+      - "new Storage("
+      - "storage.bucket("
+      - "bucket.file("
+      - "new GoogleAuth("
+      - "google.cloud.storage"
+    feeds:
+      - kind: npm_dist_tag
+        package: "@google-cloud/storage"
+        dist_tag: latest
+        github_repo: googleapis/nodejs-storage
+      - kind: pypi_dist_tag
+        package: google-cloud-storage
+        github_repo: googleapis/python-storage
+      - kind: github_release
+        repo: googleapis/nodejs-storage
+
+  - id: elasticsearch
+    name: Elasticsearch Clients
+    api_version_scheme: semver
+    api_base_urls:
+      - https://www.elastic.co/elasticsearch
+    sdk_packages:
+      - name: "@elastic/elasticsearch"
+        ecosystem: npm
+      - name: elasticsearch
+        ecosystem: pypi
+    call_site_anchors:
+      - "new Client("
+      - "client.search("
+      - "client.indices."
+      - "Elasticsearch("
+      - "elasticsearch.Elasticsearch("
+    feeds:
+      - kind: npm_dist_tag
+        package: "@elastic/elasticsearch"
+        dist_tag: latest
+        github_repo: elastic/elasticsearch-js
+      - kind: pypi_dist_tag
+        package: elasticsearch
+        github_repo: elastic/elasticsearch-py
+      - kind: github_release
+        repo: elastic/elasticsearch-js
+
+  - id: postgresql
+    name: PostgreSQL Client Libraries
+    api_version_scheme: semver
+    api_base_urls:
+      - https://www.postgresql.org
+    sdk_packages:
+      - name: pg
+        ecosystem: npm
+      - name: psycopg
+        ecosystem: pypi
+    call_site_anchors:
+      - "new Pool("
+      - "pool.query("
+      - "new Client("
+      - "client.query("
+      - "psycopg.connect("
+    feeds:
+      - kind: npm_dist_tag
+        package: pg
+        dist_tag: latest
+        github_repo: brianc/node-postgres
+      - kind: pypi_dist_tag
+        package: psycopg
+        github_repo: psycopg/psycopg
+      - kind: github_release
+        repo: brianc/node-postgres
+
+  - id: kafka
+    name: Apache Kafka Clients
+    api_version_scheme: semver
+    api_base_urls:
+      - https://kafka.apache.org
+    sdk_packages:
+      - name: kafkajs
+        ecosystem: npm
+      - name: kafka-python
+        ecosystem: pypi
+    call_site_anchors:
+      - "new Kafka("
+      - "producer.send("
+      - "consumer.run("
+      - "KafkaProducer("
+      - "KafkaConsumer("
+    feeds:
+      - kind: npm_dist_tag
+        package: kafkajs
+        dist_tag: latest
+        github_repo: tulios/kafkajs
+      - kind: pypi_dist_tag
+        package: kafka-python
+        github_repo: dpkp/kafka-python
+      - kind: github_release
+        repo: tulios/kafkajs
+
+  - id: rabbitmq
+    name: RabbitMQ Clients
+    api_version_scheme: semver
+    api_base_urls:
+      - https://www.rabbitmq.com
+    sdk_packages:
+      - name: amqplib
+        ecosystem: npm
+      - name: pika
+        ecosystem: pypi
+    call_site_anchors:
+      - "amqp.connect("
+      - "channel.assertQueue("
+      - "channel.sendToQueue("
+      - "pika.BlockingConnection("
+      - "channel.basic_publish("
+    feeds:
+      - kind: npm_dist_tag
+        package: amqplib
+        dist_tag: latest
+        github_repo: amqp-node/amqplib
+      - kind: pypi_dist_tag
+        package: pika
+        github_repo: pika/pika
+      - kind: github_release
+        repo: amqp-node/amqplib

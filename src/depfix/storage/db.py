@@ -100,24 +100,18 @@ def init_schema() -> None:
     """Bring the schema up to date. Cheap and idempotent — safe to invoke
     on every poller/orchestrator start-up.
 
-    SQLite (dev/test) keeps the original ``create_all`` shortcut: there's
-    no shared server whose schema needs versioning, and every test's
-    in-memory database is thrown away at the end of the test anyway.
-    Postgres (production) instead runs the real Alembic migrations in
-    ``depfix.migrations`` up to ``head`` — see :func:`_upgrade_to_head`.
-
-    ``_ensure_classified_at_column`` runs after either path as a defensive
-    no-op ALTER: it's what pre-Alembic Postgres deployments relied on to
-    pick up the Week 2 ``classified_at`` column, and stays harmless (``ADD
-    COLUMN IF NOT EXISTS``) now that the baseline migration also creates
-    that column on fresh databases.
+    SQLite (local development and tests) uses ``create_all`` for tables and
+    an additive column upgrade for existing databases. Postgres runs the
+    versioned Alembic migrations up to ``head``; the classified-at helper is
+    retained for deployments that pre-date Alembic entirely.
     """
     engine = get_engine()
     if engine.dialect.name == "sqlite":
         Base.metadata.create_all(engine)
+        _ensure_sqlite_columns(engine)
     else:
         _upgrade_to_head(engine)
-    _ensure_classified_at_column(engine)
+        _ensure_classified_at_column(engine)
 
 
 def _upgrade_to_head(engine: Engine) -> None:
@@ -196,15 +190,63 @@ def _legacy_schema_revision(engine: Engine) -> str | None:
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:
+    """Defensively repair only very old Postgres schemas."""
+    if engine.dialect.name != "postgresql":
+        return
     with engine.begin() as conn:
-        if engine.dialect.name == "sqlite":
-            columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(change_event)")}
-            if "classified_at" not in columns:
-                conn.exec_driver_sql("ALTER TABLE change_event ADD COLUMN classified_at DATETIME")
-        else:
-            conn.exec_driver_sql(
-                "ALTER TABLE change_event ADD COLUMN IF NOT EXISTS classified_at TIMESTAMPTZ"
-            )
+        conn.exec_driver_sql(
+            "ALTER TABLE change_event ADD COLUMN IF NOT EXISTS classified_at TIMESTAMPTZ"
+        )
+
+
+def _ensure_sqlite_columns(engine: Engine) -> None:
+    """Add migration columns to an existing SQLite database.
+
+    ``create_all`` does not alter tables that already exist. This idempotent
+    additive upgrade preserves existing rows and mirrors migrations 0002-0007
+    for local SQLite databases.
+    """
+    existing_tables = set(inspect(engine).get_table_names())
+    additions: dict[str, dict[str, str]] = {
+        "change_event": {"classified_at": "DATETIME", "body_url": "TEXT"},
+        "fix_run": {
+            "confidence_tier": "VARCHAR(16) NOT NULL DEFAULT 'none'",
+            "typechecked": "BOOLEAN NOT NULL DEFAULT 0",
+            "escalated": "BOOLEAN NOT NULL DEFAULT 0",
+        },
+        "file_fix": {
+            "origin": "VARCHAR(16) NOT NULL DEFAULT 'llm'",
+            "codemod_id": "VARCHAR(64) NOT NULL DEFAULT ''",
+        },
+        "pull_request": {
+            "state": "VARCHAR(16) NOT NULL DEFAULT 'open'",
+            "merged": "BOOLEAN NOT NULL DEFAULT 0",
+            "closed_at": "DATETIME",
+            "merged_at": "DATETIME",
+            "last_reconciled_at": "DATETIME",
+        },
+        "breaking_change": {
+            "severity": "VARCHAR(16)",
+            "severity_evidence": "VARCHAR(32)",
+        },
+        "call_site": {
+            "severity": "VARCHAR(16)",
+            "severity_evidence": "VARCHAR(32)",
+        },
+    }
+
+    with engine.begin() as connection:
+        for table, columns in additions.items():
+            if table not in existing_tables:
+                continue
+            existing = {
+                row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
+            }
+            for name, declaration in columns.items():
+                if name not in existing:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE {table} ADD COLUMN {name} {declaration}"
+                    )
 
 
 @contextmanager

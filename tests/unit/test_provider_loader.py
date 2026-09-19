@@ -151,7 +151,12 @@ def test_repo_shipped_providers_file_is_valid() -> None:
         "discord",
         "mongodb",
         "redis",
-        "posthog",
-        "algolia",
-    } <= ids
-    assert len([provider for provider in providers if provider.enabled]) == 20
+            "posthog",
+            "algolia",
+            "google-cloud",
+            "elasticsearch",
+            "postgresql",
+            "kafka",
+            "rabbitmq",
+        } <= ids
+    assert len([provider for provider in providers if provider.enabled]) == 25

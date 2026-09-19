@@ -1,10 +1,20 @@
 """Fix validators — verify generated patches before writing them out."""
 
+from __future__ import annotations
+
+from pathlib import Path
+
 from depfix.validators.javascript import FixValidator, create_unified_diff
 from depfix.validators.python import PythonFixValidator
+from depfix.validators.typescript import TypeScriptSyntaxValidator, is_typescript
 
 
-def validator_for_ecosystem(ecosystem_id: str, *, use_ast_validation: bool = True):
+def validator_for_ecosystem(
+    ecosystem_id: str,
+    *,
+    use_ast_validation: bool = True,
+    checkout_root: str | Path | None = None,
+):
     """The syntax validator for a fix-supported ecosystem.
 
     ``typescript`` maps to the JS validator (detection folds TS into
@@ -16,7 +26,17 @@ def validator_for_ecosystem(ecosystem_id: str, *, use_ast_validation: bool = Tru
     """
     if ecosystem_id == "python":
         return PythonFixValidator(use_ast_validation=use_ast_validation)
-    return FixValidator(use_ast_validation=use_ast_validation)
+    return FixValidator(
+        use_ast_validation=use_ast_validation,
+        checkout_root=checkout_root,
+    )
 
 
-__all__ = ["FixValidator", "PythonFixValidator", "create_unified_diff", "validator_for_ecosystem"]
+__all__ = [
+    "FixValidator",
+    "PythonFixValidator",
+    "TypeScriptSyntaxValidator",
+    "create_unified_diff",
+    "is_typescript",
+    "validator_for_ecosystem",
+]

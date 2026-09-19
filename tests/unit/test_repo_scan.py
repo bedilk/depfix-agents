@@ -17,11 +17,22 @@ from sqlalchemy.pool import StaticPool
 
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.providers.models import ProviderSpec, SdkPackage
+from depfix.scanners.matching import ScanMatchStatus, assess_scan_change
 from depfix.scanners.models import CallSiteKind, MatchConfidence, RepoScanResult, ScanTarget
-from depfix.scanners.repo import _current_commit_sha, build_scan_target, scan_path
-from depfix.scanners.store import latest_scan, record_scan, upsert_repo
+from depfix.scanners.repo import (
+    _current_commit_sha,
+    build_scan_target,
+    build_scan_target_for_changes,
+    scan_path,
+)
+from depfix.scanners.store import (
+    latest_scan,
+    record_scan,
+    record_scan_assessments,
+    upsert_repo,
+)
 from depfix.storage import db as db_module
-from depfix.storage.schema import Base
+from depfix.storage.schema import Base, BreakingChangeRow, ChangeEventRow, Provider
 
 pytestmark = pytest.mark.skipif(__import__("shutil").which("git") is None, reason="git not on PATH")
 
@@ -87,6 +98,27 @@ def test_build_scan_target_ignores_prose_old_api() -> None:
     target = build_scan_target(_provider(), change)
 
     assert target.symbols == ()
+
+
+def test_build_scan_target_for_changes_combines_every_old_symbol() -> None:
+    changes = [
+        BreakingChange(
+            package="openai", old_version="3.3.0", new_version="4.0.0",
+            old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
+            description="d", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
+            source=ClassificationSource.MANUAL, provider_id="openai",
+        ),
+        BreakingChange(
+            package="openai", old_version="3.3.0", new_version="4.0.0",
+            old_api="openai.createEmbedding", new_api="openai.embeddings.create",
+            description="d", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
+            source=ClassificationSource.MANUAL, provider_id="openai",
+        ),
+    ]
+
+    target = build_scan_target_for_changes(_provider(), changes)
+
+    assert target.symbols == ("openai.createChatCompletion", "openai.createEmbedding")
 
 
 def test_spec_diff_hint_is_qualified_into_the_scanner_namespace() -> None:
@@ -253,6 +285,58 @@ def test_record_scan_creates_repo_and_persists_call_sites(db_session: Session) -
     assert scan.files_scanned == 3
     assert len(scan.call_sites) == 1
     assert scan.call_sites[0].symbol == "openai.moderations.create"
+
+
+def test_record_scan_persists_change_assessment(db_session: Session) -> None:
+    change = BreakingChange(
+        package="openai", old_version="3.3.0", new_version="4.0.0",
+        old_api="openai.moderations.create", new_api="openai.moderations.create",
+        description="d", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
+        source=ClassificationSource.MANUAL, provider_id="openai",
+    )
+    provider = Provider(id="openai", name="OpenAI")
+    event = ChangeEventRow(
+        provider_id="openai",
+        feed_key="test",
+        source_kind="fixture",
+        new_token="4.0.0",
+        dedupe_key="event-key",
+    )
+    db_session.add(provider)
+    db_session.add(
+        BreakingChangeRow(
+            change_event=event,
+            dedupe_key=change.dedupe_key,
+            package=change.package,
+            old_version=change.old_version,
+            new_version=change.new_version,
+            old_api=change.old_api,
+            new_api=change.new_api,
+            description=change.description,
+            migration_guide=change.migration_guide,
+            kind=change.kind.value,
+            source=change.source.value,
+            provider_id=change.provider_id,
+        )
+    )
+    scan = record_scan(
+        db_session,
+        repo_full_name="acme/widgets",
+        owner="acme",
+        name="widgets",
+        result=_sample_result(),
+        provider_id="openai",
+    )
+    assessment = assess_scan_change(_sample_result(), change, provider_id="openai")
+
+    record_scan_assessments(db_session, scan=scan, assessments=[assessment])
+    db_session.commit()
+
+    stored = latest_scan(db_session, "acme/widgets")
+    assert stored is not None
+    assert len(stored.change_matches) == 1
+    assert stored.change_matches[0].status == ScanMatchStatus.ACTIONABLE.value
+    assert stored.change_matches[0].matched_symbols == ["openai.moderations.create"]
 
 
 def test_latest_scan_returns_none_for_unknown_repo(db_session: Session) -> None:

@@ -14,6 +14,8 @@ import logging
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
 from depfix.clone import Checkout, CloneService
@@ -47,7 +49,7 @@ def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = No
     removed v3 moderations endpoint" avoids flooding the report with every
     other unrelated call the repo makes against the same provider.
     """
-    symbols = _symbols_from_change(provider.id, change) if change is not None else ()
+    symbols = symbols_for_change(provider.id, change) if change is not None else ()
     return ScanTarget(
         provider_id=provider.id,
         sdk_packages=tuple(pkg.name for pkg in provider.sdk_packages),
@@ -58,7 +60,26 @@ def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = No
     )
 
 
-def _symbols_from_change(provider_id: str, change: BreakingChange) -> tuple[str, ...]:
+def build_scan_target_for_changes(
+    provider: ProviderSpec, changes: Iterable[BreakingChange]
+) -> ScanTarget:
+    """Build one discovery target for every classified change of a provider.
+
+    ``scan`` is the seam where upstream changes and repository usage meet. A
+    normal provider scan must therefore look for the old symbols of *all*
+    currently classified migrations, not only broad provider anchors. The
+    returned target remains a single scanner interface; callers do not need
+    to loop or know how migration symbols are normalized.
+    """
+    symbols: list[str] = []
+    for change in changes:
+        for symbol in symbols_for_change(provider.id, change):
+            if symbol not in symbols:
+                symbols.append(symbol)
+    return replace(build_scan_target(provider), symbols=tuple(symbols))
+
+
+def symbols_for_change(provider_id: str, change: BreakingChange) -> tuple[str, ...]:
     """Mine the dotted symbols a change is actually about.
 
     ``call_site_hints`` is trusted as-is -- it exists specifically for this.
@@ -84,6 +105,12 @@ def _symbols_from_change(provider_id: str, change: BreakingChange) -> tuple[str,
     add(candidate, allow_bare=False)
 
     return tuple(symbols)
+
+
+# Private compatibility alias for older internal callers/tests. New code uses
+# the public helper above so the matcher and scanner share one normalization
+# rule.
+_symbols_from_change = symbols_for_change
 
 
 _DOTTED_SYMBOL_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")

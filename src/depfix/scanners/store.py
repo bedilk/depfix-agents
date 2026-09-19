@@ -15,8 +15,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from depfix.core.models import BreakingChange
+from depfix.scanners.matching import ScanChangeAssessment
 from depfix.scanners.models import SCANNER_VERSION, RepoScanResult
-from depfix.storage.schema import CallSiteRow, RepoRow, RepoScanRow
+from depfix.storage.schema import (
+    BreakingChangeRow,
+    CallSiteRow,
+    RepoRow,
+    RepoScanRow,
+    ScanChangeMatchRow,
+)
 
 
 def upsert_repo(
@@ -121,3 +128,43 @@ def latest_scan(session: Session, repo_full_name: str) -> RepoScanRow | None:
         .limit(1)
     )
     return session.execute(stmt).scalar_one_or_none()
+
+
+def record_scan_assessments(
+    session: Session,
+    *,
+    scan: RepoScanRow,
+    assessments: list[ScanChangeAssessment],
+) -> list[ScanChangeMatchRow]:
+    """Persist the upstream-change decisions derived from one repository scan.
+
+    A scan can be compared to a manually supplied change which does not have
+    a database row; those decisions remain visible in CLI output but cannot
+    be linked safely, so they are intentionally not persisted here.
+    """
+    if not assessments:
+        return []
+
+    dedupe_keys = {assessment.change.dedupe_key for assessment in assessments}
+    rows = session.scalars(
+        select(BreakingChangeRow).where(BreakingChangeRow.dedupe_key.in_(dedupe_keys))
+    ).all()
+    rows_by_key = {row.dedupe_key: row for row in rows}
+
+    matches: list[ScanChangeMatchRow] = []
+    for assessment in assessments:
+        change_row = rows_by_key.get(assessment.change.dedupe_key)
+        if change_row is None:
+            continue
+        match = ScanChangeMatchRow(
+            breaking_change_id=change_row.id,
+            status=assessment.status.value,
+            reason=assessment.reason,
+            matched_call_site_count=len(assessment.matched_sites),
+            matched_symbols=list(
+                dict.fromkeys(site.symbol for site in assessment.matched_sites)
+            ),
+        )
+        scan.change_matches.append(match)
+        matches.append(match)
+    return matches

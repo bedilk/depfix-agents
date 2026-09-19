@@ -141,3 +141,112 @@ providers:
             subject: mongodb.findOne
             after: mongodb.findOneAsync
             detail: MongoDB callback migration.
+
+  # The following records are intentionally small, documented migrations.
+  # They provide a safe seed for the newly supported providers; broader API
+  # changes should be added only after an upstream migration guide and a
+  # regression fixture are available.
+  - id: google-cloud
+    sdk_packages: [{name: "@google-cloud/storage", ecosystem: npm}]
+    call_site_anchors: []
+    feeds:
+      - kind: fixture_change
+        id: google-cloud-storage-node-runtime
+        old_token: "6.0.0"
+        new_token: "7.0.0"
+        spec_changes:
+          - kind: operation_deprecated
+            severity: breaking
+            subject: node.runtime
+            after: node.runtime
+            detail: "The Google Cloud Node.js client major line may raise its minimum supported Node.js runtime; review engines and deployment images manually."
+
+  - id: elasticsearch
+    sdk_packages: [{name: "@elastic/elasticsearch", ecosystem: npm}]
+    call_site_anchors: ["client.search(", "new Client("]
+    feeds:
+      - kind: fixture_change
+        id: elasticsearch-js-v7-v8
+        old_token: "7.17.0"
+        new_token: "8.0.0"
+        spec_changes:
+          - kind: operation_removed
+            severity: breaking
+            subject: elasticsearch.client.search.callback
+            after: elasticsearch.client.search.promise
+            detail: "The v8 JavaScript client removed callback-style API calls; use the promise/async API."
+          - kind: param_renamed
+            severity: breaking
+            subject: elasticsearch.client.search.body
+            after: elasticsearch.client.search.query
+            detail: "The v8 client promotes request fields such as query to the request root instead of nesting them under body."
+          - kind: param_renamed
+            severity: breaking
+            subject: elasticsearch.Client.ssl
+            after: elasticsearch.Client.tls
+            detail: "The client option ssl was renamed to tls in v8."
+
+  - id: postgresql
+    sdk_packages: [{name: pg, ecosystem: npm}]
+    call_site_anchors: ["pg.connect(", "new pg.Pool(", "new Client("]
+    feeds:
+      - kind: fixture_change
+        id: node-postgres-v6-v7
+        old_token: "6.3.0"
+        new_token: "7.0.0"
+        spec_changes:
+          - kind: operation_id_changed
+            severity: breaking
+            subject: pg.connect
+            after: pg.Pool.connect
+            detail: "The deprecated singleton pg.connect/pg.end API was removed; create and manage a pg.Pool."
+      - kind: fixture_change
+        id: node-postgres-v7-v8-ssl
+        old_token: "7.0.0"
+        new_token: "8.0.0"
+        spec_changes:
+          - kind: param_type_changed
+            severity: breaking
+            subject: pg.Client.ssl.true
+            after: pg.Client.ssl.rejectUnauthorized.false
+            detail: "Self-signed SSL connections need ssl: { rejectUnauthorized: false } instead of ssl: true."
+
+  - id: kafka
+    sdk_packages: [{name: kafkajs, ecosystem: npm}]
+    call_site_anchors: ["Partitioners.JavaCompatiblePartitioner", "Partitioners.DefaultPartitioner"]
+    feeds:
+      - kind: fixture_change
+        id: kafkajs-v1-v2-partitioners
+        old_token: "1.16.0"
+        new_token: "2.0.0"
+        spec_changes:
+          - kind: operation_id_changed
+            severity: breaking
+            subject: kafkajs.Partitioners.JavaCompatiblePartitioner
+            after: kafkajs.Partitioners.DefaultPartitioner
+            detail: "KafkaJS v2 renamed JavaCompatiblePartitioner to DefaultPartitioner."
+          - kind: operation_id_changed
+            severity: breaking
+            subject: kafkajs.Partitioners.DefaultPartitioner
+            after: kafkajs.Partitioners.LegacyPartitioner
+            detail: "KafkaJS v2 renamed the previous default partitioner to LegacyPartitioner."
+
+  - id: rabbitmq
+    sdk_packages: [{name: pika, ecosystem: pypi}]
+    call_site_anchors: ["basic_publish(", "BlockingConnection(", "SSLOptions("]
+    feeds:
+      - kind: fixture_change
+        id: pika-v0-13-v1
+        old_token: "0.13.0"
+        new_token: "1.0.0"
+        spec_changes:
+          - kind: operation_id_changed
+            severity: breaking
+            subject: pika.publish
+            after: pika.basic_publish
+            detail: "Pika 1.0 removed the legacy basic_publish alias and standardized on basic_publish."
+          - kind: param_type_changed
+            severity: breaking
+            subject: pika.ConnectionParameters.ssl_options.dict
+            after: pika.SSLOptions
+            detail: "Pika 1.0 requires the SSLOptions class for TLS options instead of a dictionary."

@@ -17,6 +17,12 @@ from depfix.scanners.manifest import (
     range_allows_major,
     scan_manifests,
 )
+from depfix.scanners.matching import (
+    ScanChangeAssessment,
+    ScanMatchStatus,
+    assess_scan_change,
+    assess_scan_changes,
+)
 from depfix.scanners.models import (
     SCANNER_VERSION,
     CallSite,
@@ -27,8 +33,14 @@ from depfix.scanners.models import (
     ScanTarget,
     dedupe_call_sites,
 )
-from depfix.scanners.repo import build_scan_target, scan_checkout, scan_path, scan_repo
-from depfix.scanners.store import latest_scan, record_scan, upsert_repo
+from depfix.scanners.repo import (
+    build_scan_target,
+    build_scan_target_for_changes,
+    scan_checkout,
+    scan_path,
+    scan_repo,
+)
+from depfix.scanners.store import latest_scan, record_scan, record_scan_assessments, upsert_repo
 
 __all__ = [
     "SCANNER_VERSION",
@@ -41,16 +53,22 @@ __all__ = [
     "ManifestScan",
     "MatchConfidence",
     "RepoScanResult",
+    "ScanChangeAssessment",
+    "ScanMatchStatus",
     "ScanTarget",
     "affects_version",
+    "assess_scan_change",
+    "assess_scan_changes",
     "build_pattern_for_api",
     "build_scan_target",
+    "build_scan_target_for_changes",
     "dedupe_call_sites",
     "find_manifests",
     "latest_scan",
     "mask_comments",
     "range_allows_major",
     "record_scan",
+    "record_scan_assessments",
     "scan_checkout",
     "scan_manifests",
     "scan_path",

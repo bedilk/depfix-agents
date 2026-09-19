@@ -97,8 +97,13 @@ from depfix.scanners import (
     CallSiteScanner,
     MatchConfidence,
     RepoScanResult,
+    ScanChangeAssessment,
+    ScanMatchStatus,
+    assess_scan_changes,
     build_scan_target,
+    build_scan_target_for_changes,
     record_scan,
+    record_scan_assessments,
     scan_checkout,
     scan_path,
     scan_repo,
@@ -480,6 +485,33 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
         console.print(f"  [yellow]{err}[/yellow]")
 
 
+def _print_scan_assessments(assessments: list[ScanChangeAssessment]) -> None:
+    """Show the commit-specific upstream-change decisions from a scan."""
+    if not assessments:
+        return
+
+    status_style = {
+        ScanMatchStatus.ACTIONABLE: "green",
+        ScanMatchStatus.NO_CALL_SITES: "yellow",
+        ScanMatchStatus.VERSION_NOT_AFFECTED: "dim",
+    }
+    table = Table(title="Upstream Change Match")
+    table.add_column("Old API", style="cyan")
+    table.add_column("New API")
+    table.add_column("Decision")
+    table.add_column("Evidence", style="dim")
+    for assessment in assessments:
+        style = status_style[assessment.status]
+        table.add_row(
+            assessment.change.old_api or "(version drift)",
+            assessment.change.new_api or "—",
+            f"[{style}]{assessment.status.value}[/{style}]",
+            assessment.reason,
+        )
+    console.print(table)
+    console.print()
+
+
 def _outcome_text(change: ChangeOutcome) -> str:
     if change.skip_reason is not None:
         if change.skip_detail_text:
@@ -691,6 +723,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         console.print(f"[red]Error: {exc}[/red]")
         return 2
 
+    provider_changes: list[BreakingChange] = []
     if change is None and not args.old_api:
         console.print(f"[dim]Detecting changes for {provider.id}...[/dim]")
         try:
@@ -702,6 +735,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             )
             if created:
                 console.print(f"[green]{created} new breaking change(s) classified[/green]")
+            provider_changes = all_changes_for_provider(provider.id)
             change, _change_id = latest_change_for_provider(provider.id)
         except Exception as exc:  # detection must not prevent a broad provider scan
             console.print(f"[yellow]Change detection failed ({exc}); scanning all provider symbols[/yellow]")
@@ -712,11 +746,17 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                     f"({change.old_version} → {change.new_version})"
                 )
 
-    # A bare provider scan is a discovery view: show all provider usage even
-    # when automatic detection also found one particular migration. Explicit
-    # change selection remains deliberately narrow for focused investigation.
-    scan_change = change if (args.change_file or args.from_event is not None) else None
-    target = build_scan_target(provider, scan_change)
+    # Explicit change selection remains deliberately narrow. A normal scan
+    # instead searches for the old symbols of every classified provider
+    # change, which is the point where upstream feeds meet repository usage.
+    explicitly_selected_change = bool(args.change_file or args.from_event is not None)
+    scan_change = change if explicitly_selected_change else None
+    changes_to_assess = [change] if scan_change is not None else provider_changes
+    target = (
+        build_scan_target(provider, scan_change)
+        if scan_change is not None
+        else build_scan_target_for_changes(provider, changes_to_assess)
+    )
     if args.old_api:
         if change is not None:
             console.print(
@@ -782,24 +822,31 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         if gh_auth is not None:
             gh_auth.close()
 
-    if change is not None:
+    if scan_change is not None:
         from depfix.scanners.severity import severity_from_scan
 
-        result.severity, result.severity_evidence = severity_from_scan(change, result.call_sites)
+        result.severity, result.severity_evidence = severity_from_scan(
+            scan_change, result.call_sites
+        )
     _print_scan_result(result, show_low=args.show_low)
+    assessments = assess_scan_changes(
+        result, changes_to_assess, provider_id=provider.id
+    )
+    _print_scan_assessments(assessments)
 
     if not args.no_save:
         init_schema()
         with session_scope() as session:
-            record_scan(
+            scan_row = record_scan(
                 session,
                 repo_full_name=repo_full_name,
                 owner=owner or "local",
                 name=name or Path(local_path).name,
                 result=result,
                 provider_id=provider.id,
-                change=change,
+                change=scan_change,
             )
+            record_scan_assessments(session, scan=scan_row, assessments=assessments)
         console.print(f"[dim]saved scan to database ({repo_full_name})[/dim]\n")
 
     console.print("[dim]Evaluating depfix's deterministic regression corpus...[/dim]")

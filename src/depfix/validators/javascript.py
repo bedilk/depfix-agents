@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 from depfix.core.models import ValidationResult, ValidationStatus
+from depfix.validators.typescript import TypeScriptSyntaxValidator, is_typescript
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +24,19 @@ class FixValidator:
     Validates generated code fixes.
     """
 
-    def __init__(self, use_ast_validation: bool = True):
+    def __init__(
+        self,
+        use_ast_validation: bool = True,
+        checkout_root: str | Path | None = None,
+    ):
         """
         Initialize the validator.
         """
         self.use_ast_validation = use_ast_validation
         self._node_path = shutil.which("node")
         self._node_available = self._check_node_available()
+        self._checkout_root = checkout_root
+        self._ts_validator: TypeScriptSyntaxValidator | None = None
 
     def _check_node_available(self) -> bool:
         """Check if Node.js is available for syntax validation."""
@@ -86,6 +93,11 @@ class FixValidator:
         """
         Validate JavaScript/TypeScript syntax.
         """
+        if is_typescript(filepath):
+            if self._ts_validator is None:
+                self._ts_validator = TypeScriptSyntaxValidator(self._checkout_root)
+            return self._ts_validator.validate_syntax(code, filepath)
+
         if not self._node_available or self._node_path is None:
             logger.warning("Node.js not available, skipping syntax validation")
             return ValidationResult(

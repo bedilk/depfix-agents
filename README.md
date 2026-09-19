@@ -44,9 +44,13 @@ depfix run --codebase ./tests/fixtures/openai_v3_project --change-file my_change
 
 `depfix scan --repo OWNER/REPO --provider ID` is the normal end-to-end
 inspection command. Before it clones and scans the repository, it polls that
-provider's feeds and classifies new events. It then selects the newest relevant
-change, finds the affected SDK call sites, and runs the deterministic
-evaluation corpus last.
+provider's feeds and classifies new events. It reads the checkout's manifests
+and lockfiles, finds provider SDK/API call sites, and saves that evidence with
+the checkout commit SHA. It then compares every classified provider change to
+that exact scan and records an explainable decision: `actionable`,
+`no_call_sites`, or `version_not_affected`. `plan` re-scans before editing, so
+the saved scan is an audit record rather than permission to modify stale code.
+The deterministic evaluation corpus runs last.
 
 `depfix watch` remains available for scheduled fleet-wide polling — it polls
 every feed declared in `providers.yaml` — npm dist-tags,
@@ -156,12 +160,14 @@ depfix eval --compare report.json        # fail on any case that regressed pass-
 `depfix scan` first detects and classifies provider changes, then finds usages
 of that provider's SDK across a codebase — either a
 local directory or a remote repo cloned on the fly via a GitHub App
-installation — and reports/persists the call sites it finds, with a
+installation — and reports/persists the call sites, manifest/lockfile version
+evidence, and one feed-change decision per classified migration, with a
 confidence level (`HIGH`/`MEDIUM`/`LOW`) reflecting how directly each usage
 traces back to the SDK import.
 
 ```bash
-# Scan a local checkout for every OpenAI SDK symbol.
+# Scan a local checkout. Depfix detects upstream changes, compares their old
+# API symbols with this checkout, and saves the commit-specific result.
 depfix scan --path ./my-app --provider openai --no-save
 
 # This equivalent legacy-friendly form also works. --old-api narrows the

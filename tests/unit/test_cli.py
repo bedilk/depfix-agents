@@ -110,10 +110,10 @@ def test_explicit_pipeline_repo_bypasses_repo_config_file_gate(monkeypatch) -> N
     assert settings.pipeline_require_config_file is False
 
 
-def test_scan_with_auto_detected_change_keeps_provider_symbols_broad(
+def test_scan_with_auto_detected_changes_targets_all_classified_old_symbols(
     monkeypatch, tmp_path
 ) -> None:
-    """Automatic discovery must not hide other legacy SDK methods from scan."""
+    """A provider scan joins saved upstream changes to repository usage."""
     providers_file = tmp_path / "providers.yaml"
     providers_file.write_text(
         """providers:
@@ -147,6 +147,7 @@ def test_scan_with_auto_detected_change_keeps_provider_symbols_broad(
 
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
     monkeypatch.setattr(cli, "ensure_changes_detected", lambda *_args, **_kwargs: 1)
+    monkeypatch.setattr(cli, "all_changes_for_provider", lambda _provider: [change])
     monkeypatch.setattr(cli, "latest_change_for_provider", lambda _provider: (change, 1))
     monkeypatch.setattr(cli, "_print_header", lambda: None)
     monkeypatch.setattr(cli, "_print_scan_result", lambda *_args, **_kwargs: None)
@@ -159,7 +160,7 @@ def test_scan_with_auto_detected_change_keeps_provider_symbols_broad(
     monkeypatch.setattr(cli, "scan_path", capture_scan)
 
     assert cli._cmd_scan(args) == 0
-    assert captured["symbols"] == ()
+    assert captured["symbols"] == ("openai.createChatCompletion",)
 
 
 def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> None:
@@ -190,6 +191,7 @@ def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> N
         "ensure_changes_detected",
         lambda *_args, **_kwargs: phases.append("detect") or 0,
     )
+    monkeypatch.setattr(cli, "all_changes_for_provider", lambda _provider: [])
     monkeypatch.setattr(cli, "latest_change_for_provider", lambda _provider: (None, None))
     monkeypatch.setattr(cli, "_print_header", lambda: None)
     monkeypatch.setattr(cli, "_print_scan_result", lambda *_args, **_kwargs: None)
