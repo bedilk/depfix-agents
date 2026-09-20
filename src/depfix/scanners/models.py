@@ -134,6 +134,11 @@ class RepoScanResult:
     dependencies: list[DeclaredDependency] = field(default_factory=list)
     files_scanned: int = 0
     errors: list[str] = field(default_factory=list)
+    #: Repository-specific package-manager preparation performed by the scan.
+    #: Kept as ``object`` to avoid coupling the scanner value model to the
+    #: verification implementation; the concrete value is a
+    #: ``PackageManagerPreparation``.
+    package_manager_preparation: object | None = None
     severity: Severity | None = None
     severity_evidence: EvidenceKind | None = None
 

@@ -9,7 +9,9 @@ a different dependency tree than CI would have used.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +32,28 @@ _LOCKFILE_MANAGERS: tuple[tuple[str, str], ...] = (
 )
 
 DEFAULT_PACKAGE_MANAGER = "npm"
+_SUPPORTED_MANAGED_CLIENTS = frozenset({"yarn", "pnpm"})
+_PACKAGE_MANAGER_SPEC = re.compile(r"^(?P<name>yarn|pnpm)@(?P<version>\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?)$")
+
+
+@dataclass(frozen=True)
+class PackageManagerPreparation:
+    """A repository-specific JavaScript package-manager runtime.
+
+    The scanner is responsible for preparing this runtime once a repository
+    has been cloned. Verification calls the same deep module defensively so
+    ``plan`` remains safe when invoked without a preceding ``scan``.
+    """
+
+    package_manager: str
+    executable: Path | None = None
+    version: str = ""
+    installed: bool = False
+    detail: str = ""
+
+    @property
+    def ready(self) -> bool:
+        return self.executable is not None and not self.detail
 
 
 @dataclass
@@ -57,8 +81,140 @@ def detect_package_manager(root: str | Path) -> str:
     return DEFAULT_PACKAGE_MANAGER
 
 
-def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> list[str]:
+def prepare_package_manager(
+    root: str | Path,
+    *,
+    cache_dir: str | Path | None = None,
+    timeout: float = 90.0,
+    package_manager: str | None = None,
+) -> PackageManagerPreparation:
+    """Make the repository's declared JS package manager available.
+
+    npm is supplied by Node and is only checked. Yarn and pnpm are installed
+    at the exact version declared by ``packageManager`` into a Depfix-owned
+    cache, never globally and never into the target checkout. Bun is detected
+    but not bootstrapped because its vendor installer is a shell script; the
+    operator must install it explicitly.
+    """
+    from depfix.scanners.workspace import find_workspace_root
+
+    workspace = find_workspace_root(Path(root))
+    manager = package_manager or detect_package_manager(workspace)
+    declared_version = _declared_manager_version(workspace, manager)
+
+    installed = _which(manager)
+    if installed is not None:
+        return PackageManagerPreparation(
+            package_manager=manager,
+            executable=Path(installed),
+            version=declared_version,
+        )
+
+    if manager == "npm":
+        return PackageManagerPreparation(
+            package_manager=manager,
+            detail="npm not found on PATH (install Node.js, which includes npm)",
+        )
+    if manager == "bun":
+        return PackageManagerPreparation(
+            package_manager=manager,
+            detail="bun not found on PATH; automatic Bun installation is disabled",
+        )
+    if manager not in _SUPPORTED_MANAGED_CLIENTS:
+        return PackageManagerPreparation(
+            package_manager=manager,
+            detail=f"automatic provisioning is not supported for {manager}",
+        )
+
+    # Reusing an already-cached runtime needs neither npm nor network access.
+    version = declared_version or "latest"
+    base = Path(cache_dir) if cache_dir is not None else _default_runtime_cache()
+    prefix = base / manager / version
+    executable = prefix / "node_modules" / ".bin" / manager
+    if executable.is_file():
+        return PackageManagerPreparation(
+            package_manager=manager, executable=executable, version=version, installed=True
+        )
+
+    if _which("npm") is None:
+        return PackageManagerPreparation(
+            package_manager=manager,
+            version=declared_version,
+            detail=f"{manager} not found and npm is unavailable to provision it",
+        )
+
+    # A lockfile tells us which manager is required. A repository that omits
+    # packageManager gets the current official client, but a declared version
+    # is always honoured so a Yarn Berry monorepo does not receive Yarn 1.
+    package = _runtime_package(manager, version)
+
+    argv = [
+        "npm", "install", "--ignore-scripts", "--prefix", str(prefix),
+        "--no-save", f"{package}@{version}",
+    ]
+    result = run_sandboxed(
+        argv, cwd=workspace, timeout=timeout, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES
+    )
+    if not result.ok:
+        message = result.error or result.stderr.strip() or f"exit code {result.exit_code}"
+        return PackageManagerPreparation(
+            package_manager=manager,
+            version=version,
+            detail=f"could not provision {manager}@{version}: {message}",
+        )
+    if not executable.is_file():
+        return PackageManagerPreparation(
+            package_manager=manager,
+            version=version,
+            detail=f"provisioning {manager}@{version} completed but no executable was installed",
+        )
+    return PackageManagerPreparation(
+        package_manager=manager, executable=executable, version=version, installed=True
+    )
+
+
+def _declared_manager_version(root: Path, manager: str) -> str:
+    try:
+        package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    raw = package.get("packageManager")
+    if not isinstance(raw, str):
+        return ""
+    match = _PACKAGE_MANAGER_SPEC.fullmatch(raw.strip())
+    if match is None or match.group("name") != manager:
+        return ""
+    return match.group("version")
+
+
+def _runtime_package(manager: str, version: str) -> str:
+    # Yarn v2+ is Berry and is distributed as the official CLI dist package;
+    # the `yarn` npm package only supplies classic Yarn v1.
+    if manager == "yarn" and version not in {"latest", ""}:
+        try:
+            if int(version.split(".", 1)[0]) >= 2:
+                return "@yarnpkg/cli-dist"
+        except ValueError:
+            pass
+    return manager
+
+
+def _default_runtime_cache() -> Path:
+    return Path.home() / ".depfix" / "package-managers"
+
+
+def _is_yarn_berry(version: str) -> bool:
+    try:
+        return int(version.split(".", 1)[0]) >= 2
+    except ValueError:
+        return False
+
+
+def _install_argv(
+    package_manager: str, root: Path, *, ignore_scripts: bool, version: str = ""
+) -> list[str]:
     has_lockfile = any((root / lockfile).is_file() for lockfile, mgr in _LOCKFILE_MANAGERS if mgr == package_manager)
+    yarn_berry = package_manager == "yarn" and _is_yarn_berry(version)
 
     if package_manager == "bun":
         argv = ["bun", "install"]
@@ -69,7 +225,7 @@ def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> 
     elif package_manager == "yarn":
         argv = ["yarn", "install"]
         if has_lockfile:
-            argv.append("--frozen-lockfile")
+            argv.append("--immutable" if yarn_berry else "--frozen-lockfile")
     elif package_manager == "pnpm":
         argv = ["pnpm", "install"]
         if has_lockfile:
@@ -77,7 +233,11 @@ def _install_argv(package_manager: str, root: Path, *, ignore_scripts: bool) -> 
     else:
         argv = ["npm", "install"]
 
-    if ignore_scripts:
+    if yarn_berry and ignore_scripts:
+        # Yarn Berry has no `--ignore-scripts` flag. Its documented
+        # dependency-installer equivalent avoids package build scripts.
+        argv.append("--mode=skip-build")
+    elif ignore_scripts:
         argv.append("--ignore-scripts")
     return argv
 
@@ -89,7 +249,12 @@ def build_install_argv(root: str | Path, *, ignore_scripts: bool, package_manage
     logic and without reaching into this module's private helpers."""
     root = Path(root)
     manager = package_manager or detect_package_manager(root)
-    return _install_argv(manager, root, ignore_scripts=ignore_scripts)
+    return _install_argv(
+        manager,
+        root,
+        ignore_scripts=ignore_scripts,
+        version=_declared_manager_version(root, manager),
+    )
 
 
 def install_dependencies(
@@ -124,10 +289,22 @@ def install_dependencies(
     from depfix.scanners.workspace import find_workspace_root
     install_root = find_workspace_root(root)
     manager = package_manager or detect_package_manager(install_root)
-    argv = _install_argv(manager, install_root, ignore_scripts=ignore_scripts)
-
-    if _which(argv[0]) is None:
-        return InstallResult(package_manager=manager, skipped_reason=f"{argv[0]} not found on PATH")
+    prepared = prepare_package_manager(
+        install_root, timeout=min(timeout, 90.0), package_manager=manager
+    )
+    if not prepared.ready:
+        return InstallResult(package_manager=manager, skipped_reason=prepared.detail)
+    argv = _install_argv(
+        manager,
+        install_root,
+        ignore_scripts=ignore_scripts,
+        version=prepared.version,
+    )
+    # Preserve the familiar bare command when it was already installed. A
+    # managed runtime needs its absolute path because its cache directory is
+    # intentionally not added to the operator's global PATH.
+    if prepared.installed:
+        argv[0] = str(prepared.executable)
 
     logger.info("installing dependencies: %s (cwd=%s)", " ".join(argv), install_root)
     result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)

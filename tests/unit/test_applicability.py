@@ -14,14 +14,14 @@ def _change() -> BreakingChange:
     )
 
 
-def test_drift_on_another_resolved_major_is_not_affected() -> None:
+def test_major_drift_is_a_human_review_candidate() -> None:
     verdict = change_applies(
         [DeclaredDependency("openai", "package-lock.json", "^4.24.7", "4.24.7", "lockfile")],
         _change(),
     )
 
-    assert verdict.status is Applicability.NOT_AFFECTED
-    assert "different major" in verdict.reason
+    assert verdict.status is Applicability.APPLIES
+    assert "human review" in verdict.reason
 
 
 def test_missing_version_evidence_does_not_hide_call_sites() -> None:

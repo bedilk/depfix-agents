@@ -47,9 +47,15 @@ class Classifier:
             # from its canonical feed key when classifying a persisted event.
             if not event.raw.get("package"):
                 if event.feed_key.startswith("npm:"):
-                    package = event.feed_key.removeprefix("npm:").rsplit(":", 1)[0]
+                    # Scan-bootstrap events add a repo/version suffix for
+                    # idempotency.  Strip it before recovering the ordinary
+                    # ``npm:<package>:<dist-tag>`` identity.
+                    feed_identity = event.feed_key.removeprefix("npm:").split(":repo:", 1)[0]
+                    package = feed_identity.rsplit(":", 1)[0]
                 elif event.feed_key.startswith("pypi:"):
-                    package = event.feed_key.removeprefix("pypi:")
+                    # Scan-bootstrap events add a repository/version suffix
+                    # for idempotency, just like npm events do.
+                    package = event.feed_key.removeprefix("pypi:").split(":repo:", 1)[0]
             return ClassifyOutcome(changes=[BreakingChange(
                 package=package,
                 old_version=event.old_token,

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from depfix.verify.manager import PackageManagerPreparation
 from depfix.verify.models import TestFramework, TestStatus
 from depfix.verify.runner import (
     _reporter_args,
@@ -173,6 +174,31 @@ def test_run_tests_reads_reporter_output_file_when_written(
     assert result.cases[0].status == TestStatus.PASSED
     assert result.used_fallback_parser is False
     assert result.duration_ms == 42.0
+
+
+def test_run_tests_uses_the_isolated_runtime_prepared_by_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_package_json(tmp_path, {"scripts": {"test": "node --test"}})
+    executable = tmp_path / ".depfix-tools" / "yarn"
+    prepared = PackageManagerPreparation(
+        package_manager="yarn", executable=executable, version="4.18.0", installed=True
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "depfix.verify.runner.prepare_package_manager", lambda *_args, **_kwargs: prepared
+    )
+
+    def fake_run_sandboxed(argv, *, cwd, timeout, extra_env=None, max_output_bytes=0):
+        captured["argv"] = argv
+        return SandboxResult(argv=tuple(argv), exit_code=0, stdout="", stderr="", duration_ms=1.0)
+
+    monkeypatch.setattr("depfix.verify.runner.run_sandboxed", fake_run_sandboxed)
+
+    run_tests(tmp_path, timeout=5.0, package_manager="yarn")
+
+    assert captured["argv"][0] == str(executable)
 
 
 def test_run_tests_falls_back_to_stdout_when_no_reporter_file_written(

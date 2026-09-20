@@ -14,13 +14,14 @@ import pytest
 from depfix.verify.manager import (
     DEFAULT_PACKAGE_MANAGER,
     InstallResult,
+    PackageManagerPreparation,
     _install_argv,
     _which,
     detect_package_manager,
     install_dependencies,
+    prepare_package_manager,
 )
 from depfix.verify.sandbox import SandboxResult
-
 
 # -- detect_package_manager -----------------------------------------------------
 
@@ -47,6 +48,61 @@ def test_detect_package_manager_detects_yarn(tmp_path: Path) -> None:
 def test_detect_package_manager_detects_pnpm(tmp_path: Path) -> None:
     (tmp_path / "pnpm-lock.yaml").write_text("", encoding="utf-8")
     assert detect_package_manager(tmp_path) == "pnpm"
+
+
+def test_prepare_package_manager_installs_repository_pinned_yarn_in_isolated_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scan can prepare Yarn Berry without requiring a global Yarn install."""
+    (tmp_path / "package.json").write_text(
+        '{"packageManager": "yarn@4.18.0"}', encoding="utf-8"
+    )
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    cache_dir = tmp_path / "tools"
+
+    def fake_which(executable: str) -> str | None:
+        return "/usr/bin/npm" if executable == "npm" else None
+
+    def fake_run_sandboxed(argv, *, cwd, timeout, max_output_bytes, **kwargs):
+        assert argv[:4] == ["npm", "install", "--ignore-scripts", "--prefix"]
+        prefix = Path(argv[4])
+        executable = prefix / "node_modules" / ".bin" / "yarn"
+        executable.parent.mkdir(parents=True)
+        executable.write_text("#!/bin/sh\n", encoding="utf-8")
+        return SandboxResult(
+            argv=tuple(argv), exit_code=0, stdout="", stderr="", duration_ms=1.0
+        )
+
+    monkeypatch.setattr("depfix.verify.manager._which", fake_which)
+    monkeypatch.setattr("depfix.verify.manager.run_sandboxed", fake_run_sandboxed)
+
+    result = prepare_package_manager(tmp_path, cache_dir=cache_dir, timeout=5.0)
+
+    assert result == PackageManagerPreparation(
+        package_manager="yarn",
+        executable=cache_dir / "yarn" / "4.18.0" / "node_modules" / ".bin" / "yarn",
+        version="4.18.0",
+        installed=True,
+    )
+
+
+def test_prepare_package_manager_marks_an_existing_cached_runtime_as_managed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"packageManager": "yarn@4.18.0"}', encoding="utf-8"
+    )
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    cache_dir = tmp_path / "tools"
+    executable = cache_dir / "yarn" / "4.18.0" / "node_modules" / ".bin" / "yarn"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("depfix.verify.manager._which", lambda executable: None)
+
+    result = prepare_package_manager(tmp_path, cache_dir=cache_dir, timeout=5.0)
+
+    assert result.executable == executable
+    assert result.installed is True
 
 
 # -- _install_argv ---------------------------------------------------------------
@@ -77,6 +133,17 @@ def test_install_argv_yarn_adds_frozen_lockfile_only_with_lockfile(tmp_path: Pat
         "yarn",
         "install",
         "--frozen-lockfile",
+    ]
+
+
+def test_install_argv_yarn_berry_uses_immutable_lockfile(tmp_path: Path) -> None:
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+
+    assert _install_argv("yarn", tmp_path, ignore_scripts=True, version="4.18.0") == [
+        "yarn",
+        "install",
+        "--immutable",
+        "--mode=skip-build",
     ]
 
 

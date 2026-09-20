@@ -38,6 +38,7 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -54,6 +55,7 @@ from depfix.classify import (
     OllamaCompleter,
     breaking_change_from_row,
     classify_pending,
+    discover_usage_candidates,
 )
 from depfix.clone import CloneError, CloneService
 from depfix.config import Settings, get_settings
@@ -62,6 +64,7 @@ from depfix.core.models import AgentResult, BreakingChange, ChangeKind, Classifi
 from depfix.core.pipeline import FixPipelineResult
 from depfix.core.shortcuts import (
     all_changes_for_provider,
+    capture_repository_dependency_drift,
     ensure_changes_detected,
     latest_change_for_provider,
 )
@@ -94,6 +97,7 @@ from depfix.providers.loader import ProviderConfigError, load_providers_file
 from depfix.providers.models import ProviderSpec
 from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
 from depfix.scanners import (
+    CallSiteKind,
     CallSiteScanner,
     MatchConfidence,
     RepoScanResult,
@@ -101,7 +105,6 @@ from depfix.scanners import (
     ScanMatchStatus,
     assess_scan_changes,
     build_scan_target,
-    build_scan_target_for_changes,
     record_scan,
     record_scan_assessments,
     scan_checkout,
@@ -118,6 +121,7 @@ from depfix.storage import (
     init_schema,
     record_fix_run,
     record_pull_request,
+    reset_sqlite_state,
     session_scope,
 )
 from depfix.watcher.runner import Watcher, WatchOutcome
@@ -492,6 +496,7 @@ def _print_scan_assessments(assessments: list[ScanChangeAssessment]) -> None:
 
     status_style = {
         ScanMatchStatus.ACTIONABLE: "green",
+        ScanMatchStatus.CURRENT: "green",
         ScanMatchStatus.NO_CALL_SITES: "yellow",
         ScanMatchStatus.VERSION_NOT_AFFECTED: "dim",
     }
@@ -510,6 +515,93 @@ def _print_scan_assessments(assessments: list[ScanChangeAssessment]) -> None:
         )
     console.print(table)
     console.print()
+
+
+def _print_dependency_drift_summary(
+    result: RepoScanResult, assessments: list[ScanChangeAssessment]
+) -> None:
+    """Print feed-version context without implying an automatic upgrade."""
+    from depfix.scanners.drift_summary import summarize_dependency_drift
+
+    rows = summarize_dependency_drift(result, assessments)
+    if not rows:
+        return
+    table = Table(title="Dependency Drift Summary (feed observation)")
+    table.add_column("Package", style="cyan")
+    table.add_column("Repository version")
+    table.add_column("Feed version")
+    table.add_column("Decision")
+    table.add_column("Risk if ignored", style="dim")
+    for row in rows:
+        table.add_row(
+            row.package,
+            row.current_version,
+            row.feed_version,
+            row.decision,
+            row.risk,
+        )
+    console.print(table)
+    console.print(
+        "[dim]A feed version is comparison evidence, not automatic permission to "
+        "perform a major upgrade.[/dim]\n"
+    )
+
+
+def _write_scan_report(
+    *,
+    local_path: str | None,
+    remote_repo: str | None,
+    result: RepoScanResult,
+    assessments: list[ScanChangeAssessment],
+    settings: Settings,
+) -> None:
+    """Persist an operator-requested Markdown report without touching main."""
+    from depfix.scanners.report import render_scan_report
+
+    content = render_scan_report(result, assessments)
+    relpath = ".depfix/scan-report.md"
+    if local_path is not None:
+        destination = Path(local_path) / relpath
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8")
+        console.print(f"[green]Scan report:[/green] {destination}")
+        return
+
+    assert remote_repo is not None
+    owner, name = remote_repo.split("/", 1)
+    auth = _build_gh_auth(settings)
+    if auth is None:
+        console.print("[yellow]Could not write scan report: GitHub App is not configured.[/yellow]")
+        return
+    try:
+        installation = auth.resolve_installation_for_repo(owner, name)
+        token = auth.installation_token(
+            installation.id, repositories=(name,), permissions={"contents": "write"}
+        )
+        branch = f"{BRANCH_PREFIX}scan-report-{result.commit_sha[:12]}"
+        edit = FileEdit(
+            relpath=relpath,
+            original_content="",
+            fixed_content=content,
+            diff="",
+            verdict=EditVerdict.KEPT,
+            derivation_trace="Depfix scan report",
+        )
+        with BranchWriter(token.token, owner, name) as writer:
+            writer.commit_edits(
+                branch=branch,
+                base_branch=auth.default_ref(owner, name),
+                message="chore(depfix): add scan report",
+                edits=[edit],
+            )
+    except GitHubAppError as exc:
+        console.print(f"[yellow]Could not write scan report: {exc}[/yellow]")
+        return
+    finally:
+        auth.close()
+    console.print(
+        f"[green]Scan report branch:[/green] https://github.com/{remote_repo}/tree/{branch}/{relpath}"
+    )
 
 
 def _outcome_text(change: ChangeOutcome) -> str:
@@ -746,17 +838,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                     f"({change.old_version} → {change.new_version})"
                 )
 
-    # Explicit change selection remains deliberately narrow. A normal scan
-    # instead searches for the old symbols of every classified provider
-    # change, which is the point where upstream feeds meet repository usage.
+    # Explicit selection remains deliberately narrow. A normal scan begins
+    # broad: it records all provider usage before feed candidates are matched
+    # against the repository's actual API symbols.
     explicitly_selected_change = bool(args.change_file or args.from_event is not None)
     scan_change = change if explicitly_selected_change else None
     changes_to_assess = [change] if scan_change is not None else provider_changes
-    target = (
-        build_scan_target(provider, scan_change)
-        if scan_change is not None
-        else build_scan_target_for_changes(provider, changes_to_assess)
-    )
+    target = build_scan_target(provider, scan_change)
     if args.old_api:
         if change is not None:
             console.print(
@@ -787,6 +875,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             result = scan_path(
                 local_path, target, repo_full_name=repo_full_name, scanner=scanner,
                 change=scan_change, judge=judge,
+                prepare_package_manager_runtime=settings.scan_prepare_package_manager,
+                package_manager_timeout=settings.package_manager_install_timeout,
             )
         else:
             assert remote_repo is not None
@@ -814,6 +904,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 scanner=scanner,
                 change=scan_change,
                 judge=judge,
+                prepare_package_manager_runtime=settings.scan_prepare_package_manager,
+                package_manager_timeout=settings.package_manager_install_timeout,
             )
     except (CloneError, GitHubAppError, FileNotFoundError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
@@ -828,13 +920,130 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         result.severity, result.severity_evidence = severity_from_scan(
             scan_change, result.call_sites
         )
+    if change is None and not args.old_api:
+        # The first feed poll after ``init`` is correctly a baseline, but a
+        # repository lockfile supplies the missing old side of a version
+        # comparison.  Persist that scan-specific drift before assessing call
+        # sites, so a fresh SQLite database has useful, non-stale findings.
+        package_ecosystems: dict[str, tuple[str, ...]] = {}
+        for sdk in provider.sdk_packages:
+            package_ecosystems[sdk.name] = (*package_ecosystems.get(sdk.name, ()), sdk.ecosystem)
+        captured = capture_repository_dependency_drift(
+            provider.id,
+            repository=repo_full_name,
+            dependencies=result.dependencies,
+            package_ecosystems=package_ecosystems,
+        )
+        if captured:
+            console.print(
+                f"[green]{captured} repository/feed version drift record(s) classified[/green]"
+            )
+            provider_changes = all_changes_for_provider(provider.id)
+            changes_to_assess = provider_changes
+    if scan_change is None and result.actionable_sites:
+        completer = _build_completer(settings)
+        if completer is not None:
+            package = provider.sdk_packages[0].name if provider.sdk_packages else provider.id
+            with session_scope() as session:
+                discovered = discover_usage_candidates(
+                    session,
+                    provider_id=provider.id,
+                    package=package,
+                    observed_symbols=[site.symbol for site in result.actionable_sites],
+                    completer=completer,
+                )
+            if discovered:
+                provider_changes = all_changes_for_provider(provider.id)
+                # ``discover_usage_candidates`` persists before returning,
+                # but include its return value too. This keeps the scan
+                # decision correct for every storage adapter and avoids
+                # making the security decision depend on a read-after-write.
+                changes_to_assess = list(
+                    {
+                        change.dedupe_key: change
+                        for change in [*provider_changes, *discovered]
+                    }.values()
+                )
+                console.print(
+                    f"[green]{len(discovered)} feed-proven migration candidate(s) "
+                    "matched this repository's usage[/green]"
+                )
     _print_scan_result(result, show_low=args.show_low)
+    preparation = result.package_manager_preparation
+    if preparation is not None:
+        from depfix.verify.manager import PackageManagerPreparation
+
+        assert isinstance(preparation, PackageManagerPreparation)
+        if preparation.ready:
+            source = "installed in Depfix cache" if preparation.installed else "already available"
+            version = f"@{preparation.version}" if preparation.version else ""
+            console.print(
+                f"[green]Package manager ready:[/green] "
+                f"{preparation.package_manager}{version} ({source})"
+            )
+        else:
+            console.print(
+                f"[yellow]Package manager unavailable:[/yellow] {preparation.detail}"
+            )
     assessments = assess_scan_changes(
         result, changes_to_assess, provider_id=provider.id
     )
     _print_scan_assessments(assessments)
+    _print_dependency_drift_summary(result, assessments)
+    if args.write_report:
+        _write_scan_report(
+            local_path=local_path,
+            remote_repo=remote_repo,
+            result=result,
+            assessments=assessments,
+            settings=settings,
+        )
 
     if not args.no_save:
+        # Repository usage is recorded before plan/apply eligibility is
+        # considered. The catalog's managed section preserves every resolved
+        # call site, including usages for which no feed has a migration yet.
+        from depfix.catalog import canonical_providers_file, record_detected_usage
+
+        catalog_path = canonical_providers_file()
+        if catalog_path is not None:
+            recordable_kinds = frozenset(
+                {
+                    CallSiteKind.METHOD_CALL,
+                    CallSiteKind.BARE_SYMBOL,
+                    CallSiteKind.SDK_IMPORT,
+                    CallSiteKind.CLIENT_CONSTRUCTION,
+                    CallSiteKind.WRAPPER_IMPORT,
+                }
+            )
+            provider_packages = {sdk.name for sdk in provider.sdk_packages}
+            try:
+                learned = record_detected_usage(
+                    catalog_path,
+                    repo_full_name=repo_full_name,
+                    commit_sha=result.commit_sha,
+                    provider_id=provider.id,
+                    detected_symbols=[
+                        site.symbol
+                        for site in result.actionable_sites
+                        if site.kind in recordable_kinds
+                    ],
+                    classified_changes=changes_to_assess,
+                    sdk_versions={
+                        dependency.package: dependency.resolved_version
+                        for dependency in result.dependencies
+                        if dependency.package in provider_packages
+                        and dependency.resolved_version is not None
+                    },
+                )
+            except (OSError, yaml.YAMLError) as exc:
+                console.print(f"[yellow]Could not update migration catalog: {exc}[/yellow]")
+            else:
+                if learned:
+                    console.print(
+                        f"[green]{learned} repository API usage record(s) written to "
+                        "repository_migrations[/green]"
+                    )
         init_schema()
         with session_scope() as session:
             scan_row = record_scan(
@@ -1256,6 +1465,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
     console.print("[dim]Initializing database...[/dim]")
     try:
+        if not args.keep_state and reset_sqlite_state():
+            console.print("  [green]✓[/green] cleared local SQLite state")
         init_schema()
         console.print(f"  [green]✓[/green] database ready ({get_engine().dialect.name})")
     except Exception as exc:
@@ -1858,6 +2069,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also print LOW-confidence (report-only, never auto-fixed) call sites",
     )
+    scan_p.add_argument(
+        "--write-report",
+        action="store_true",
+        help="Write .depfix/scan-report.md locally, or to a dedicated depfix branch for --repo",
+    )
     _add_command_logging_arguments(scan_p)
 
     # -- repos --------------------------------------------------------------------
@@ -2039,6 +2255,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_p.add_argument("--providers-file", default=None, help="Path to providers.yaml")
     init_p.add_argument("--offline", action="store_true", help="Skip GitHub App and LLM network checks")
+    init_p.add_argument(
+        "--keep-state",
+        action="store_true",
+        help="Keep existing local SQLite history instead of starting a fresh local run",
+    )
     _add_command_logging_arguments(init_p)
 
     return p

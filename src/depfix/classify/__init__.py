@@ -13,6 +13,10 @@ from depfix.classify.store import (
     load_unclassified_events,
     persist_classification,
 )
+from depfix.classify.usage_candidates import (
+    UsageCandidateResolver,
+    discover_usage_candidates,
+)
 
 __all__ = [
     "Classifier",
@@ -23,9 +27,11 @@ __all__ = [
     "LLMResponse",
     "NotesClassifier",
     "OllamaCompleter",
+    "UsageCandidateResolver",
     "breaking_change_from_row",
     "classify_pending",
     "classify_spec_changes",
+    "discover_usage_candidates",
     "event_from_row",
     "load_unclassified_events",
     "persist_classification",

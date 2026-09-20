@@ -1,252 +1,719 @@
 # Canonical migrations cover historical breaks a new depfix installation
 # cannot observe through a first upstream poll. Feed IDs are stable, making
 # every catalog migration idempotent through the normal watcher cursor.
-providers:
-  - id: openai
-    sdk_packages: [{name: openai, ecosystem: npm}]
-    call_site_anchors: ["sdk.createChatCompletion("]
-    feeds:
-      - kind: fixture_change
-        id: openai-v3-v4-canonical
-        old_token: "3.3.0"
-        new_token: "4.0.1"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: openai.createChatCompletion
-            after: openai.chat.completions.create
-            detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: openai.createCompletion
-            after: openai.completions.create
-            detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: openai.createEmbedding
-            after: openai.embeddings.create
-            detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: openai.createModeration
-            after: openai.moderations.create
-            detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: openai.createImage
-            after: openai.images.generate
-            detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: openai.createEdit
-            after: openai.edits.create
-            detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
+# providers:
+#   - id: openai
+#     sdk_packages: [{name: openai, ecosystem: npm}]
+#     call_site_anchors: ["sdk.createChatCompletion("]
+#     feeds:
+#       - kind: fixture_change
+#         id: openai-v3-v4-canonical
+#         old_token: "3.3.0"
+#         new_token: "4.0.1"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: openai.createChatCompletion
+#             after: openai.chat.completions.create
+#             detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: openai.createCompletion
+#             after: openai.completions.create
+#             detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: openai.createEmbedding
+#             after: openai.embeddings.create
+#             detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: openai.createModeration
+#             after: openai.moderations.create
+#             detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: openai.createImage
+#             after: openai.images.generate
+#             detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: openai.createEdit
+#             after: openai.edits.create
+#             detail: OpenAI v4 migration. Configuration and OpenAIApi classes removed; use new OpenAI({ apiKey }) directly.
 
-  - id: stripe
-    sdk_packages: [{name: stripe, ecosystem: npm}]
-    call_site_anchors: ["sdk.charges.create("]
-    feeds:
-      - kind: fixture_change
-        id: stripe-v12-v13
-        old_token: "12.0.0"
-        new_token: "13.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: stripe.charges.create
-            after: stripe.paymentIntents.create
-            detail: Stripe Charges migration.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: stripe.charges.retrieve
-            after: stripe.paymentIntents.retrieve
-            detail: Stripe Charges migration.
-          - kind: operation_id_changed
-            severity: breaking
-            subject: stripe.charges.list
-            after: stripe.paymentIntents.list
-            detail: Stripe Charges migration.
+#   - id: stripe
+#     sdk_packages: [{name: stripe, ecosystem: npm}]
+#     call_site_anchors: ["sdk.charges.create("]
+#     feeds:
+#       - kind: fixture_change
+#         id: stripe-v12-v13
+#         old_token: "12.0.0"
+#         new_token: "13.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: stripe.charges.create
+#             after: stripe.paymentIntents.create
+#             detail: Stripe Charges migration.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: stripe.charges.retrieve
+#             after: stripe.paymentIntents.retrieve
+#             detail: Stripe Charges migration.
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: stripe.charges.list
+#             after: stripe.paymentIntents.list
+#             detail: Stripe Charges migration.
 
-  - id: anthropic
-    sdk_packages: [{name: "@anthropic-ai/sdk", ecosystem: npm}]
-    call_site_anchors: ["sdk.completions.create("]
-    feeds:
-      - kind: fixture_change
-        id: anthropic-completions-messages
-        old_token: "0.8.0"
-        new_token: "0.9.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: anthropic.completions.create
-            after: anthropic.messages.create
-            detail: Anthropic Messages migration.
+#   - id: anthropic
+#     sdk_packages: [{name: "@anthropic-ai/sdk", ecosystem: npm}]
+#     call_site_anchors: ["sdk.completions.create("]
+#     feeds:
+#       - kind: fixture_change
+#         id: anthropic-completions-messages
+#         old_token: "0.8.0"
+#         new_token: "0.9.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: anthropic.completions.create
+#             after: anthropic.messages.create
+#             detail: Anthropic Messages migration.
 
-  - id: supabase
-    sdk_packages: [{name: "@supabase/supabase-js", ecosystem: npm}]
-    call_site_anchors: ["sdk.auth.signIn("]
-    feeds:
-      - kind: fixture_change
-        id: supabase-v1-v2
-        old_token: "1.0.0"
-        new_token: "2.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: supabase.auth.signIn
-            after: supabase.auth.signInWithPassword
-            detail: Supabase auth migration.
+#   - id: supabase
+#     sdk_packages: [{name: "@supabase/supabase-js", ecosystem: npm}]
+#     call_site_anchors: ["sdk.auth.signIn("]
+#     feeds:
+#       - kind: fixture_change
+#         id: supabase-v1-v2
+#         old_token: "1.0.0"
+#         new_token: "2.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: supabase.auth.signIn
+#             after: supabase.auth.signInWithPassword
+#             detail: Supabase auth migration.
 
-  - id: vercel-ai
-    sdk_packages: [{name: ai, ecosystem: npm}]
-    call_site_anchors: ["sdk.generateText("]
-    feeds:
-      - kind: fixture_change
-        id: vercel-ai-v2-v3
-        old_token: "2.0.0"
-        new_token: "3.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: vercel-ai.generateText
-            after: vercel-ai.streamText
-            detail: Vercel AI migration.
+#   - id: vercel-ai
+#     sdk_packages: [{name: ai, ecosystem: npm}]
+#     call_site_anchors: ["sdk.generateText("]
+#     feeds:
+#       - kind: fixture_change
+#         id: vercel-ai-v2-v3
+#         old_token: "2.0.0"
+#         new_token: "3.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: vercel-ai.generateText
+#             after: vercel-ai.streamText
+#             detail: Vercel AI migration.
 
-  - id: sentry
-    sdk_packages: [{name: "@sentry/node", ecosystem: npm}]
-    call_site_anchors: ["sdk.Integrations.Http("]
-    feeds:
-      - kind: fixture_change
-        id: sentry-v7-v8
-        old_token: "7.0.0"
-        new_token: "8.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: sentry.Integrations.Http
-            after: sentry.httpIntegration
-            detail: Sentry integration migration.
+#   - id: sentry
+#     sdk_packages: [{name: "@sentry/node", ecosystem: npm}]
+#     call_site_anchors: ["sdk.Integrations.Http("]
+#     feeds:
+#       - kind: fixture_change
+#         id: sentry-v7-v8
+#         old_token: "7.0.0"
+#         new_token: "8.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: sentry.Integrations.Http
+#             after: sentry.httpIntegration
+#             detail: Sentry integration migration.
 
-  - id: mongodb
-    sdk_packages: [{name: mongodb, ecosystem: npm}]
-    call_site_anchors: ["sdk.findOne("]
-    feeds:
-      - kind: fixture_change
-        id: mongodb-v4-v5
-        old_token: "4.0.0"
-        new_token: "5.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: mongodb.findOne
-            after: mongodb.findOneAsync
-            detail: MongoDB callback migration.
+#   - id: mongodb
+#     sdk_packages: [{name: mongodb, ecosystem: npm}]
+#     call_site_anchors: ["sdk.findOne("]
+#     feeds:
+#       - kind: fixture_change
+#         id: mongodb-v4-v5
+#         old_token: "4.0.0"
+#         new_token: "5.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: mongodb.findOne
+#             after: mongodb.findOneAsync
+#             detail: MongoDB callback migration.
 
-  # The following records are intentionally small, documented migrations.
-  # They provide a safe seed for the newly supported providers; broader API
-  # changes should be added only after an upstream migration guide and a
-  # regression fixture are available.
-  - id: google-cloud
-    sdk_packages: [{name: "@google-cloud/storage", ecosystem: npm}]
-    call_site_anchors: []
-    feeds:
-      - kind: fixture_change
-        id: google-cloud-storage-node-runtime
-        old_token: "6.0.0"
-        new_token: "7.0.0"
-        spec_changes:
-          - kind: operation_deprecated
-            severity: breaking
-            subject: node.runtime
-            after: node.runtime
-            detail: "The Google Cloud Node.js client major line may raise its minimum supported Node.js runtime; review engines and deployment images manually."
+#   # The following records are intentionally small, documented migrations.
+#   # They provide a safe seed for the newly supported providers; broader API
+#   # changes should be added only after an upstream migration guide and a
+#   # regression fixture are available.
+#   - id: google-cloud
+#     sdk_packages: [{name: "@google-cloud/storage", ecosystem: npm}]
+#     call_site_anchors: []
+#     feeds:
+#       - kind: fixture_change
+#         id: google-cloud-storage-node-runtime
+#         old_token: "6.0.0"
+#         new_token: "7.0.0"
+#         spec_changes:
+#           - kind: operation_deprecated
+#             severity: breaking
+#             subject: node.runtime
+#             after: node.runtime
+#             detail: "The Google Cloud Node.js client major line may raise its minimum supported Node.js runtime; review engines and deployment images manually."
 
-  - id: elasticsearch
-    sdk_packages: [{name: "@elastic/elasticsearch", ecosystem: npm}]
-    call_site_anchors: ["client.search(", "new Client("]
-    feeds:
-      - kind: fixture_change
-        id: elasticsearch-js-v7-v8
-        old_token: "7.17.0"
-        new_token: "8.0.0"
-        spec_changes:
-          - kind: operation_removed
-            severity: breaking
-            subject: elasticsearch.client.search.callback
-            after: elasticsearch.client.search.promise
-            detail: "The v8 JavaScript client removed callback-style API calls; use the promise/async API."
-          - kind: param_renamed
-            severity: breaking
-            subject: elasticsearch.client.search.body
-            after: elasticsearch.client.search.query
-            detail: "The v8 client promotes request fields such as query to the request root instead of nesting them under body."
-          - kind: param_renamed
-            severity: breaking
-            subject: elasticsearch.Client.ssl
-            after: elasticsearch.Client.tls
-            detail: "The client option ssl was renamed to tls in v8."
+#   - id: elasticsearch
+#     sdk_packages: [{name: "@elastic/elasticsearch", ecosystem: npm}]
+#     call_site_anchors: ["client.search(", "new Client("]
+#     feeds:
+#       - kind: fixture_change
+#         id: elasticsearch-js-v7-v8
+#         old_token: "7.17.0"
+#         new_token: "8.0.0"
+#         spec_changes:
+#           - kind: operation_removed
+#             severity: breaking
+#             subject: elasticsearch.client.search.callback
+#             after: elasticsearch.client.search.promise
+#             detail: "The v8 JavaScript client removed callback-style API calls; use the promise/async API."
+#           - kind: param_renamed
+#             severity: breaking
+#             subject: elasticsearch.client.search.body
+#             after: elasticsearch.client.search.query
+#             detail: "The v8 client promotes request fields such as query to the request root instead of nesting them under body."
+#           - kind: param_renamed
+#             severity: breaking
+#             subject: elasticsearch.Client.ssl
+#             after: elasticsearch.Client.tls
+#             detail: "The client option ssl was renamed to tls in v8."
 
-  - id: postgresql
-    sdk_packages: [{name: pg, ecosystem: npm}]
-    call_site_anchors: ["pg.connect(", "new pg.Pool(", "new Client("]
-    feeds:
-      - kind: fixture_change
-        id: node-postgres-v6-v7
-        old_token: "6.3.0"
-        new_token: "7.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: pg.connect
-            after: pg.Pool.connect
-            detail: "The deprecated singleton pg.connect/pg.end API was removed; create and manage a pg.Pool."
-      - kind: fixture_change
-        id: node-postgres-v7-v8-ssl
-        old_token: "7.0.0"
-        new_token: "8.0.0"
-        spec_changes:
-          - kind: param_type_changed
-            severity: breaking
-            subject: pg.Client.ssl.true
-            after: pg.Client.ssl.rejectUnauthorized.false
-            detail: "Self-signed SSL connections need ssl: { rejectUnauthorized: false } instead of ssl: true."
+#   - id: postgresql
+#     sdk_packages: [{name: pg, ecosystem: npm}]
+#     call_site_anchors: ["pg.connect(", "new pg.Pool(", "new Client("]
+#     feeds:
+#       - kind: fixture_change
+#         id: node-postgres-v6-v7
+#         old_token: "6.3.0"
+#         new_token: "7.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: pg.connect
+#             after: pg.Pool.connect
+#             detail: "The deprecated singleton pg.connect/pg.end API was removed; create and manage a pg.Pool."
+#       - kind: fixture_change
+#         id: node-postgres-v7-v8-ssl
+#         old_token: "7.0.0"
+#         new_token: "8.0.0"
+#         spec_changes:
+#           - kind: param_type_changed
+#             severity: breaking
+#             subject: pg.Client.ssl.true
+#             after: pg.Client.ssl.rejectUnauthorized.false
+#             detail: "Self-signed SSL connections need ssl: { rejectUnauthorized: false } instead of ssl: true."
 
-  - id: kafka
-    sdk_packages: [{name: kafkajs, ecosystem: npm}]
-    call_site_anchors: ["Partitioners.JavaCompatiblePartitioner", "Partitioners.DefaultPartitioner"]
-    feeds:
-      - kind: fixture_change
-        id: kafkajs-v1-v2-partitioners
-        old_token: "1.16.0"
-        new_token: "2.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: kafkajs.Partitioners.JavaCompatiblePartitioner
-            after: kafkajs.Partitioners.DefaultPartitioner
-            detail: "KafkaJS v2 renamed JavaCompatiblePartitioner to DefaultPartitioner."
-          - kind: operation_id_changed
-            severity: breaking
-            subject: kafkajs.Partitioners.DefaultPartitioner
-            after: kafkajs.Partitioners.LegacyPartitioner
-            detail: "KafkaJS v2 renamed the previous default partitioner to LegacyPartitioner."
+#   - id: kafka
+#     sdk_packages: [{name: kafkajs, ecosystem: npm}]
+#     call_site_anchors: ["Partitioners.JavaCompatiblePartitioner", "Partitioners.DefaultPartitioner"]
+#     feeds:
+#       - kind: fixture_change
+#         id: kafkajs-v1-v2-partitioners
+#         old_token: "1.16.0"
+#         new_token: "2.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: kafkajs.Partitioners.JavaCompatiblePartitioner
+#             after: kafkajs.Partitioners.DefaultPartitioner
+#             detail: "KafkaJS v2 renamed JavaCompatiblePartitioner to DefaultPartitioner."
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: kafkajs.Partitioners.DefaultPartitioner
+#             after: kafkajs.Partitioners.LegacyPartitioner
+#             detail: "KafkaJS v2 renamed the previous default partitioner to LegacyPartitioner."
 
-  - id: rabbitmq
-    sdk_packages: [{name: pika, ecosystem: pypi}]
-    call_site_anchors: ["basic_publish(", "BlockingConnection(", "SSLOptions("]
-    feeds:
-      - kind: fixture_change
-        id: pika-v0-13-v1
-        old_token: "0.13.0"
-        new_token: "1.0.0"
-        spec_changes:
-          - kind: operation_id_changed
-            severity: breaking
-            subject: pika.publish
-            after: pika.basic_publish
-            detail: "Pika 1.0 removed the legacy basic_publish alias and standardized on basic_publish."
-          - kind: param_type_changed
-            severity: breaking
-            subject: pika.ConnectionParameters.ssl_options.dict
-            after: pika.SSLOptions
-            detail: "Pika 1.0 requires the SSLOptions class for TLS options instead of a dictionary."
+#   - id: rabbitmq
+#     sdk_packages: [{name: pika, ecosystem: pypi}]
+#     call_site_anchors: ["basic_publish(", "BlockingConnection(", "SSLOptions("]
+#     feeds:
+#       - kind: fixture_change
+#         id: pika-v0-13-v1
+#         old_token: "0.13.0"
+#         new_token: "1.0.0"
+#         spec_changes:
+#           - kind: operation_id_changed
+#             severity: breaking
+#             subject: pika.publish
+#             after: pika.basic_publish
+#             detail: "Pika 1.0 removed the legacy basic_publish alias and standardized on basic_publish."
+#           - kind: param_type_changed
+#             severity: breaking
+#             subject: pika.ConnectionParameters.ssl_options.dict
+#             after: pika.SSLOptions
+#             detail: "Pika 1.0 requires the SSLOptions class for TLS options instead of a dictionary."
+
+# Depfix-managed repository migration observations.
+repository_migrations:
+- provider_id: kafka
+  repository: bedilk/amplication
+  commit_sha: 7656495d27f0dceff89657590c3f14149e45c7a6
+  current_api: kafka.Kafka
+  sdk_package: kafkajs
+  sdk_version: 2.2.4
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: 2.2.4
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: rabbitmq
+  repository: bedilk/n8n
+  commit_sha: 69b0c527fa2b36f7a1b1f55d59d17271d36fabbc
+  current_api: rabbitmq.connect
+  sdk_package: ''
+  sdk_version: ''
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: ''
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: rabbitmq
+  repository: bedilk/n8n
+  commit_sha: 69b0c527fa2b36f7a1b1f55d59d17271d36fabbc
+  current_api: rabbitmq.credentials.external
+  sdk_package: ''
+  sdk_version: ''
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: ''
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: kafka
+  repository: bedilk/kafkajs-consume-produce
+  commit_sha: 7e0fbe0857f648167500b3235f50b667f27af1ea
+  current_api: kafka.Kafka
+  sdk_package: kafkajs
+  sdk_version: 2.2.4
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: 2.2.4
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: kafka
+  repository: bedilk/kafkajs-consume-produce
+  commit_sha: 7e0fbe0857f648167500b3235f50b667f27af1ea
+  current_api: kafka.consumer
+  sdk_package: kafkajs
+  sdk_version: 2.2.4
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: 2.2.4
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: kafka
+  repository: bedilk/kafkajs-consume-produce
+  commit_sha: 7e0fbe0857f648167500b3235f50b667f27af1ea
+  current_api: kafka.producer
+  sdk_package: kafkajs
+  sdk_version: 2.2.4
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: 2.2.4
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: google-cloud
+  repository: bedilk/biomes-game
+  commit_sha: 669da235acbc5ec19720b047889c4aaa1c013ce2
+  current_api: google-cloud.Storage
+  sdk_package: ''
+  sdk_version: ''
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: ''
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: google-cloud
+  repository: bedilk/depfix-citizen
+  commit_sha: 6061a2531b9de45471a607c9d89536668838d1c9
+  current_api: google-cloud.Storage
+  sdk_package: '@google-cloud/storage'
+  sdk_version: 7.7.0
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: 7.7.0
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: google-cloud
+  repository: bedilk/depfix-citizen
+  commit_sha: 6061a2531b9de45471a607c9d89536668838d1c9
+  current_api: google-cloud.bucket
+  sdk_package: '@google-cloud/storage'
+  sdk_version: 7.7.0
+  old_api: ''
+  new_api: ''
+  status: non_actionable
+  source_url: ''
+  evidence: ''
+  current_version: 7.7.0
+  latest_version: ''
+  reason: rescan required to compare this usage with current feeds
+- provider_id: openai
+  repository: bedilk/LibreChat
+  commit_sha: ba44443fdb232bbe6d4977e2619774b5a72586ac
+  current_api: openai.images.generate
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.20.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: openai
+  repository: bedilk/LibreChat
+  commit_sha: ba44443fdb232bbe6d4977e2619774b5a72586ac
+  current_api: openai.mockImplementation
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.20.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: kafka
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: kafka.Kafka
+  sdk_package: ''
+  current_version: ''
+  latest_version: 2.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: kafka
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: kafka.admin
+  sdk_package: ''
+  current_version: ''
+  latest_version: 2.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: kafka
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: kafka.apacheKafka
+  sdk_package: ''
+  current_version: ''
+  latest_version: 2.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: kafka
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: kafka.consumer
+  sdk_package: ''
+  current_version: ''
+  latest_version: 2.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: kafka
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: kafka.producer
+  sdk_package: ''
+  current_version: ''
+  latest_version: 2.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.accounts.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.billingPortal.sessions.create
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.checkout.sessions.create
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.checkout.sessions.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.create
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.del
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.list
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.update
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.oauth.token
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.subscriptions.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.subscriptions.update
+  sdk_package: ''
+  current_version: ''
+  latest_version: 13.0.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: mongodb
+  repository: bedilk/Rocket.Chat
+  commit_sha: e4e82e71a7f3598a2a5a8ce3a979933f67699855
+  current_api: mongodb.MongoClient
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.6.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: mongodb
+  repository: bedilk/Rocket.Chat
+  commit_sha: e4e82e71a7f3598a2a5a8ce3a979933f67699855
+  current_api: mongodb.ObjectId
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.6.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: mongodb
+  repository: bedilk/Rocket.Chat
+  commit_sha: e4e82e71a7f3598a2a5a8ce3a979933f67699855
+  current_api: mongodb.ReadPreference
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.6.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: mongodb
+  repository: bedilk/Rocket.Chat
+  commit_sha: e4e82e71a7f3598a2a5a8ce3a979933f67699855
+  current_api: mongodb.connect
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.6.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: mongodb
+  repository: bedilk/Rocket.Chat
+  commit_sha: e4e82e71a7f3598a2a5a8ce3a979933f67699855
+  current_api: mongodb.db
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.6.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: mongodb
+  repository: bedilk/Rocket.Chat
+  commit_sha: e4e82e71a7f3598a2a5a8ce3a979933f67699855
+  current_api: mongodb.toHexString
+  sdk_package: ''
+  current_version: ''
+  latest_version: 7.6.0
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/documenso
+  commit_sha: e658cc581878f52c03b3e6a8f7ffd613aead4e69
+  current_api: stripe.subscriptions.update
+  sdk_package: stripe
+  current_version: 12.18.0
+  latest_version: 22.6.2
+  status: actionable
+  reason: installed SDK 12.18.0 is behind the feed's latest 22.6.2
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''

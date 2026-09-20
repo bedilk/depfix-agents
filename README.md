@@ -15,7 +15,9 @@ When a package ships a breaking change, `depfix`:
 - Python **3.11+**
 - Node.js **20+** (used to syntax-check generated JS/TS fixes)
 - npm (used by `depfix plan`/`apply` to install a target repo's dependencies and run its real test
-  suite when verifying a fix; not needed for `depfix scan`/`depfix run`'s syntax-only checks)
+  suite when verifying a fix). During `scan`, Depfix also detects the repository's npm, Yarn, or
+  pnpm client. Missing repository-pinned Yarn/pnpm versions are installed into `~/.depfix/`
+  rather than globally, ready for later verification.
 - A Google Generative AI API key ([get one here](https://aistudio.google.com/app/apikey)), or a
   local [Ollama](https://ollama.com/) install for `--llm-provider ollama`
 
@@ -48,9 +50,20 @@ provider's feeds and classifies new events. It reads the checkout's manifests
 and lockfiles, finds provider SDK/API call sites, and saves that evidence with
 the checkout commit SHA. It then compares every classified provider change to
 that exact scan and records an explainable decision: `actionable`,
-`no_call_sites`, or `version_not_affected`. `plan` re-scans before editing, so
-the saved scan is an audit record rather than permission to modify stale code.
-The deterministic evaluation corpus runs last.
+`current`, `no_call_sites`, or `version_not_affected`. When a feed contains
+release-note or spec evidence for an API that the repository actually uses,
+Depfix may create a feed-proven migration candidate; its old API must match an
+observed symbol and its evidence must be verbatim from the feed. Each saved
+scan updates the catalog's managed `repository_migrations` section with every
+resolved high/medium-confidence repository symbol, its repository and commit
+SHA, resolved SDK package/version, the latest feed version, and one of two
+decisions: `actionable` (the SDK is behind a feed version or the old API is
+used) or `non_actionable`. A reason explains the comparison. The hand-authored
+catalog describes provider feeds; it is not a fallback source of changes to
+fix. `plan` re-scans and still requires a classified, feed-proven change before
+editing, so a broad provider anchor, a stale observation, or version metadata
+alone can never authorize a model call or PR. The deterministic evaluation
+corpus runs last.
 
 `depfix watch` remains available for scheduled fleet-wide polling — it polls
 every feed declared in `providers.yaml` — npm dist-tags,
@@ -202,6 +215,14 @@ install it on the target repo(s)/org, and set:
 `depfix scan` mints a short-lived, least-privilege installation token per
 scan and shallow-clones (`--depth=1`) into a temp directory that's removed
 after the scan regardless of outcome.
+
+For JavaScript repositories, scan also prepares the package manager that the
+checkout declares. npm is checked from `PATH`; a missing pinned Yarn or pnpm
+client is installed with `npm --ignore-scripts` into
+`~/.depfix/package-managers/`, outside both the target repository and your
+global toolchain. `plan` and `apply` repeat this preparation defensively, so
+they remain usable when run without a preceding scan. Bun is detected but not
+auto-installed because its vendor installer is an arbitrary shell script.
 
 ### Safe GitHub App test repositories
 
@@ -377,6 +398,8 @@ All configuration is read from environment variables (or a local `.env` file). S
 | `CLONE_DIR`       | system temp dir      | Base directory for shallow clones        |
 | `CLONE_MAX_REPO_MB` | `500`               | Reject a clone once its working tree exceeds this size |
 | `SCAN_MAX_FILES`  | `20000`              | Hard cap on files scanned per repo       |
+| `SCAN_PREPARE_PACKAGE_MANAGER` | `true` | Prepare repository-pinned Yarn/pnpm during scan in the isolated Depfix cache |
+| `PACKAGE_MANAGER_INSTALL_TIMEOUT` | `90` | Seconds allowed to provision a package-manager runtime |
 | `FIX_VALIDATE_SYNTAX` | `true`           | Run syntax/sanity checks before writing an edit to disk |
 | `VERIFY_ENABLED`  | `true`               | Whether `depfix plan`/`apply` runs the repo's own test suite to confirm each edit |
 | `VERIFY_INSTALL_TIMEOUT` | `300`         | Wall-clock cap (seconds) for the dependency install step |

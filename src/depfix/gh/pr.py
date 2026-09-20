@@ -60,6 +60,15 @@ def build_pr_body(
         lines += ["", "### Evidence", "", f"> {change.evidence}"]
     if change.source_url:
         lines += ["", f"Source: {change.source_url}"]
+    if _is_major_dependency_review(change):
+        lines += [
+            "",
+            "### Human review required",
+            "",
+            "This is a registry-confirmed major dependency update. Depfix opened "
+            "this as a draft PR after validation/verification; review the provider's "
+            "migration guidance before merging.",
+        ]
 
     lines += ["", "### Files changed", "", "| File | Verdict | Author | Usages fixed |", "| --- | --- | --- | --- |"]
     for edit in edits:
@@ -105,6 +114,14 @@ def _author_label(edit: FileEdit) -> str:
     return "model"
 
 
+def _is_major_dependency_review(change: BreakingChange) -> bool:
+    if change.kind.value != "dependency_version_bump":
+        return False
+    from depfix.codemods.lockfile import dependency_drift_policy
+
+    return dependency_drift_policy(change) == "review_pr"
+
+
 _PR_TRAILER_PREFIX = "<!-- depfix:v1"
 
 
@@ -131,7 +148,10 @@ def kept_edits(result: FixPipelineResult) -> list[FileEdit]:
     return [edit for edit in result.edits if edit.verdict == EditVerdict.KEPT]
 
 
-def committable_edits(result: FixPipelineResult, *, allow_unverified: bool = False) -> list[FileEdit]:
+def committable_edits(
+    result: FixPipelineResult, *, allow_unverified: bool = False,
+    allow_review_suspects: bool = False,
+) -> list[FileEdit]:
     """Edits safe to push to a branch.
 
     Defaults to the same test-confirmed-only set as :func:`kept_edits`. When
@@ -143,7 +163,18 @@ def committable_edits(result: FixPipelineResult, *, allow_unverified: bool = Fal
     syntax couldn't even be validated has no business in a PR.
     """
     verdicts = {EditVerdict.KEPT, EditVerdict.APPLIED} if allow_unverified else {EditVerdict.KEPT}
-    return [edit for edit in result.edits if edit.verdict in verdicts]
+    edits = [edit for edit in result.edits if edit.verdict in verdicts]
+    if allow_review_suspects:
+        # Deterministic registry-drift PRs may proceed when the repository's
+        # test reporter/typecheck is unavailable. A suspect edit is admitted
+        # only when syntax validation itself succeeded/was unnecessary; this
+        # covers unavailable verification tooling, never malformed source.
+        edits.extend(
+            edit for edit in result.edits
+            if edit.verdict is EditVerdict.SUSPECT
+            and (edit.validation is None or edit.validation.is_valid)
+        )
+    return edits
 
 
 def open_pull_request(

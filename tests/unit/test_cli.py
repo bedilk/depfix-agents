@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 
 from depfix import cli
@@ -9,7 +11,13 @@ from depfix.cli import _cmd_pipeline, _scan_location, build_parser
 from depfix.config import Settings
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 from depfix.providers.loader import ProviderConfigError
-from depfix.scanners.models import RepoScanResult
+from depfix.scanners.models import (
+    CallSite,
+    CallSiteKind,
+    DeclaredDependency,
+    MatchConfidence,
+    RepoScanResult,
+)
 
 
 def test_log_format_is_accepted_after_watch_subcommand() -> None:
@@ -110,10 +118,10 @@ def test_explicit_pipeline_repo_bypasses_repo_config_file_gate(monkeypatch) -> N
     assert settings.pipeline_require_config_file is False
 
 
-def test_scan_with_auto_detected_changes_targets_all_classified_old_symbols(
+def test_scan_with_auto_detected_changes_starts_with_broad_usage_discovery(
     monkeypatch, tmp_path
 ) -> None:
-    """A provider scan joins saved upstream changes to repository usage."""
+    """A normal scan finds repository usage before matching feed changes."""
     providers_file = tmp_path / "providers.yaml"
     providers_file.write_text(
         """providers:
@@ -160,7 +168,7 @@ def test_scan_with_auto_detected_changes_targets_all_classified_old_symbols(
     monkeypatch.setattr(cli, "scan_path", capture_scan)
 
     assert cli._cmd_scan(args) == 0
-    assert captured["symbols"] == ("openai.createChatCompletion",)
+    assert captured["symbols"] == ()
 
 
 def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> None:
@@ -206,3 +214,150 @@ def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> N
 
     assert cli._cmd_scan(args) == 0
     assert phases == ["detect", "scan", "evaluate"]
+
+
+def test_scan_derives_feed_candidate_only_from_observed_api_usage(monkeypatch, tmp_path) -> None:
+    providers_file = tmp_path / "providers.yaml"
+    providers_file.write_text(
+        """providers:
+  - id: openai
+    sdk_packages: [{name: openai, ecosystem: npm}]
+    feeds: [{kind: fixture_change, id: test, old_token: '3.0.0', new_token: '4.0.0'}]
+"""
+    )
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    candidate = BreakingChange(
+        package="openai", old_version="3.0.0", new_version="4.0.0",
+        old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
+        description="migration", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
+        source=ClassificationSource.LLM_SYNTHESIS, provider_id="openai",
+    )
+    settings = Settings(providers_file=str(providers_file), llm_provider="ollama")
+    args = build_parser().parse_args(
+        ["scan", "--path", str(checkout), "--provider", "openai", "--no-save"]
+    )
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setattr(cli, "ensure_changes_detected", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(cli, "all_changes_for_provider", lambda _provider: [])
+    monkeypatch.setattr(cli, "latest_change_for_provider", lambda _provider: (None, None))
+    monkeypatch.setattr(cli, "_build_completer", lambda _settings: object())
+    monkeypatch.setattr(cli, "_print_header", lambda: None)
+    monkeypatch.setattr(cli, "_print_scan_result", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_print_scan_assessments", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_cmd_eval", lambda _args: 0)
+
+    @contextmanager
+    def fake_session_scope():
+        yield object()
+
+    monkeypatch.setattr(cli, "session_scope", fake_session_scope)
+
+    def discover(_session, **kwargs):
+        seen.update(kwargs)
+        return [candidate]
+
+    monkeypatch.setattr(cli, "discover_usage_candidates", discover)
+    monkeypatch.setattr(
+        cli,
+        "scan_path",
+        lambda *_args, **_kwargs: RepoScanResult(
+            repo_full_name="local",
+            commit_sha="test",
+            call_sites=[
+                CallSite(
+                    filepath="src/openai.js", line_number=1, column=0,
+                    line_content="openai.createChatCompletion({})",
+                    kind=CallSiteKind.METHOD_CALL, confidence=MatchConfidence.HIGH,
+                    symbol="openai.createChatCompletion", provider_id="openai",
+                )
+            ],
+        ),
+    )
+
+    assert cli._cmd_scan(args) == 0
+    assert seen["observed_symbols"] == ["openai.createChatCompletion"]
+
+
+def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_path) -> None:
+    """A persisted scan writes its resolved usage before plan eligibility."""
+    import depfix.catalog as catalog
+
+    providers_file = tmp_path / "providers.yaml"
+    providers_file.write_text(
+        """providers:
+  - id: openai
+    sdk_packages: [{name: openai, ecosystem: npm}]
+    feeds: [{kind: fixture_change, id: test, old_token: '3.0.0', new_token: '4.0.0'}]
+"""
+    )
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    candidate = BreakingChange(
+        package="openai", old_version="3.0.0", new_version="4.0.0",
+        old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
+        description="migration", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
+        source=ClassificationSource.LLM_SYNTHESIS, provider_id="openai",
+        evidence="release note says use openai.chat.completions.create",
+    )
+    settings = Settings(providers_file=str(providers_file), llm_provider="ollama")
+    args = build_parser().parse_args(
+        ["scan", "--path", str(checkout), "--provider", "openai"]
+    )
+    learned: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setattr(cli, "ensure_changes_detected", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(cli, "all_changes_for_provider", lambda _provider: [])
+    monkeypatch.setattr(cli, "latest_change_for_provider", lambda _provider: (None, None))
+    monkeypatch.setattr(cli, "_build_completer", lambda _settings: object())
+    monkeypatch.setattr(cli, "_print_header", lambda: None)
+    monkeypatch.setattr(cli, "_print_scan_result", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_print_scan_assessments", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_cmd_eval", lambda _args: 0)
+    monkeypatch.setattr(cli, "init_schema", lambda: None)
+    monkeypatch.setattr(cli, "record_scan", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "record_scan_assessments", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(catalog, "canonical_providers_file", lambda: "catalog.yaml")
+
+    @contextmanager
+    def fake_session_scope():
+        yield object()
+
+    monkeypatch.setattr(cli, "session_scope", fake_session_scope)
+    monkeypatch.setattr(cli, "discover_usage_candidates", lambda *_args, **_kwargs: [candidate])
+    monkeypatch.setattr(
+        cli,
+        "scan_path",
+        lambda *_args, **_kwargs: RepoScanResult(
+            repo_full_name="local", commit_sha="observed-sha",
+            dependencies=[
+                DeclaredDependency("openai", "package-lock.json", "^3", "3.3.0", "lockfile"),
+                DeclaredDependency("unrelated", "package-lock.json", "^1", "1.0.0", "lockfile"),
+            ],
+            call_sites=[
+                CallSite(
+                    filepath="src/openai.js", line_number=1, column=0,
+                    line_content="openai.createChatCompletion({})",
+                    kind=CallSiteKind.METHOD_CALL, confidence=MatchConfidence.HIGH,
+                    symbol="openai.createChatCompletion", provider_id="openai",
+                )
+            ],
+        ),
+    )
+
+    def record(path, **kwargs):
+        learned["path"] = path
+        learned.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(catalog, "record_detected_usage", record)
+
+    assert cli._cmd_scan(args) == 0
+    assert learned["path"] == "catalog.yaml"
+    assert learned["commit_sha"] == "observed-sha"
+    assert learned["detected_symbols"] == ["openai.createChatCompletion"]
+    assert learned["classified_changes"] == [candidate]
+    assert learned["sdk_versions"] == {"openai": "3.3.0"}

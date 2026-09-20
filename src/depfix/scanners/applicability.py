@@ -45,9 +45,9 @@ def _decide_one(dep: DeclaredDependency, change: BreakingChange) -> Applicabilit
         if resolved is not None:
             if is_drift and resolved[0] != new[0]:
                 return ApplicabilityVerdict(
-                    Applicability.NOT_AFFECTED,
-                    f"{dep.manifest_path} resolves {dep.package} to {dep.resolved_version}, "
-                    f"a different major than {change.new_version}",
+                    Applicability.APPLIES,
+                    f"{dep.manifest_path} resolves {dep.package} to {dep.resolved_version}; "
+                    f"major drift to {change.new_version} requires human review",
                 )
             affected = affects_version(dep.resolved_version, change.old_version, change.new_version)
             if affected is True:
@@ -63,6 +63,13 @@ def _decide_one(dep: DeclaredDependency, change: BreakingChange) -> Applicabilit
                 )
     if dep.declared_range:
         old = _parse_semver(change.old_version)
+        declared = _parse_semver(dep.declared_range)
+        if is_drift and declared is not None and declared[0] != new[0]:
+            return ApplicabilityVerdict(
+                Applicability.APPLIES,
+                f"{dep.manifest_path} pins {dep.package} to {dep.declared_range}; "
+                f"major drift to {change.new_version} requires human review",
+            )
         target_major = new[0] if is_drift else (old[0] if old is not None else new[0])
         if range_allows_major(dep.declared_range, target_major) is False:
             return ApplicabilityVerdict(

@@ -36,8 +36,11 @@ def db_session() -> Session:
 def _add_event(session: Session, *, body: str = "", body_url: str | None = None) -> ChangeEventRow:
     row = ChangeEventRow(
         provider_id="acme",
-        feed_key="npm:widgets:latest",
-        source_kind="npm_dist_tag",
+        # This helper covers the empty-release-notes path. Registry events
+        # are intentionally classified as dependency drift even without a
+        # prose body, so they belong in classifier-specific tests instead.
+        feed_key="github_release:acme/widgets",
+        source_kind="github_release",
         old_token="1.0.0",
         new_token="2.0.0",
         body=body,

@@ -96,6 +96,28 @@ def test_scan_manifests_resolves_version_from_lockfile_v2plus(tmp_path: Path) ->
     assert scan.matches[0].resolved_version == "4.20.1"
 
 
+def test_scan_manifests_resolves_workspace_version_from_pnpm_lockfile(tmp_path: Path) -> None:
+    """A workspace package may use ``catalog:`` while pnpm pins the real SDK version."""
+    _write_json(tmp_path / "package.json", {"name": "root"})
+    _write_json(
+        tmp_path / "apps" / "web" / "package.json",
+        {"dependencies": {"@prisma/client": "catalog:"}},
+    )
+    (tmp_path / "pnpm-lock.yaml").write_text(
+        """lockfileVersion: '9.0'
+packages:
+  '@prisma/client@6.14.0':
+    resolution: {integrity: sha512-example}
+""",
+        encoding="utf-8",
+    )
+
+    scan = scan_manifests(tmp_path, ["@prisma/client"])
+
+    assert scan.matches[0].resolved_version == "6.14.0"
+    assert scan.matches[0].source == "lockfile"
+
+
 def test_scan_manifests_skips_unparseable_manifest(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text("{not valid json", encoding="utf-8")
 

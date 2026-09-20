@@ -31,6 +31,7 @@ from depfix.gh import GitHubAppError, Installation, InstallationToken, branch_na
 from depfix.orchestrator import Orchestrator, SkipReason
 from depfix.orchestrator.plan import PlanArtifact, plan_path_for
 from depfix.providers.models import ProviderSpec, SdkPackage
+from depfix.scanners.models import CallSite, CallSiteKind, MatchConfidence, RepoScanResult
 from depfix.storage import AttemptStatus, Base, ChangeAttemptRow, RepoRow
 from depfix.storage import db as db_module
 
@@ -379,6 +380,47 @@ def test_no_call_sites_records_ledger_without_pr(in_memory_db: Any) -> None:
         assert row is not None
         assert row.status == AttemptStatus.NO_CALL_SITES.value
         assert row.attempts_used == 0
+
+
+def test_unrelated_provider_sites_do_not_trigger_a_fix(
+    in_memory_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provider anchors alone must not make an unrelated migration fixable."""
+    change = _change(old_api="openai.responses.create()")
+    gh_auth = _FakeGhAuth(config_text="version: 1\nverify: false\n")
+    clone_service = _FakeCloneService(FIXTURE)
+    orchestrator = _orchestrator(gh_auth, clone_service)
+
+    # Reproduces Medusa's failure mode: a broad provider observation exists,
+    # but it is not the API named by this migration.
+    import depfix.orchestrator.runner as runner_module
+
+    monkeypatch.setattr(
+        runner_module,
+        "scan_checkout",
+        lambda *_args, **_kwargs: RepoScanResult(
+            repo_full_name="acme/widgets",
+            commit_sha="sha-1",
+            call_sites=[
+                CallSite(
+                    filepath="src/config.js",
+                    line_number=1,
+                    column=0,
+                    line_content="apiVersion: '1'",
+                    kind=CallSiteKind.API_VERSION_PIN,
+                    confidence=MatchConfidence.MEDIUM,
+                    symbol="openai.<api_version_pin>",
+                    provider_id="openai",
+                )
+            ],
+        ),
+    )
+
+    outcome = orchestrator.run(["acme/widgets"], [change])
+
+    (change_outcome,) = outcome.repos[0].changes
+    assert change_outcome.attempt_status == AttemptStatus.NO_CALL_SITES
+    assert "no call sites match" in change_outcome.detail
 
 
 # -- full happy path: real scan + real fix + real (respx-mocked) PR -------------

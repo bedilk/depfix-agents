@@ -14,7 +14,7 @@ import logging
 import re
 import shutil
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from pathlib import Path
 
@@ -99,12 +99,30 @@ def symbols_for_change(provider_id: str, change: BreakingChange) -> tuple[str, .
     for hint in change.call_site_hints:
         add(hint, allow_bare=True)
 
-    candidate = change.old_api.strip()
+    add_api_symbol(change.old_api, add)
+
+    return tuple(symbols)
+
+
+def symbols_for_api(provider_id: str, api: str) -> tuple[str, ...]:
+    """Normalize one documented API symbol into the scanner namespace."""
+    symbols: list[str] = []
+
+    def add(raw: str, *, allow_bare: bool) -> None:
+        symbol = _qualify_symbol(provider_id, raw, allow_bare_identifier=allow_bare)
+        if symbol is not None and symbol not in symbols:
+            symbols.append(symbol)
+
+    add_api_symbol(api, add)
+    return tuple(symbols)
+
+
+def add_api_symbol(api: str, add: Callable[..., None]) -> None:
+    """Remove a call suffix before handing one documented API to ``add``."""
+    candidate = api.strip()
     if candidate.endswith(")"):
         candidate = candidate.split("(", 1)[0].strip()
     add(candidate, allow_bare=False)
-
-    return tuple(symbols)
 
 
 # Private compatibility alias for older internal callers/tests. New code uses
@@ -206,6 +224,8 @@ def scan_checkout(
     scanner: CallSiteScanner | None = None,
     change: BreakingChange | None = None,
     judge: object | None = None,
+    prepare_package_manager_runtime: bool = False,
+    package_manager_timeout: float = 90.0,
 ) -> RepoScanResult:
     """Scan an already-acquired checkout for manifests + call sites.
 
@@ -224,6 +244,12 @@ def scan_checkout(
     ecosystem_id = ecosystems_registry.detect(checkout.path)
     spec = ecosystems_registry.get(ecosystem_id)
     dependencies: list[DeclaredDependency] = []
+    preparation: object | None = None
+
+    if prepare_package_manager_runtime and (spec is None or spec.id == "javascript"):
+        from depfix.verify.manager import prepare_package_manager
+
+        preparation = prepare_package_manager(checkout.path, timeout=package_manager_timeout)
 
     if spec is not None and spec.id != "javascript":
         from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
@@ -272,6 +298,7 @@ def scan_checkout(
         dependencies=dependencies,
         files_scanned=call_site_result.files_scanned,
         errors=call_site_result.errors,
+        package_manager_preparation=preparation,
     )
 
 
@@ -283,10 +310,16 @@ def scan_path(
     scanner: CallSiteScanner | None = None,
     change: BreakingChange | None = None,
     judge: object | None = None,
+    prepare_package_manager_runtime: bool = False,
+    package_manager_timeout: float = 90.0,
 ) -> RepoScanResult:
     """Scan a local directory directly, with no clone/GitHub App involved."""
     checkout = CloneService().local(path)
-    return scan_checkout(checkout, target, repo_full_name=repo_full_name, scanner=scanner, change=change, judge=judge)
+    return scan_checkout(
+        checkout, target, repo_full_name=repo_full_name, scanner=scanner, change=change, judge=judge,
+        prepare_package_manager_runtime=prepare_package_manager_runtime,
+        package_manager_timeout=package_manager_timeout,
+    )
 
 
 def scan_repo(
@@ -300,6 +333,8 @@ def scan_repo(
     scanner: CallSiteScanner | None = None,
     change: BreakingChange | None = None,
     judge: object | None = None,
+    prepare_package_manager_runtime: bool = False,
+    package_manager_timeout: float = 90.0,
 ) -> RepoScanResult:
     """Resolve the App installation for ``owner/repo``, mint a
     least-privilege token, shallow-clone, scan, and clean up -- always,
@@ -311,6 +346,10 @@ def scan_repo(
 
     checkout = clone_service.clone(owner, repo, ref=resolved_ref, token=token.token)
     try:
-        return scan_checkout(checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner, change=change, judge=judge)
+        return scan_checkout(
+            checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner, change=change, judge=judge,
+            prepare_package_manager_runtime=prepare_package_manager_runtime,
+            package_manager_timeout=package_manager_timeout,
+        )
     finally:
         clone_service.cleanup(checkout)

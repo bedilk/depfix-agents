@@ -68,6 +68,14 @@ def test_assessment_records_no_call_sites_for_an_affected_but_unmatched_change()
     assert assessment.matched_sites == ()
 
 
+def test_assessment_marks_a_repo_current_when_it_uses_the_feed_replacement() -> None:
+    assessment = assess_scan_change(
+        _result(symbol="openai.chat.completions.create"), _change()
+    )
+
+    assert assessment.status is ScanMatchStatus.CURRENT
+
+
 def test_assessment_rejects_version_not_affected_before_call_site_matching() -> None:
     result = _result()
     result.dependencies[0] = DeclaredDependency(

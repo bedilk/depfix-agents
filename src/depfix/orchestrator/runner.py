@@ -101,6 +101,15 @@ _NO_WORK_STATUSES = frozenset(
 )
 
 
+def _is_major_dependency_review(change: BreakingChange) -> bool:
+    """Whether a registry major drift must be opened as a draft review PR."""
+    if change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
+        return False
+    from depfix.codemods.lockfile import dependency_drift_policy
+
+    return dependency_drift_policy(change) == "review_pr"
+
+
 class Orchestrator:
     """Runs the full fleet pipeline for a batch of ``(repo, change)`` pairs.
 
@@ -435,11 +444,18 @@ class Orchestrator:
                 f", {suppressed_call_sites} path-suppressed" if suppressed_call_sites else "",
             )
 
-            from depfix.scanners.applicability import change_applies
+            from depfix.scanners.matching import ScanMatchStatus, assess_scan_change
 
-            applicability = change_applies(scan_result.dependencies, change)
-            if applicability.blocks:
-                logger.info("%s does not apply to %s: %s", change.dedupe_key[:12], repo_full_name, applicability.reason)
+            assessment = assess_scan_change(
+                scan_result, change, provider_id=change.provider_id
+            )
+            if assessment.status is ScanMatchStatus.VERSION_NOT_AFFECTED:
+                logger.info(
+                    "%s does not apply to %s: %s",
+                    change.dedupe_key[:12],
+                    repo_full_name,
+                    assessment.reason,
+                )
                 if not self._dry_run:
                     touch_recheck_on_change(
                         session,
@@ -449,12 +465,35 @@ class Orchestrator:
                         ref_sha=current_ref_sha,
                     )
                 outcome.attempt_status = AttemptStatus.VERSION_NOT_AFFECTED
-                outcome.detail = applicability.reason
+                outcome.detail = assessment.reason
                 outcome.suppressed_call_sites = suppressed_call_sites
                 outcome.planned = self._dry_run
                 return outcome
 
-            if not scan_result.actionable_sites and change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
+            if assessment.status is ScanMatchStatus.CURRENT:
+                logger.info(
+                    "%s: repository already uses the replacement API: %s",
+                    change.dedupe_key[:12],
+                    assessment.reason,
+                )
+                if not self._dry_run:
+                    touch_recheck_on_change(
+                        session,
+                        repo_id=repo_full_name,
+                        dedupe_key=change.dedupe_key,
+                        status=AttemptStatus.VERSION_NOT_AFFECTED,
+                        ref_sha=current_ref_sha,
+                    )
+                outcome.attempt_status = AttemptStatus.VERSION_NOT_AFFECTED
+                outcome.detail = assessment.reason
+                outcome.suppressed_call_sites = suppressed_call_sites
+                outcome.planned = self._dry_run
+                return outcome
+
+            if (
+                assessment.status is ScanMatchStatus.NO_CALL_SITES
+                and change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP
+            ):
                 if not self._dry_run:
                     touch_recheck_on_change(
                         session,
@@ -466,9 +505,13 @@ class Orchestrator:
                 outcome.attempt_status = AttemptStatus.NO_CALL_SITES
                 outcome.suppressed_call_sites = suppressed_call_sites
                 outcome.detail = (
-                    "no actionable call sites"
-                    if not suppressed_call_sites
-                    else f"no actionable call sites after paths filter ({suppressed_call_sites} suppressed)"
+                    f"no call sites match {change.old_api!r}"
+                    if scan_result.actionable_sites
+                    else "no actionable call sites"
+                ) + (
+                    f" ({suppressed_call_sites} path-suppressed)"
+                    if suppressed_call_sites
+                    else ""
                 )
                 outcome.planned = self._dry_run
                 return outcome
@@ -572,7 +615,7 @@ class Orchestrator:
                     change=change,
                     fix_result=fix_result,
                     edits=committable,
-                    draft=repo_config.draft_pr,
+                    draft=repo_config.draft_pr or _is_major_dependency_review(change),
                     escalated=fix_service_result.escalated,
                     plan_digest=plan_digest,
                 )
@@ -643,7 +686,6 @@ class Orchestrator:
         finally:
             if checkout is not None:
                 self._clone_service.cleanup(checkout)
-
     def _apply_plan_artifact(
         self, checkout: Checkout, scan_result: RepoScanResult, change: BreakingChange, artifact: PlanArtifact
     ) -> FixServiceResult:

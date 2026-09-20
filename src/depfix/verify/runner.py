@@ -16,7 +16,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from depfix.verify.manager import detect_package_manager
+from depfix.verify.manager import detect_package_manager, prepare_package_manager
 from depfix.verify.models import TestFramework, TestRunResult
 from depfix.verify.parsers import parse_output
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, run_sandboxed
@@ -103,14 +103,20 @@ def _script_already_configures_reporter(root: Path, framework: TestFramework) ->
 
 
 def _test_argv(
-    package_manager: str, framework: TestFramework, out_path: Path, *, skip_reporter_args: bool = False
+    package_manager: str,
+    framework: TestFramework,
+    out_path: Path,
+    *,
+    executable: str | None = None,
+    skip_reporter_args: bool = False,
 ) -> list[str]:
     reporter = [] if skip_reporter_args else _reporter_args(framework, out_path)
+    command = executable or package_manager
     if package_manager == "bun":
-        return ["bun", "run", "test", "--", *reporter]
+        return [command, "run", "test", "--", *reporter]
     if package_manager == "pnpm":
-        return ["pnpm", "run", "test", "--", *reporter]
-    return [package_manager, "test", "--", *reporter]
+        return [command, "run", "test", "--", *reporter]
+    return [command, "test", "--", *reporter]
 
 
 def run_tests(
@@ -141,11 +147,21 @@ def run_tests(
 
     manager = package_manager or detect_package_manager(effective_cwd)
     framework = detect_framework(effective_cwd)
+    prepared = prepare_package_manager(
+        effective_cwd, timeout=min(timeout, 90.0), package_manager=manager
+    )
+    if not prepared.ready:
+        return TestRunResult(
+            framework=framework,
+            parse_error=prepared.detail,
+            used_fallback_parser=True,
+        )
 
     with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
         out_path = Path(tmp) / "results.json"
         argv = _test_argv(
             manager, framework, out_path,
+            executable=str(prepared.executable) if prepared.installed else None,
             skip_reporter_args=_script_already_configures_reporter(effective_cwd, framework),
         )
         logger.info("running tests: %s (framework=%s)", " ".join(argv), framework.value)

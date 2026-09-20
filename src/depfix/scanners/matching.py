@@ -14,13 +14,14 @@ from enum import StrEnum
 from depfix.core.models import BreakingChange, ChangeKind
 from depfix.scanners.applicability import change_applies
 from depfix.scanners.models import CallSite, RepoScanResult
-from depfix.scanners.repo import symbols_for_change
+from depfix.scanners.repo import symbols_for_api, symbols_for_change
 
 
 class ScanMatchStatus(StrEnum):
     """The result of comparing one classified change with one repo scan."""
 
     ACTIONABLE = "actionable"
+    CURRENT = "current"
     NO_CALL_SITES = "no_call_sites"
     VERSION_NOT_AFFECTED = "version_not_affected"
 
@@ -73,6 +74,15 @@ def assess_scan_change(
             ScanMatchStatus.ACTIONABLE,
             f"{len(matched)} actionable call site(s) match the old API",
             matched,
+        )
+    replacement_symbols = symbols_for_api(provider_id or change.provider_id, change.new_api)
+    if replacement_symbols and any(
+        _site_matches(site, replacement_symbols) for site in result.actionable_sites
+    ):
+        return ScanChangeAssessment(
+            change,
+            ScanMatchStatus.CURRENT,
+            "repository already uses the feed-documented replacement API",
         )
     return ScanChangeAssessment(
         change,

@@ -33,6 +33,7 @@ from depfix.scanners.store import (
 )
 from depfix.storage import db as db_module
 from depfix.storage.schema import Base, BreakingChangeRow, ChangeEventRow, Provider
+from depfix.verify.manager import PackageManagerPreparation
 
 pytestmark = pytest.mark.skipif(__import__("shutil").which("git") is None, reason="git not on PATH")
 
@@ -193,6 +194,25 @@ def test_scan_path_reports_blank_commit_for_non_repo_directory(tmp_path: Path) -
     assert result.commit_sha == ""
     method_sites = [s for s in result.call_sites if s.kind == CallSiteKind.METHOD_CALL]
     assert len(method_sites) == 1
+
+
+def test_scan_prepares_repository_package_manager_when_requested(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "package.json").write_text('{"packageManager": "yarn@4.18.0"}', encoding="utf-8")
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    prepared = PackageManagerPreparation(
+        package_manager="yarn", executable=tmp_path / "yarn", version="4.18.0", installed=True
+    )
+    monkeypatch.setattr("depfix.verify.manager.prepare_package_manager", lambda *_args, **_kwargs: prepared)
+
+    result = scan_path(
+        tmp_path,
+        ScanTarget(provider_id="openai", sdk_packages=("openai",)),
+        prepare_package_manager_runtime=True,
+    )
+
+    assert result.package_manager_preparation == prepared
 
 
 def test_spec_diff_narrowed_scan_finds_a_real_call_site(tmp_path: Path) -> None:

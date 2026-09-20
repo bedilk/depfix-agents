@@ -1,8 +1,12 @@
-"""Bundled, canonical migration records for historical SDK breaks."""
+"""Repository-observed, feed-compared migration records."""
 
 from __future__ import annotations
 
 from pathlib import Path
+
+from depfix.catalog.learned import record_detected_usage
+
+__all__ = ["canonical_providers_file", "record_detected_usage"]
 
 
 def canonical_providers_file() -> str | None:

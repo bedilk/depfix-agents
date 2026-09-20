@@ -256,10 +256,9 @@ def _run_dependency_drift(
         )
         return FixServiceResult(result, [], verify_required)
 
-    if policy != "automatic":
+    if policy == "declined":
         return report_only(
-            "major or unparseable dependency drift requires a vetted API migration; "
-            "recorded for review but not applied automatically."
+            "unparseable or non-forward dependency drift cannot be safely rewritten."
         )
 
     if ecosystem == "javascript":
@@ -311,6 +310,60 @@ def _run_dependency_drift(
             continue
         edits.append(dataclasses.replace(edit, derivation_trace=trace))
         notes.append(note)
+
+    # Dependency declarations are source-of-truth; JavaScript lockfiles are
+    # generated output. Refresh every affected workspace lock before
+    # verification, so npm/yarn/pnpm/bun frozen installs see a consistent
+    # dependency graph. This deliberately includes pnpm catalogs, whose
+    # source of truth is ``pnpm-workspace.yaml`` rather than a consumer JSON.
+    if (
+        ecosystem == "javascript"
+        and settings.lockfile_regenerate
+        and checkout.is_temporary
+        and edits
+    ):
+        from depfix.codemods.lockfile import lockfile_paths, try_refresh_javascript_lockfile
+
+        originals: dict[str, bytes] = {}
+        for lockfile in lockfile_paths(checkout.path):
+            try:
+                relpath = lockfile.resolve().relative_to(checkout.path.resolve()).as_posix()
+                originals[relpath] = lockfile.read_bytes()
+            except OSError:
+                continue
+        ok, message = try_refresh_javascript_lockfile(
+            checkout.path, timeout=settings.verify_install_timeout,
+            max_output_bytes=settings.verify_max_output_bytes,
+        )
+        notes.append(message)
+        if ok:
+            try:
+                refreshed = {
+                    lockfile.resolve().relative_to(checkout.path.resolve()).as_posix(): lockfile
+                    for lockfile in lockfile_paths(checkout.path)
+                }
+            except OSError:
+                refreshed = {}
+            for relpath, original_lock in originals.items():
+                lockfile = refreshed.get(relpath)
+                if lockfile is None:
+                    continue
+                try:
+                    refreshed_lock = lockfile.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                if refreshed_lock.encode("utf-8") == original_lock:
+                    continue
+                lockfile.write_bytes(original_lock)
+                lock_edit = editor.write_fix(
+                    relpath, refreshed_lock, confidence=1.0,
+                    origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                )
+                if lock_edit.changed:
+                    edits.append(dataclasses.replace(
+                        lock_edit,
+                        derivation_trace=f"JavaScript lockfile refreshed after dependency drift: {message}",
+                    ))
 
     verification = None
     if edits and verify_required:
@@ -367,10 +420,27 @@ def _run_dependency_drift(
         repo_full_name=scan_result.repo_full_name, breaking_change=change,
         files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),
         total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
-        verification=verification, codemod_notes=tuple(notes),
+        verification=verification,
+        codemod_notes=(
+            *notes,
+            *(
+                (
+                    "MAJOR VERSION REVIEW: this registry-confirmed major update is "
+                    "opened as a draft PR and requires human approval.",
+                )
+                if policy == "review_pr"
+                else ()
+            ),
+        ),
     )
     return FixServiceResult(
-        result, committable_edits(result, allow_unverified=not verify_required), verify_required,
+        result,
+        committable_edits(
+            result,
+            allow_unverified=not verify_required,
+            allow_review_suspects=change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP,
+        ),
+        verify_required,
     )
 
 

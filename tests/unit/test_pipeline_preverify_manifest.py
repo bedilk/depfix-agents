@@ -10,6 +10,7 @@ from depfix.clone.service import Checkout
 from depfix.codemods.lockfile import (
     build_dependency_drift_bumps,
     build_dependency_drift_plan,
+    build_manifest_bumps,
     dependency_drift_policy,
 )
 from depfix.config import Settings
@@ -99,7 +100,7 @@ def test_minor_dependency_drift_preserves_the_npm_range_operator(tmp_path: Path)
     assert bumps[0].new_range == "~1.4.3"
 
 
-def test_major_dependency_drift_requires_a_vetted_migration(tmp_path: Path) -> None:
+def test_major_dependency_drift_becomes_a_draft_review_candidate(tmp_path: Path) -> None:
     root = tmp_path / "checkout"
     root.mkdir()
     (root / "package.json").write_text(json.dumps({"dependencies": {"acme-sdk": "^1.2.0"}}))
@@ -110,11 +111,29 @@ def test_major_dependency_drift_requires_a_vetted_migration(tmp_path: Path) -> N
         kind=ChangeKind.DEPENDENCY_VERSION_BUMP, source=ClassificationSource.REGISTRY,
     )
 
-    assert dependency_drift_policy(change) == "vetted_migration_required"
-    assert build_dependency_drift_bumps(root, change) == []
+    assert dependency_drift_policy(change) == "review_pr"
+    bumps = build_dependency_drift_bumps(root, change)
+    assert len(bumps) == 1
+    assert bumps[0].new_range == "^2.0.0"
 
 
-def test_dependency_drift_refuses_to_cross_the_declared_major(tmp_path: Path) -> None:
+def test_major_review_preserves_an_exact_manifest_pin(tmp_path: Path) -> None:
+    root = tmp_path / "checkout"
+    root.mkdir()
+    (root / "package.json").write_text(json.dumps({"dependencies": {"acme-sdk": "1.2.0"}}))
+    change = BreakingChange(
+        package="acme-sdk", old_version="1.2.0", new_version="2.0.0",
+        old_api="acme-sdk@1.2.0", new_api="acme-sdk@2.0.0",
+        description="Registry version drift", migration_guide="",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP, source=ClassificationSource.REGISTRY,
+    )
+
+    bump = build_dependency_drift_bumps(root, change)[0]
+
+    assert bump.new_range == "2.0.0"
+
+
+def test_dependency_drift_does_not_rewrite_a_manifest_at_another_version(tmp_path: Path) -> None:
     root = tmp_path / "checkout"
     root.mkdir()
     (root / "package.json").write_text(json.dumps({"dependencies": {"acme-sdk": "^4.24.7"}}))
@@ -128,7 +147,89 @@ def test_dependency_drift_refuses_to_cross_the_declared_major(tmp_path: Path) ->
     plan = build_dependency_drift_plan(root, change)
 
     assert plan.bumps == []
-    assert "crosses a major boundary" in plan.declines[0]
+    assert plan.declines == []
+
+
+def test_dependency_drift_updates_the_pnpm_catalog_not_consuming_package_json(
+    tmp_path: Path,
+) -> None:
+    """``catalog:`` dependencies are owned by pnpm-workspace.yaml."""
+    root = tmp_path / "checkout"
+    (root / "apps" / "web").mkdir(parents=True)
+    (root / "apps" / "web" / "package.json").write_text(
+        json.dumps({"dependencies": {"@prisma/client": "catalog:"}}) + "\n"
+    )
+    workspace = root / "pnpm-workspace.yaml"
+    workspace.write_text("catalog:\n  '@prisma/client': ^7.8.0\n", encoding="utf-8")
+    change = BreakingChange(
+        package="@prisma/client", old_version="7.8.0", new_version="7.10.0",
+        old_api="@prisma/client@7.8.0", new_api="@prisma/client@7.10.0",
+        description="Registry version drift", migration_guide="",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP, source=ClassificationSource.REGISTRY,
+    )
+
+    plan = build_dependency_drift_plan(root, change)
+
+    assert len(plan.bumps) == 1
+    assert plan.bumps[0].manifest_relpath == "pnpm-workspace.yaml"
+    assert "'@prisma/client': ^7.10.0" in plan.bumps[0].fixed_content
+    assert (root / "apps" / "web" / "package.json").read_text() == (
+        json.dumps({"dependencies": {"@prisma/client": "catalog:"}}) + "\n"
+    )
+
+
+def test_dependency_drift_updates_the_named_pnpm_catalog_not_consumer(
+    tmp_path: Path,
+) -> None:
+    """``catalog:name`` is owned by ``catalogs.name`` in the workspace file."""
+    root = tmp_path / "checkout"
+    (root / "apps" / "web").mkdir(parents=True)
+    consumer = root / "apps" / "web" / "package.json"
+    consumer.write_text(
+        json.dumps({"dependencies": {"@prisma/client": "catalog:platform"}}) + "\n"
+    )
+    workspace = root / "pnpm-workspace.yaml"
+    workspace.write_text(
+        "catalogs:\n  platform:\n    '@prisma/client': ^7.8.0\n",
+        encoding="utf-8",
+    )
+    change = BreakingChange(
+        package="@prisma/client", old_version="7.8.0", new_version="7.10.0",
+        old_api="@prisma/client@7.8.0", new_api="@prisma/client@7.10.0",
+        description="Registry version drift", migration_guide="",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP, source=ClassificationSource.REGISTRY,
+    )
+
+    plan = build_dependency_drift_plan(root, change)
+
+    assert len(plan.bumps) == 1
+    assert plan.bumps[0].manifest_relpath == "pnpm-workspace.yaml"
+    assert "'@prisma/client': ^7.10.0" in plan.bumps[0].fixed_content
+    assert consumer.read_text() == (
+        json.dumps({"dependencies": {"@prisma/client": "catalog:platform"}}) + "\n"
+    )
+
+
+def test_api_migration_bumps_the_pnpm_catalog_not_consumer(tmp_path: Path) -> None:
+    """The regular API-migration path uses the same source-of-truth resolver."""
+    root = tmp_path / "checkout"
+    (root / "apps" / "web").mkdir(parents=True)
+    consumer = root / "apps" / "web" / "package.json"
+    consumer.write_text(json.dumps({"dependencies": {"openai": "catalog:"}}) + "\n")
+    (root / "pnpm-workspace.yaml").write_text("catalog:\n  openai: ^3.3.0\n")
+    change = BreakingChange(
+        package="openai", old_version="3.3.0", new_version="4.0.1",
+        old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
+        description="OpenAI v4", migration_guide="",
+        kind=ChangeKind.METHOD_RENAMED, source=ClassificationSource.MANUAL,
+    )
+
+    bumps = build_manifest_bumps(root, change)
+
+    assert len(bumps) == 1
+    assert bumps[0].manifest_relpath == "pnpm-workspace.yaml"
+    assert "openai: ^4.0.0" in bumps[0].fixed_content
+    assert consumer.read_text() == json.dumps({"dependencies": {"openai": "catalog:"}}) + "\n"
 
 
 def test_dependency_drift_uses_the_fix_service_without_call_sites(tmp_path: Path) -> None:

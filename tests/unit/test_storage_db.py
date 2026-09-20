@@ -69,3 +69,18 @@ def test_sqlite_column_upgrade_is_idempotent_and_preserves_rows() -> None:
     assert {"severity", "severity_evidence"} <= columns
     with engine.connect() as connection:
         assert connection.execute(text("SELECT id FROM breaking_change")).scalar_one() == 1
+
+
+def test_reset_sqlite_state_drops_in_memory_tables(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE stale_state (id INTEGER PRIMARY KEY)"))
+
+    monkeypatch.setattr(db, "_engine", engine)
+    monkeypatch.setattr(db, "_session_factory", None)
+
+    assert db.reset_sqlite_state() is True
+    fresh = db.get_engine()
+    assert "stale_state" not in inspect(fresh).get_table_names()

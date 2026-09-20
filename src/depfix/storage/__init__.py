@@ -7,7 +7,7 @@ from depfix.storage.attempt_store import (
     touch_no_call_sites,
     touch_recheck_on_change,
 )
-from depfix.storage.db import get_engine, init_schema, session_scope
+from depfix.storage.db import get_engine, init_schema, reset_sqlite_state, session_scope
 from depfix.storage.fix_store import latest_fix_run, record_fix_run, record_pull_request
 from depfix.storage.schema import (
     AttemptStatus,
@@ -53,6 +53,7 @@ __all__ = [
     "record_change_attempt",
     "record_fix_run",
     "record_pull_request",
+    "reset_sqlite_state",
     "session_scope",
     "touch_no_call_sites",
     "touch_recheck_on_change",

@@ -1,4 +1,4 @@
-"""npm manifest + lockfile scanning.
+"""JavaScript manifest + lockfile scanning.
 
 Resolves what version of a tracked SDK package a repo actually has, so the
 call-site scanner can report "this repo's lockfile resolves openai to 4.1.0
@@ -11,8 +11,9 @@ this repo affected" with certainty. A semver range in ``package.json``
 (``^3.0.0``) is a three-valued (yes/no/unknown) fallback when there is no
 lockfile to resolve against.
 
-**npm only.** ``yarn.lock``/``pnpm-lock.yaml`` are explicitly out of scope
-here -- different formats, different week.
+``package-lock.json`` and ``pnpm-lock.yaml`` are supported. Workspace
+manifests inherit a lockfile from the nearest parent directory, which lets a
+``catalog:`` declaration be resolved from the root pnpm lockfile.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,15 @@ def _load_json(path: Path) -> dict | None:
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning("failed to parse %s: %s", path, exc)
         return None
+
+
+def _load_yaml(path: Path) -> dict | None:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        logger.warning("failed to parse %s: %s", path, exc)
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _declared_ranges(manifest: dict) -> dict[str, str]:
@@ -128,9 +140,53 @@ def _resolve_from_lockfile(lock: dict, package: str) -> str | None:
     return _resolve_from_lockfile_v1(lock, package)
 
 
+def _version_from_package_key(key: str, package: str) -> str | None:
+    """Extract a package version from a pnpm package-key without guessing."""
+    prefix = f"{package}@"
+    if not key.startswith(prefix):
+        return None
+    candidate = key.removeprefix(prefix).split("(", 1)[0]
+    return candidate if _SEMVER_RE.match(candidate) else None
+
+
+def _resolve_from_pnpm_lockfile(lock: dict, package: str) -> str | None:
+    """Resolve a package from pnpm v6--v9 ``packages`` entries.
+
+    pnpm stores the real version in keys such as
+    ``@prisma/client@6.14.0(prisma@6.14.0)``.  Prefer the lowest nesting-free
+    candidate deterministically rather than deriving a version from a
+    workspace ``catalog:`` declaration.
+    """
+    candidates: list[str] = []
+    for key, entry in (lock.get("packages") or {}).items():
+        if not isinstance(key, str):
+            continue
+        version = _version_from_package_key(key, package)
+        if version:
+            candidates.append(version)
+        elif key == package and isinstance(entry, dict) and isinstance(entry.get("version"), str):
+            # Older lockfile forms can keep a package version in the value.
+            candidates.append(entry["version"])
+    parsed = [(value, _parse_semver(value)) for value in candidates]
+    known = [(value, version) for value, version in parsed if version is not None]
+    return min(known, key=lambda item: item[1])[0] if known else None
+
+
+def _nearest_lockfile(manifest_path: Path, root: Path, filename: str) -> Path | None:
+    """Find a sibling or workspace-root lockfile without escaping *root*."""
+    current = manifest_path.parent
+    while True:
+        candidate = current / filename
+        if candidate.is_file():
+            return candidate
+        if current == root:
+            return None
+        current = current.parent
+
+
 def scan_manifests(root: Path, sdk_packages: list[str]) -> ManifestScan:
     """Scan every ``package.json`` under ``root`` for ``sdk_packages``,
-    resolving actual installed versions via a sibling ``package-lock.json``
+    resolving actual installed versions via the nearest workspace lockfile
     when one exists."""
     scan = ManifestScan()
     for manifest_path in find_manifests(root):
@@ -144,11 +200,15 @@ def scan_manifests(root: Path, sdk_packages: list[str]) -> ManifestScan:
         if not wanted:
             continue
 
-        lock_path = manifest_path.parent / "package-lock.json"
-        lock = _load_json(lock_path) if lock_path.exists() else None
+        npm_lock_path = _nearest_lockfile(manifest_path, root, "package-lock.json")
+        pnpm_lock_path = _nearest_lockfile(manifest_path, root, "pnpm-lock.yaml")
+        npm_lock = _load_json(npm_lock_path) if npm_lock_path else None
+        pnpm_lock = _load_yaml(pnpm_lock_path) if pnpm_lock_path else None
 
         for package in wanted:
-            resolved = _resolve_from_lockfile(lock, package) if lock else None
+            resolved = _resolve_from_lockfile(npm_lock, package) if npm_lock else None
+            if resolved is None and pnpm_lock is not None:
+                resolved = _resolve_from_pnpm_lockfile(pnpm_lock, package)
             scan.matches.append(
                 DependencyMatch(
                     package=package,

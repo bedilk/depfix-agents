@@ -154,6 +154,15 @@ class Settings(BaseSettings):
     )
     scan_llm_judge_enabled: bool = Field(default=False)
     scan_llm_judge_max_candidates: int = Field(default=20, ge=1, le=100)
+    scan_prepare_package_manager: bool = Field(
+        default=True,
+        description="During depfix scan, prepare a repository's declared npm/Yarn/pnpm runtime "
+        "for a later local verification. Yarn and pnpm are cached under ~/.depfix, never globally.",
+    )
+    package_manager_install_timeout: float = Field(
+        default=90.0, ge=1.0, le=600.0,
+        description="Wall-clock cap for installing a repository-pinned package-manager runtime.",
+    )
 
     # --- Fix generation + verification (Week 4) ----------------------------------
     fix_validate_syntax: bool = Field(
@@ -201,7 +210,7 @@ class Settings(BaseSettings):
     verify_characterize_timeout: int = Field(default=120, ge=1, le=1800)
     llm_fallback_provider: str = Field(default="")
     llm_fallback_model: str = Field(default="")
-    lockfile_regenerate: bool = Field(default=False)
+    lockfile_regenerate: bool = Field(default=True)
     verify_ignore_scripts: bool = Field(
         default=True,
         description="Pass --ignore-scripts to the install command so a hostile repo's "

@@ -114,6 +114,31 @@ def init_schema() -> None:
         _ensure_classified_at_column(engine)
 
 
+def reset_sqlite_state() -> bool:
+    """Discard the local SQLite database used by the current process.
+
+    ``init`` uses this to start a new local detection run without stale
+    feed events or classified records from another repository.  Postgres is
+    deliberately never reset here: it may be a shared deployment database.
+    Returns whether a SQLite state store was reset.
+    """
+    global _engine, _session_factory
+    engine = get_engine()
+    if engine.dialect.name != "sqlite":
+        return False
+
+    database = engine.url.database
+    if database in (None, ":memory:"):
+        Base.metadata.drop_all(engine)
+    else:
+        database_path = Path(database)
+        engine.dispose()
+        database_path.unlink(missing_ok=True)
+    _engine = None
+    _session_factory = None
+    return True
+
+
 def _upgrade_to_head(engine: Engine) -> None:
     """Run ``depfix.migrations`` up to ``head`` against a Postgres database.
 
