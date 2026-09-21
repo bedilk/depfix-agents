@@ -379,32 +379,6 @@ repository_migrations:
   current_version: 7.7.0
   latest_version: ''
   reason: rescan required to compare this usage with current feeds
-- provider_id: openai
-  repository: bedilk/LibreChat
-  commit_sha: ba44443fdb232bbe6d4977e2619774b5a72586ac
-  current_api: openai.images.generate
-  sdk_package: ''
-  current_version: ''
-  latest_version: 7.20.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: openai
-  repository: bedilk/LibreChat
-  commit_sha: ba44443fdb232bbe6d4977e2619774b5a72586ac
-  current_api: openai.mockImplementation
-  sdk_package: ''
-  current_version: ''
-  latest_version: 7.20.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
 - provider_id: kafka
   repository: bedilk/n8n
   commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
@@ -464,162 +438,6 @@ repository_migrations:
   sdk_package: ''
   current_version: ''
   latest_version: 2.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.accounts.retrieve
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.billingPortal.sessions.create
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.checkout.sessions.create
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.checkout.sessions.retrieve
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.customers.create
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.customers.del
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.customers.list
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.customers.retrieve
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.customers.update
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.oauth.token
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.subscriptions.retrieve
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
-  status: non_actionable
-  reason: SDK version and call sites match the feed's current state
-  old_api: ''
-  new_api: ''
-  source_url: ''
-  evidence: ''
-- provider_id: stripe
-  repository: bedilk/cal.diy
-  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
-  current_api: stripe.subscriptions.update
-  sdk_package: ''
-  current_version: ''
-  latest_version: 13.0.0
   status: non_actionable
   reason: SDK version and call sites match the feed's current state
   old_api: ''
@@ -704,6 +522,32 @@ repository_migrations:
   new_api: ''
   source_url: ''
   evidence: ''
+- provider_id: openai
+  repository: bedilk/LibreChat
+  commit_sha: ba44443fdb232bbe6d4977e2619774b5a72586ac
+  current_api: openai.images.generate
+  sdk_package: openai
+  current_version: 5.8.2
+  latest_version: 7.20.0
+  status: actionable
+  reason: installed SDK 5.8.2 is behind the feed's latest 7.20.0
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: openai
+  repository: bedilk/LibreChat
+  commit_sha: ba44443fdb232bbe6d4977e2619774b5a72586ac
+  current_api: openai.mockImplementation
+  sdk_package: openai
+  current_version: 5.8.2
+  latest_version: 7.20.0
+  status: actionable
+  reason: installed SDK 5.8.2 is behind the feed's latest 7.20.0
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
 - provider_id: stripe
   repository: bedilk/documenso
   commit_sha: e658cc581878f52c03b3e6a8f7ffd613aead4e69
@@ -713,6 +557,422 @@ repository_migrations:
   latest_version: 22.6.2
   status: actionable
   reason: installed SDK 12.18.0 is behind the feed's latest 22.6.2
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: sentry
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: sentry.NodeClient
+  sdk_package: ''
+  current_version: ''
+  latest_version: ''
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: sentry
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: sentry.Scope
+  sdk_package: ''
+  current_version: ''
+  latest_version: ''
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: sentry
+  repository: bedilk/n8n
+  commit_sha: 02dc131bc9cc5e7bcd7a68c4832d2a47f1c3bddb
+  current_api: sentry.getDefaultIntegrations
+  sdk_package: ''
+  current_version: ''
+  latest_version: ''
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: openai
+  repository: bedilk/chatbot-ui
+  commit_sha: 81328b61d2a4ab597a7a057be70e785cf756d9f8
+  current_api: openai.beta.assistants.list
+  sdk_package: openai
+  current_version: 4.24.7
+  latest_version: 7.20.0
+  status: actionable
+  reason: installed SDK 4.24.7 is behind the feed's latest 7.20.0
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: openai
+  repository: bedilk/chatbot-ui
+  commit_sha: 81328b61d2a4ab597a7a057be70e785cf756d9f8
+  current_api: openai.chat.completions.create
+  sdk_package: openai
+  current_version: 4.24.7
+  latest_version: 7.20.0
+  status: actionable
+  reason: installed SDK 4.24.7 is behind the feed's latest 7.20.0
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.accounts.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.billingPortal.sessions.create
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.checkout.sessions.create
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.checkout.sessions.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.create
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.del
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.list
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.customers.update
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.oauth.token
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.subscriptions.retrieve
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: stripe
+  repository: bedilk/cal.diy
+  commit_sha: 54343aa685ae8f33159d2f485ec4a57bad5c574a
+  current_api: stripe.subscriptions.update
+  sdk_package: ''
+  current_version: ''
+  latest_version: 22.6.2
+  status: non_actionable
+  reason: SDK version and call sites match the feed's current state
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.DefaultChatTransport
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.convertToModelMessages
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.createUIMessageStream
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.createUIMessageStreamResponse
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.customProvider
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.generateId
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.generateText
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.isStepCount
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.registerTelemetry
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.simulateReadableStream
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.smoothStream
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.streamText
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.toUIMessageStream
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/ai-chatbot
+  commit_sha: c2f8235e1f3ea903ad8b7f61447c4f74164b5c58
+  current_api: vercel-ai.tool
+  sdk_package: ai
+  current_version: 7.0.15
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 7.0.15 is behind the feed's latest 7.0.107
+  old_api: ''
+  new_api: ''
+  source_url: ''
+  evidence: ''
+- provider_id: vercel-ai
+  repository: bedilk/novel
+  commit_sha: fa95098e66476c466faebb8211baa5869c101a9c
+  current_api: vercel-ai.streamText
+  sdk_package: ai
+  current_version: 3.4.33
+  latest_version: 7.0.107
+  status: actionable
+  reason: installed SDK 3.4.33 is behind the feed's latest 7.0.107
   old_api: ''
   new_api: ''
   source_url: ''

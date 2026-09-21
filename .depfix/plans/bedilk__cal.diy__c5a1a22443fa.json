@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "repo_full_name": "bedilk/cal.diy",
+  "base_sha": "54343aa685ae8f33159d2f485ec4a57bad5c574a",
+  "change_dedupe_key": "c5a1a22443fad241336a3e81c9d82c07d68c036759c338a760e13db7226863b7",
+  "change": {
+    "package": "stripe",
+    "old_version": "9.16.0",
+    "new_version": "22.6.2",
+    "old_api": "stripe@9.16.0",
+    "new_api": "stripe@22.6.2",
+    "description": "Dependency drift: stripe 9.16.0 \u2192 22.6.2",
+    "migration_guide": "Review release notes before a major upgrade; patch and minor updates can be verified as manifest-only changes.",
+    "kind": "dependency_version_bump",
+    "source": "registry",
+    "provider_id": "stripe",
+    "source_url": "https://www.npmjs.com/package/stripe/v/22.6.2",
+    "evidence": "npm_dist_tag moved from 9.16.0 to 22.6.2",
+    "confidence": 1.0,
+    "call_site_hints": [],
+    "examples": []
+  },
+  "confidence": "low",
+  "verified_by": "could not install dependencies for a typecheck (install failed)",
+  "created_at": "2026-09-20T21:16:47.642647+00:00",
+  "edits": []
+}

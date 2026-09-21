@@ -31,6 +31,7 @@ assumed for backwards compatibility with the Day 1-2 CLI.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -44,7 +45,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from depfix import DependencyFixAgent
 from depfix.apply import EditVerdict, FileEdit
@@ -207,7 +208,8 @@ def _scan_provider(providers: list[ProviderSpec], provider_id: str | None, packa
 
 
 def _load_pipeline_changes(
-    args: argparse.Namespace, settings: Settings, *, limit: int
+    args: argparse.Namespace, settings: Settings, *, limit: int,
+    repo_full_names: list[str] | None = None,
 ) -> list[BreakingChange]:
     """Resolve the breaking changes a `pipeline` run should consider.
 
@@ -234,7 +236,26 @@ def _load_pipeline_changes(
             if settings.pipeline_newest_first
             else BreakingChangeRow.created_at.asc()
         )
-        stmt = select(BreakingChangeRow).order_by(order).limit(limit)
+        stmt = select(BreakingChangeRow)
+        if repo_full_names:
+            # Registry drift is repository-scoped: the old side is the
+            # version seen in that repository's lockfile. Never let a
+            # Documenso Stripe-12 record become Medusa's plan input merely
+            # because it was globally newer in SQLite. Provider-wide API
+            # migrations remain eligible for every explicitly named repo.
+            from depfix.core.models import ChangeKind
+            from depfix.storage import ChangeEventRow
+
+            repo_keys = [hashlib.sha256(repo.encode("utf-8")).hexdigest()[:12] for repo in repo_full_names]
+            repo_drift = or_(*[
+                ChangeEventRow.feed_key.like(f"%:repo:{repo_key}:installed:%")
+                for repo_key in repo_keys
+            ])
+            stmt = stmt.join(ChangeEventRow).where(or_(
+                BreakingChangeRow.kind != ChangeKind.DEPENDENCY_VERSION_BUMP.value,
+                repo_drift,
+            ))
+        stmt = stmt.order_by(order).limit(limit)
         return [breaking_change_from_row(row) for row in session.scalars(stmt)]
 
 
@@ -1556,6 +1577,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 if args.limit is not None
                 else settings.pipeline_default_change_limit
             ),
+            repo_full_names=repo_full_names if (args.repos or args.repo) else None,
         )
     except (FileNotFoundError, LookupError, json.JSONDecodeError) as exc:
         console.print(f"[red]Error: {exc}[/red]")

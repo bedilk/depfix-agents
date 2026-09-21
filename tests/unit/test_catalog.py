@@ -145,6 +145,39 @@ def test_scan_bootstrap_is_idempotent_for_same_repository_version(
     ) == 0
 
 
+def test_repository_drifts_with_different_installed_versions_stay_distinct(
+    in_memory_db: None,
+) -> None:
+    """A Stripe-12 scan must not hide a later Stripe-19 repository drift."""
+    with db_module.session_scope() as session:
+        session.add(Provider(id="stripe", name="Stripe"))
+        session.add(
+            FeedState(
+                provider_id="stripe", feed_key="npm:stripe:latest",
+                kind="npm_dist_tag", last_token="22.6.2",
+            )
+        )
+
+    package_ecosystems = {"stripe": "npm"}
+    assert shortcuts.capture_repository_dependency_drift(
+        "stripe", repository="bedilk/documenso",
+        dependencies=[DeclaredDependency("stripe", "package.json", "12.18.0", "12.18.0", "lockfile")],
+        package_ecosystems=package_ecosystems,
+    ) == 1
+    assert shortcuts.capture_repository_dependency_drift(
+        "stripe", repository="bedilk/medusa",
+        dependencies=[DeclaredDependency("stripe", "package.json", "19.1.0", "19.1.0", "lockfile")],
+        package_ecosystems=package_ecosystems,
+    ) == 1
+
+    with db_module.session_scope() as session:
+        changes = session.scalars(select(BreakingChangeRow).order_by(BreakingChangeRow.old_version)).all()
+    assert [(change.old_version, change.new_version) for change in changes] == [
+        ("12.18.0", "22.6.2"),
+        ("19.1.0", "22.6.2"),
+    ]
+
+
 def test_scan_bootstrap_accepts_an_exact_manifest_pin_without_lockfile(
     in_memory_db: None,
 ) -> None:
