@@ -92,6 +92,20 @@ def build_pr_body(
         lines.append(f"New test failures introduced: {verification.new_failure_count}.")
     if verification is not None and verification.typechecked:
         lines.append(f"`tsc --noEmit` introduced {len(verification.new_diagnostics)} new diagnostic(s).")
+    if verification is not None and verification.static_after is not None:
+        tool = verification.static_after.tool or "static check"
+        added = len(verification.new_static_diagnostics)
+        lines.append(f"`{tool}` introduced {added} new diagnostic(s).")
+    if verification is not None and verification.coverage is not None:
+        lines.append(f"Coverage: {verification.coverage.summary()}.")
+    if verification is not None and verification.contract is not None:
+        lines.append(f"Request contract: {verification.contract.summary()}.")
+    if verification is not None and verification.flaky_test_identities:
+        flaky = ", ".join(verification.flaky_test_identities[:5])
+        lines.append(
+            f"_{len(verification.flaky_test_identities)} test(s) failed once but did not "
+            f"reproduce on re-run and were treated as flaky: {flaky}._"
+        )
 
     lines.append("")
     if result.codemod_notes:

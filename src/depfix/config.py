@@ -28,11 +28,21 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ------------------------------------------------------------------
-    llm_provider: Literal["gemini", "ollama"] = Field(
+    llm_provider: Literal["gemini", "ollama", "bedrock"] = Field(
         default="gemini", description="Which LLM backend to use for `depfix run`"
     )
     google_api_key: str = Field(default="", description="Google Generative AI API key")
     gemini_model: str = Field(default="gemini-2.5-flash", description="Gemini model id")
+
+    # --- AWS Bedrock (Claude) -------------------------------------------------
+    bedrock_access_key: str = Field(default="", description="AWS Bedrock access key")
+    bedrock_secret_key: str = Field(default="", description="AWS Bedrock secret key")
+    bedrock_region: str = Field(default="us-east-1", description="AWS region for Bedrock")
+    bedrock_profile: str = Field(default="", description="AWS profile name for Bedrock auth")
+    bedrock_model: str = Field(
+        default="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        description="Bedrock model ID",
+    )
     llm_max_retries: int = Field(default=3, ge=1, le=10)
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     fix_strategy: Literal["single_shot", "agent"] = Field(
@@ -210,6 +220,59 @@ class Settings(BaseSettings):
     verify_characterize_timeout: int = Field(default=120, ge=1, le=1800)
     llm_fallback_provider: str = Field(default="")
     llm_fallback_model: str = Field(default="")
+
+    # --- Behavioural evidence: coverage + HTTP contract (Week 8) ----------------
+    verify_coverage_enabled: bool = Field(
+        default=True,
+        description="Record V8 coverage during the after-fix test run and check whether the "
+        "migrated lines were actually executed. A suite that passes without ever running the "
+        "changed line is not HIGH confidence, and this is what detects that.",
+    )
+    verify_contract_enabled: bool = Field(
+        default=False,
+        description="Record the SHAPE of outbound HTTP during both test runs (method, host, "
+        "normalised path, header/body key names -- never values) and diff them. Answers the "
+        "question repo tests usually can't: did the migrated call produce the same request? "
+        "Off by default because it preloads a shim into the repo's test process.",
+    )
+    verify_flake_retries: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description="Re-run the after-fix suite this many extra times when new failures appear. "
+        "Only failures present in EVERY run are blamed on the fix; the rest are reported as "
+        "flaky. 0 restores the old single-run behaviour.",
+    )
+    verify_static_check_enabled: bool = Field(
+        default=True,
+        description="Use a non-TypeScript static checker (mypy/pyright for Python, `go vet` for "
+        "Go) as a MEDIUM-tier oracle when the repo's tests can't decide.",
+    )
+    verify_static_check_timeout: float = Field(default=300.0, ge=1.0, le=1800.0)
+    verify_selective_tests: bool = Field(
+        default=False,
+        description="Run only the test files that reach a touched file (import graph + filename "
+        "convention) instead of the whole suite. Much cheaper per fix, but a regression in an "
+        "unrelated test is invisible -- opt in per fleet, never silently.",
+    )
+
+    # --- Container sandbox -------------------------------------------------------
+    sandbox_container_image: str = Field(
+        default="",
+        description="When set, every install/test/typecheck subprocess runs inside this container "
+        "image instead of on the host. Empty keeps the existing process-level sandbox.",
+    )
+    sandbox_container_runtime: str = Field(
+        default="docker",
+        description="Container CLI used for sandbox_container_image (docker, podman, ...).",
+    )
+
+    # --- Prompt hygiene -----------------------------------------------------------
+    redact_secrets_in_prompts: bool = Field(
+        default=True,
+        description="Scrub credential-shaped text out of file contents before they are sent to a "
+        "language model. Leave this on; the only reason to turn it off is debugging redaction.",
+    )
     lockfile_regenerate: bool = Field(default=True)
     verify_ignore_scripts: bool = Field(
         default=True,

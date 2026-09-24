@@ -21,6 +21,7 @@ from depfix.codemods import CodemodRegistry
 from depfix.config import Settings
 from depfix.core.models import BreakingChange, ChangeKind
 from depfix.core.pipeline import FixPipeline, FixPipelineResult
+from depfix.fixers.bedrock import BedrockFixGenerator
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh.pr import committable_edits
@@ -43,13 +44,14 @@ class FixServiceResult:
     committable: list[FileEdit]
     verify_required: bool
     escalated: bool = False
+    cross_major_drift: bool = False
 
 
 def build_fix_pipeline(
     *,
     settings: Settings,
     repo_config: RepoConfig,
-    fixer: FixGenerator | OllamaFixGenerator | FixAgent,
+    fixer: BedrockFixGenerator | FixGenerator | OllamaFixGenerator | FixAgent,
     editor: WorkspaceEditor,
     max_retries: int | None = None,
     toolset: FixToolset | None = None,
@@ -80,6 +82,12 @@ def build_fix_pipeline(
             typecheck_timeout=settings.verify_typecheck_timeout,
             characterizer=characterizer,
             ecosystem=ecosystem,
+            coverage_enabled=settings.verify_coverage_enabled,
+            contract_enabled=settings.verify_contract_enabled,
+            flake_retries=settings.verify_flake_retries,
+            static_check_enabled=settings.verify_static_check_enabled,
+            static_check_timeout=settings.verify_static_check_timeout,
+            selective_tests=settings.verify_selective_tests,
         )
         if verify_required
         else None
@@ -113,7 +121,7 @@ def _build_completer_for_characterize(settings: Settings) -> LLMCompleter | None
     )
 
 
-def _build_fallback_fixer(settings: Settings) -> FixGenerator | OllamaFixGenerator | None:
+def _build_fallback_fixer(settings: Settings) -> BedrockFixGenerator | FixGenerator | OllamaFixGenerator | None:
     """Instantiate the configured stronger fallback model, if any."""
     if not settings.llm_fallback_model:
         return None
@@ -136,7 +144,7 @@ def run_fix_for_change(
     change: BreakingChange,
     settings: Settings,
     repo_config: RepoConfig,
-    fixer: FixGenerator | OllamaFixGenerator,
+    fixer: BedrockFixGenerator | FixGenerator | OllamaFixGenerator,
     max_retries: int | None = None,
 ) -> FixServiceResult:
     """Run a fix, escalating once when the primary has no committable edit."""
@@ -261,10 +269,12 @@ def _run_dependency_drift(
             "unparseable or non-forward dependency drift cannot be safely rewritten."
         )
 
+    cross_major = False
     if ecosystem == "javascript":
         from depfix.codemods.lockfile import build_dependency_drift_plan
 
         plan = build_dependency_drift_plan(checkout.path, change)
+        cross_major = plan.cross_major
         drift_bumps = [
             (
                 bump.manifest_relpath, bump.fixed_content, bump.note,
@@ -375,6 +385,12 @@ def _run_dependency_drift(
             typecheck_enabled=settings.verify_typecheck_enabled,
             typecheck_timeout=settings.verify_typecheck_timeout,
             ecosystem=ecosystem,
+            coverage_enabled=settings.verify_coverage_enabled,
+            contract_enabled=settings.verify_contract_enabled,
+            flake_retries=settings.verify_flake_retries,
+            static_check_enabled=settings.verify_static_check_enabled,
+            static_check_timeout=settings.verify_static_check_timeout,
+            selective_tests=settings.verify_selective_tests,
         )
         verification = verifier.verify(edits, change=change)
         edits = list(verification.edits)
@@ -416,6 +432,7 @@ def _run_dependency_drift(
                 )
                 edits.append(lock_edit)
 
+    needs_major_review = policy == "review_pr" or cross_major
     result = FixPipelineResult(
         repo_full_name=scan_result.repo_full_name, breaking_change=change,
         files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),
@@ -425,10 +442,10 @@ def _run_dependency_drift(
             *notes,
             *(
                 (
-                    "MAJOR VERSION REVIEW: this registry-confirmed major update is "
-                    "opened as a draft PR and requires human approval.",
+                    "MAJOR VERSION REVIEW: this update crosses a major version boundary "
+                    "and is opened as a draft PR requiring human approval.",
                 )
-                if policy == "review_pr"
+                if needs_major_review
                 else ()
             ),
         ),
@@ -441,6 +458,7 @@ def _run_dependency_drift(
             allow_review_suspects=change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP,
         ),
         verify_required,
+        cross_major_drift=cross_major,
     )
 
 
@@ -451,7 +469,7 @@ def _run_once(
     change: BreakingChange,
     settings: Settings,
     repo_config: RepoConfig,
-    fixer: FixGenerator | OllamaFixGenerator,
+    fixer: BedrockFixGenerator | FixGenerator | OllamaFixGenerator,
     max_retries: int | None,
     characterizer: Characterizer | None,
     ecosystem: str = "javascript",

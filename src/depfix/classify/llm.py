@@ -95,6 +95,64 @@ class GeminiCompleter:
         )
 
 
+class BedrockCompleter:
+    """Calls Claude via AWS Bedrock using the anthropic SDK."""
+
+    PRICING = {
+        "us.anthropic.claude-opus-4-6-v1": {"input": 15.0, "output": 75.0},
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0": {"input": 3.0, "output": 15.0},
+        "us.anthropic.claude-sonnet-4-5-20250514": {"input": 3.0, "output": 15.0},
+        "us.anthropic.claude-haiku-3-5-20241022": {"input": 0.80, "output": 4.0},
+        "anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 3.0, "output": 15.0},
+    }
+
+    def __init__(
+        self,
+        *,
+        aws_access_key: str = "",
+        aws_secret_key: str = "",
+        aws_region: str = "us-east-1",
+        aws_profile: str = "",
+        model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    ) -> None:
+        from anthropic import AnthropicBedrock
+
+        kwargs: dict = {"aws_region": aws_region}
+        if aws_access_key and aws_secret_key:
+            kwargs["aws_access_key"] = aws_access_key
+            kwargs["aws_secret_key"] = aws_secret_key
+        elif aws_profile:
+            kwargs["aws_profile"] = aws_profile
+        self._client = AnthropicBedrock(**kwargs)
+        self.model = model
+
+    def complete(self, prompt: str, *, temperature: float = 0.1) -> LLMResponse:
+        start = time.time()
+        message = self._client.messages.create(
+            model=self.model,
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+            extra_body={"temperature": temperature},
+        )
+        duration_ms = int((time.time() - start) * 1000)
+
+        text = message.content[0].text if message.content else ""
+        input_tokens = message.usage.input_tokens
+        output_tokens = message.usage.output_tokens
+        pricing = self.PRICING.get(self.model, {"input": 15.0, "output": 75.0})
+        cost = (input_tokens / 1_000_000) * pricing["input"] + (
+            output_tokens / 1_000_000
+        ) * pricing["output"]
+
+        return LLMResponse(
+            text=text,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_estimate=cost,
+            duration_ms=duration_ms,
+        )
+
+
 class OllamaCompleter:
     """Calls a local Ollama server. Cost is always zero (local inference)."""
 
