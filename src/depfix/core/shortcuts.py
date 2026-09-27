@@ -216,6 +216,7 @@ def _ecosystem_for_dependency(
     preferred = (
         "npm" if name == "package.json"
         else "pypi" if name in {"pyproject.toml", "requirements.txt", "Pipfile"}
+        else "rubygems" if name in {"Gemfile", "*.gemspec"}
         else None
     )
     if preferred in choices:
@@ -227,6 +228,8 @@ def _registry_feed_details(package: str, ecosystem: str) -> tuple[str, SourceKin
     """Return the canonical feed-state key for a supported registry SDK."""
     if ecosystem == "pypi":
         return (f"pypi:{package}", SourceKind.PYPI_DIST_TAG, "https://pypi.org/project/{package}/{version}/")
+    if ecosystem in ("rubygems", "gem"):
+        return (f"rubygems:{package}", SourceKind.RUBYGEMS_DIST_TAG, "https://rubygems.org/gems/{package}/versions/{version}")
     return (f"npm:{package}:latest", SourceKind.NPM_DIST_TAG, "https://www.npmjs.com/package/{package}/v/{version}")
 
 

@@ -116,6 +116,9 @@ class RepoConfig:
     providers: ProviderFilter = dataclasses.field(default_factory=ProviderFilter)
     paths: PathFilter = dataclasses.field(default_factory=PathFilter)
     ignore: tuple[str, ...] = ()
+    triage_rules: tuple = ()
+    group_prs_by: str = "provider"
+    max_repo_mb: int | None = None
 
     def is_ignored(self, *, provider_id: str, dedupe_key: str) -> bool:
         """Tenant instructions: an unconditional skip list matched against

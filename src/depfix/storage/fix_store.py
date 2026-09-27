@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from depfix.core.pipeline import FixPipelineResult
 from depfix.gh.models import PullRequest
+from depfix.obs.cost import CostLedger
 from depfix.storage.schema import FileFixRow, FixRunRow, PullRequestRow, TestRunRow
 from depfix.verify.models import TestRunResult, TestStatus
 
@@ -27,6 +28,7 @@ def record_fix_run(
     installation_id: int | None = None,
     default_branch: str | None = None,
     escalated: bool = False,
+    cost_ledger: CostLedger | None = None,
 ) -> FixRunRow:
     """Persist one :class:`FixPipelineResult`, creating the parent ``repo``
     row if this is the first time it's been touched by any pipeline (scan
@@ -63,6 +65,9 @@ def record_fix_run(
         files_affected=result.files_affected,
         total_usages_fixed=result.total_usages_fixed,
         total_cost=result.total_cost,
+        cost_classify=cost_ledger.by_stage.get("classify", 0.0) if cost_ledger else 0.0,
+        cost_characterization=cost_ledger.by_stage.get("characterization", 0.0) if cost_ledger else 0.0,
+        cost_call_site_judge=cost_ledger.by_stage.get("call_site_judge", 0.0) if cost_ledger else 0.0,
         total_tokens=result.total_tokens,
         duration_ms=result.duration_ms,
         verified=result.verification is not None and result.verification.ran,

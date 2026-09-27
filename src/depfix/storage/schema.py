@@ -413,6 +413,9 @@ class FixRunRow(Base):
     files_affected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_usages_fixed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cost_classify: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cost_characterization: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cost_call_site_judge: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Whether Verifier actually ran the repo's own test suite (as opposed to

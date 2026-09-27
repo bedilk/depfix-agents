@@ -75,10 +75,18 @@ class Watcher:
         deps: SourceDeps,
         source_builder: SourceBuilder = build_source,
         dry_run: bool = False,
+        *,
+        strategy: str = "deterministic",  # NEW
+        completer: object | None = None,   # NEW — required when strategy="agent"
+        ledger: object | None = None,      # NEW — shared CostLedger
     ) -> None:
         self._deps = deps
         self._build = source_builder
         self._dry_run = dry_run
+        self._strategy = strategy
+        self._completer = completer
+        self._ledger = ledger
+        self._agent_ran: set[str] = set()  # prevents >1 call per provider per run
 
     def run_once(self, providers: list[ProviderSpec]) -> WatchOutcome:
         init_schema()
@@ -121,6 +129,10 @@ class Watcher:
         feed: FeedSpec,
         outcome: WatchOutcome,
     ) -> None:
+        # Agent mode: delegate the entire provider's feeds in one call, once.
+        if self._strategy == "agent":
+            return self._run_provider_via_agent(session, provider, outcome)
+
         try:
             source = self._build(provider.id, feed, self._deps)
         except UnsupportedSourceKind as exc:
@@ -297,6 +309,16 @@ class Watcher:
         )
 
     def _persist_event(self, session: Session, event: ChangeEvent) -> None:
+        Watcher._persist_event_static(session, event)
+
+    @staticmethod
+    def _persist_event_static(session: Session, event: ChangeEvent) -> None:
+        """Persist one ChangeEvent + its SpecChange children.
+
+        Shared by the deterministic watcher, the agent watcher, and the
+        orchestrator's agent feed pass, so all three produce byte-identical
+        DB rows from the same code path.
+        """
         row = ChangeEventRow(
             provider_id=event.provider_id,
             feed_key=event.feed_key,
@@ -329,3 +351,61 @@ class Watcher:
                 )
             )
         session.flush()
+
+    def _run_provider_via_agent(
+        self, session: Session, provider: ProviderSpec, outcome: WatchOutcome
+    ) -> None:
+        """Delegate one provider's entire feed set to a FeedAgent, once per
+        provider per run. Re-entry for the same provider is a no-op so the
+        per-feed loop calling this method doesn't multiply the work."""
+        marker = f"agent:{provider.id}"
+        if marker in self._agent_ran:
+            return
+        self._agent_ran.add(marker)
+
+        if self._completer is None:
+            outcome.reports.append(FeedReport(
+                provider.id, f"agent:{provider.id}", "agent", "failed",
+                "agent strategy requires an LLM but none is configured",
+            ))
+            return
+
+        from depfix.agent.scan_agent import ScanAgent
+        from depfix.agent.scan_tools import ScanToolset
+
+        states: dict = {}
+        for row in session.scalars(
+            select(FeedState).where(FeedState.provider_id == provider.id)
+        ).all():
+            states[(row.provider_id, row.feed_key)] = FeedStateSnapshot(
+                last_token=row.last_token,
+                last_payload_sha256=row.last_payload_sha256,
+                last_payload_path=row.last_payload_path,
+            )
+
+        toolset = ScanToolset(
+            checkout_root=None,
+            http=self._deps.http,
+            npm=self._deps.npm,
+            pypi=self._deps.pypi,
+            github_api_url=self._deps.github_api_url,
+        )
+        agent = ScanAgent(self._completer, ledger=self._ledger)
+        events, _transcript = agent.poll_feed(provider, toolset)
+
+        for event in events:
+            if self._dry_run:
+                outcome.events.append(event)
+                continue
+            if self._is_duplicate(session, event):
+                outcome.duplicates += 1
+                continue
+            self._persist_event(session, event)
+            outcome.events.append(event)
+
+        outcome.reports.append(FeedReport(
+            provider.id, f"agent:{provider.id}", "agent",
+            "changed" if events else "unchanged",
+            f"agent found {len(events)} event(s)",
+            event_count=len(events),
+        ))

@@ -15,6 +15,7 @@ from datetime import datetime
 import httpx
 
 from depfix.core.models import BreakingChange, FileUsage, LLMCall, Usage
+from depfix.redaction import RedactionError, redact_file_usage
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,14 @@ class OllamaFixGenerator:
         at fixing this file was rejected (syntax error or test regression),
         appended to the prompt so the model can course-correct on retry.
         """
-        prompt = self._build_prompt(file_usage, breaking_change, feedback=feedback)
+        safe_usage, redaction = redact_file_usage(file_usage)
+        safe_feedback = redaction.cover(feedback) if feedback else None
+        if redaction.redacted:
+            logger.info(
+                "Redacted %d secret value(s) in %s before sending to %s",
+                len(redaction.secrets), file_usage.filepath, self.model,
+            )
+        prompt = self._build_prompt(safe_usage, breaking_change, feedback=safe_feedback)
 
         for attempt in range(self.max_retries):
             try:
@@ -72,7 +80,6 @@ class OllamaFixGenerator:
 
                 duration_ms = int((time.time() - start) * 1000)
                 raw_text = data.get("response", "")
-                fixed_code = self._extract_code(raw_text)
 
                 input_tokens = int(data.get("prompt_eval_count", 0) or 0)
                 output_tokens = int(data.get("eval_count", 0) or 0)
@@ -88,6 +95,8 @@ class OllamaFixGenerator:
                     duration_ms=duration_ms,
                 )
                 self.llm_calls.append(llm_call)
+
+                fixed_code = redaction.restore(self._extract_code(raw_text))
 
                 confidence = self._calculate_confidence(
                     file_usage.file_content,
@@ -106,6 +115,8 @@ class OllamaFixGenerator:
                 )
                 return fixed_code, confidence, llm_call
 
+            except RedactionError:
+                raise
             except Exception as e:
                 logger.warning("Ollama error on attempt %d: %s", attempt + 1, e)
                 if attempt < self.max_retries - 1:
@@ -168,6 +179,7 @@ REQUIREMENTS:
 3. Maintain the same code style and formatting
 4. Do not add any comments about the migration
 5. Do not change any imports unless necessary for the new API
+6. Tokens of the form DEPFIX_REDACTED_<hex> stand for redacted secrets: copy each one through unchanged, exactly where it appears
 {feedback_section}
 OUTPUT:
 Return ONLY the complete updated code. No explanations, no markdown code blocks, just the raw code.

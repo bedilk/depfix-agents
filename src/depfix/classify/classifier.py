@@ -36,12 +36,42 @@ class Classifier:
     def classify(self, event: ChangeEvent) -> ClassifyOutcome:
         package = str(event.raw.get("package") or event.provider_id)
 
+        if event.advisory is not None:
+            advisory = event.advisory
+            return ClassifyOutcome(changes=[BreakingChange(
+                package=advisory.package,
+                old_version=str(event.raw.get("version") or advisory.vulnerable_range),
+                new_version=advisory.fixed_version or "",
+                old_api=f"{advisory.package}@{advisory.vulnerable_range}",
+                new_api=(
+                    f"{advisory.package}@{advisory.fixed_version}"
+                    if advisory.has_fix
+                    else f"{advisory.package} (no fix published)"
+                ),
+                description=f"Security advisory {advisory.advisory_id}: {advisory.summary}",
+                migration_guide=(
+                    f"Upgrade {advisory.package} to {advisory.fixed_version} or later "
+                    "to remediate this vulnerability."
+                    if advisory.has_fix
+                    else "No fixed version is published yet; monitor the advisory and "
+                    "consider a temporary mitigation."
+                ),
+                kind=ChangeKind.SECURITY_ADVISORY,
+                source=ClassificationSource.SECURITY,
+                provider_id=event.provider_id,
+                source_url=event.source_url,
+                evidence=advisory.summary,
+                confidence=1.0,
+                call_site_hints=list(advisory.affected_symbols),
+                advisory_severity=advisory.severity.lower() if advisory.severity else None,
+            )])
+
         # A dist-tag movement is independently useful information even when
         # the release notes are empty.  Record it as *dependency drift*, not
         # as a guessed breaking API change.  The apply policy later permits
         # only safe patch/minor manifest updates unless a separate vetted API
         # migration exists.
-        if event.source_kind in (SourceKind.NPM_DIST_TAG, SourceKind.PYPI_DIST_TAG) and event.old_token:
+        if event.source_kind in (SourceKind.NPM_DIST_TAG, SourceKind.PYPI_DIST_TAG, SourceKind.RUBYGEMS_DIST_TAG) and event.old_token:
             # ``ChangeEventRow`` deliberately stores stable event fields, not
             # the source's arbitrary raw payload. Recover the npm package
             # from its canonical feed key when classifying a persisted event.
@@ -53,9 +83,9 @@ class Classifier:
                     feed_identity = event.feed_key.removeprefix("npm:").split(":repo:", 1)[0]
                     package = feed_identity.rsplit(":", 1)[0]
                 elif event.feed_key.startswith("pypi:"):
-                    # Scan-bootstrap events add a repository/version suffix
-                    # for idempotency, just like npm events do.
                     package = event.feed_key.removeprefix("pypi:").split(":repo:", 1)[0]
+                elif event.feed_key.startswith("rubygems:"):
+                    package = event.feed_key.removeprefix("rubygems:").split(":repo:", 1)[0]
             return ClassifyOutcome(changes=[BreakingChange(
                 package=package,
                 old_version=event.old_token,
@@ -76,7 +106,7 @@ class Classifier:
         if event.spec_changes and event.body.strip() and self._synthesizer is not None:
             result = self._synthesizer.synthesize(event, package=package)
             if result.change is not None:
-                return ClassifyOutcome(changes=[result.change])
+                return ClassifyOutcome(changes=[result.change], cost=result.cost_usd)
             logger.info("synthesis for %s did not pass gates: %s", package, result.reason)
 
         if event.spec_changes:
@@ -91,9 +121,6 @@ class Classifier:
             return ClassifyOutcome(changes=changes)
 
         if not event.body.strip():
-            # No spec_changes and nothing to read either -- there is no
-            # signal here to classify, terminal (not an error to retry, and
-            # not a trusted "zero changes" verdict either).
             return ClassifyOutcome(unclassifiable=True)
 
         if self._notes is None:
@@ -109,4 +136,4 @@ class Classifier:
             provider_id=event.provider_id,
             source_url=event.source_url,
         )
-        return ClassifyOutcome(changes=changes)
+        return ClassifyOutcome(changes=changes, cost=self._notes.last_cost)

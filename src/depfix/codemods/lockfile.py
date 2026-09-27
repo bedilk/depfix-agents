@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from depfix.core.models import BreakingChange
+from depfix.scanners.manifest import declared_major
 
-_RANGE = re.compile(r"^(?P<op>[\^~>=<]*)(?:v)?(?P<major>\d+)(?:\.\d+)?(?:\.\d+)?(?:.*)$")
+_OPERATOR_RE = re.compile(r"^([\^~>=<\s]*)")
 _SEMVER = re.compile(r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[-+][0-9A-Za-z.-]+)?$")
 _SECTIONS = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
 _SKIP = {"node_modules", ".git", "dist", "build", "coverage", ".next"}
@@ -36,24 +37,26 @@ class DriftPlan:
 
     bumps: list[ManifestBump]
     declines: list[str]
+    cross_major: bool = False
 
 
 def _major(value: str) -> int | None:
     # Stripe-style dated API versions are not semver package releases.
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()):
         return None
-    match = _RANGE.match(value.strip())
-    return int(match.group("major")) if match else None
+    return declared_major(value)
 
 
 def _bump_range(value: str, major: int) -> str | None:
     raw = value.strip()
     if not raw or raw in {"*", "x", "latest"} or ":" in raw:
         return None
-    match = _RANGE.match(raw)
-    if match is None:
+    # Extract operator prefix (^, ~, >=, etc.) and reconstruct with new major
+    match = _OPERATOR_RE.match(raw)
+    if match is None or declared_major(raw) is None:
         return None
-    return f"{match.group('op') or '^'}{major}.0.0"
+    operator = match.group(1).strip() or "^"
+    return f"{operator}{major}.0.0"
 
 
 def _semver(value: str) -> tuple[int, int, int] | None:
@@ -63,27 +66,96 @@ def _semver(value: str) -> tuple[int, int, int] | None:
     return tuple(int(match.group(part)) for part in ("major", "minor", "patch"))
 
 
-def dependency_drift_policy(change: BreakingChange) -> str:
+@dataclass(frozen=True)
+class _Upgradable:
+    """Whether one declaration may be rewritten, and why not when it can't."""
+
+    current: tuple[int, int, int] | None = None
+    decline: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.current is not None and not self.decline
+
+
+def _declaration_upgradable(current_text: str, change: BreakingChange) -> _Upgradable:
+    """Decide whether a declared range may be moved to the change's new version.
+
+    Two valid upgrade scenarios:
+    1. Declaration is on the SAME major as the drift's OLD side (standard
+       same-major bump within the tracked range).
+    2. Declaration is on the SAME major as the drift's NEW side but behind
+       the new version (e.g. declared ``^11.10.0``, drift says ``12.16.0 →
+       12.19.0`` — the repo already migrated to major 12 independently but
+       is behind on minor/patch; a rescan is NOT needed, only a bump).
+    """
+    old = _semver(change.old_version)
+    new = _semver(change.new_version)
+    current = _semver(current_text.lstrip("^~<>= "))
+    if new is None:
+        return _Upgradable(decline=f"{change.new_version!r} is not plain semver")
+    if current is None:
+        return _Upgradable(
+            decline=f"declared as {current_text!r}, which depfix will not rewrite automatically"
+        )
+    if old is not None and current[0] != old[0]:
+        # The declared major doesn't match the drift record's OLD side.
+        # But if it matches the NEW side and is behind, this is still a
+        # valid same-major bump — the repo already crossed the major
+        # boundary independently and just needs to catch up.
+        if current[0] == new[0] and current < new:
+            return _Upgradable(current=current)
+        return _Upgradable(
+            decline=(
+                f"declared {current_text!r} (major {current[0]}), but this drift record is for "
+                f"major {old[0]}; a rescan will produce the record for this workspace"
+            )
+        )
+    if current >= new:
+        return _Upgradable(decline="")
+    return _Upgradable(current=current)
+
+
+def dependency_drift_policy(
+    change: BreakingChange, *, max_major_gap: int = 0, max_minor_gap: int | None = None
+) -> str:
     """Return the review policy for a registry version movement.
 
-    Patch/minor drift is an ordinary verified manifest update. A forward
-    major drift becomes a draft review PR candidate; it must still pass the
-    normal validation and verification policy before it can be committed.
+    ``max_major_gap`` controls how many major steps are still automatic.
+    0 (default) means any major change is ``review_pr``.
     """
     old, new = _semver(change.old_version), _semver(change.new_version)
     if old is None or new is None or new <= old:
         return "declined"
-    return "automatic" if old[0] == new[0] else "review_pr"
+    major_gap = new[0] - old[0]
+    if major_gap > max_major_gap:
+        return "review_pr"
+    if major_gap == 0 and max_minor_gap is not None and (new[1] - old[1]) > max_minor_gap:
+        return "review_pr"
+    return "automatic"
+
+
+def describe_drift(change: BreakingChange) -> str:
+    """One line a reviewer can act on: how far this move actually travels."""
+    old, new = _semver(change.old_version), _semver(change.new_version)
+    if old is None or new is None:
+        return f"{change.old_version} -> {change.new_version} (unparseable)"
+    major_gap = new[0] - old[0]
+    if major_gap == 0:
+        return f"same major, {new[1] - old[1]} minor step(s)"
+    step = "one major step" if major_gap == 1 else f"{major_gap} major versions"
+    return f"{step} ({old[0]} -> {new[0]})"
 
 
 def _replace_range_version(value: str, new_version: str) -> str | None:
     raw = value.strip()
     if not raw or raw in {"*", "x", "latest"} or ":" in raw:
         return None
-    match = _RANGE.match(raw)
-    if match is None:
+    # Extract operator prefix and verify the range is parseable
+    match = _OPERATOR_RE.match(raw)
+    if match is None or declared_major(raw) is None:
         return None
-    return f"{match.group('op')}{new_version}"
+    return f"{match.group(1)}{new_version}"
 
 
 def build_dependency_drift_plan(root: Path, change: BreakingChange) -> DriftPlan:
@@ -92,8 +164,6 @@ def build_dependency_drift_plan(root: Path, change: BreakingChange) -> DriftPlan
     This is deliberately separate from ``build_manifest_bumps``: API
     migrations always move to a new major, whereas a registry drift preserves
     the declared range operator and targets only the observed old version.
-    Other ecosystem adapters can share the policy while supplying their own
-    manifest writer at this seam.
     """
     policy = dependency_drift_policy(change)
     if policy == "declined":
@@ -101,12 +171,9 @@ def build_dependency_drift_plan(root: Path, change: BreakingChange) -> DriftPlan
     new_version = _semver(change.new_version)
     if new_version is None:
         return DriftPlan([], [])
-    catalog_bumps = _build_pnpm_catalog_bumps(root, change)
-    if catalog_bumps:
-        # ``catalog:`` is an indirection: the workspace file is the only
-        # authoritative manifest. Editing consumers would defeat pnpm's
-        # shared-version model and leave the lockfile inconsistent.
-        return DriftPlan(catalog_bumps, [])
+    catalog_plan = _build_pnpm_catalog_plan(root, change)
+    if catalog_plan.bumps or catalog_plan.declines:
+        return catalog_plan
     bumps: list[ManifestBump] = []
     declines: list[str] = []
     for path in root.rglob("package.json"):
@@ -119,88 +186,106 @@ def build_dependency_drift_plan(root: Path, change: BreakingChange) -> DriftPlan
             continue
         if not isinstance(document, dict):
             continue
+        relpath = path.relative_to(root).as_posix()
         for section in _SECTIONS:
             dependencies = document.get(section)
             current = dependencies.get(change.package) if isinstance(dependencies, dict) else None
             if not isinstance(current, str):
                 continue
-            current_version = _semver(current.lstrip("^~<>= "))
+            if current.startswith("catalog:"):
+                catalog_ref = current.removeprefix("catalog:")
+                label = f"catalog:{catalog_ref}" if catalog_ref else "catalog:"
+                declines.append(
+                    f"{relpath}: {change.package} is declared '{current}', which depfix "
+                    f"will not rewrite automatically (edit pnpm-workspace.yaml's {label} "
+                    "entry directly, or run with --provider to target the catalog)"
+                )
+                break
+            verdict = _declaration_upgradable(current, change)
+            if not verdict.ok:
+                if verdict.decline:
+                    declines.append(f"{relpath}: {verdict.decline}")
+                break
             new_range = _replace_range_version(current, change.new_version)
-            if current_version is None or new_range is None:
+            if new_range is None:
+                declines.append(f"{relpath}: cannot rewrite the range {current!r}")
+                break
+            if policy == "automatic" and verdict.current[0] != new_version[0]:
                 declines.append(
-                    f"{path.relative_to(root).as_posix()}: {change.package} is declared {current!r}, "
-                    "which depfix will not rewrite automatically"
+                    f"{relpath}: refusing to bump {change.package} {current!r} to "
+                    f"{change.new_version} -- that crosses a major boundary"
                 )
                 break
-            if current_version != _semver(change.old_version):
-                continue
-            if policy == "automatic" and current_version[0] != new_version[0]:
-                declines.append(
-                    f"{path.relative_to(root).as_posix()}: refusing to bump {change.package} {current!r} "
-                    f"to {change.new_version} -- that crosses a major boundary"
-                )
-                break
-            if new_version <= current_version:
-                continue
             dependencies[change.package] = new_range
             indent = 4 if "\n    \"" in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
-            bumps.append(ManifestBump(path.relative_to(root).as_posix(), original, fixed,
-                                      change.package, section, current, new_range))
+            bumps.append(ManifestBump(relpath, original, fixed, change.package, section,
+                                      current, new_range))
             break
+    if not bumps and not declines:
+        declines.append(
+            f"{change.package} is not declared in any package.json depfix scanned; "
+            "the drift was detected via the registry feed but no manifest declares "
+            "this package directly (it may be a transitive dependency, or the repo "
+            "uses a non-standard package manager depfix doesn't support yet)"
+        )
     return DriftPlan(bumps, declines)
 
 
-def _build_pnpm_catalog_bumps(
+def _build_pnpm_catalog_plan(
     root: Path, change: BreakingChange, *, target_version: str | None = None,
-) -> list[ManifestBump]:
-    """Build format-preserving edits to every pnpm catalog the repo uses.
-
-    pnpm workspaces declare consumers as ``package: catalog:`` and place the
-    actual version under the root ``catalog:`` mapping. Named consumers such
-    as ``package: catalog:platform`` are owned by ``catalogs.platform``. We
-    deliberately edit only that source-of-truth mapping, retaining comments,
-    quote style, and unrelated YAML. A monorepo may intentionally use the
-    same package through multiple named catalogs, so all explicitly-used
-    owning entries are updated together.
-    """
+) -> DriftPlan:
+    """Edit every pnpm catalog that owns ``change.package``."""
     workspace = root / "pnpm-workspace.yaml"
     catalog_names = _pnpm_catalog_consumers(root, change.package)
     if not workspace.is_file() or not catalog_names:
-        return []
+        return DriftPlan([], [])
     try:
         original = workspace.read_text(encoding="utf-8")
     except OSError:
-        return []
+        return DriftPlan([], [])
 
     fixed = original
     bumped: list[ManifestBump] = []
+    declines: list[str] = []
     for catalog_name in sorted(catalog_names):
+        label = "catalog" if not catalog_name else f"catalogs.{catalog_name}"
         replacement = _replace_pnpm_catalog_entry(
             fixed, change, catalog_name, target_version=target_version,
         )
+        if isinstance(replacement, str):
+            declines.append(f"pnpm-workspace.yaml ({label}): {replacement}")
+            continue
         if replacement is None:
             continue
         prior, fixed, old_range, new_range = replacement
         bumped.append(ManifestBump(
             "pnpm-workspace.yaml", prior, fixed, change.package,
-            "catalog" if not catalog_name else f"catalog:{catalog_name}", old_range, new_range,
+            label, old_range, new_range,
         ))
     if not bumped:
-        return []
-    # WorkspaceEditor needs one edit per physical file. Multiple catalog
-    # entries therefore collapse to a single original->final diff.
-    return [ManifestBump(
-        "pnpm-workspace.yaml", original, fixed, change.package,
-        "catalog", bumped[0].old_range,
-        bumped[-1].new_range,
-    )]
+        return DriftPlan([], declines)
+    return DriftPlan(
+        [ManifestBump("pnpm-workspace.yaml", original, fixed, change.package,
+                      "catalog", bumped[0].old_range, bumped[-1].new_range)],
+        declines,
+    )
+
+
+def _build_pnpm_catalog_bumps(
+    root: Path, change: BreakingChange, *, target_version: str | None = None,
+) -> list[ManifestBump]:
+    return _build_pnpm_catalog_plan(root, change, target_version=target_version).bumps
 
 
 def _replace_pnpm_catalog_entry(
     original: str, change: BreakingChange, catalog_name: str, *, target_version: str | None = None,
-) -> tuple[str, str, str, str] | None:
-    """Replace one known pnpm catalog entry without reserializing YAML."""
+) -> tuple[str, str, str, str] | str | None:
+    """Replace one known pnpm catalog entry without reserializing YAML.
+
+    Returns a 4-tuple on success, a decline-reason string on refusal, or
+    ``None`` when the entry was not found in this catalog at all.
+    """
 
     lines = original.splitlines(keepends=True)
     catalog_indent: int | None = None
@@ -235,10 +320,12 @@ def _replace_pnpm_catalog_entry(
         if match is None or len(match.group("indent")) <= catalog_indent:
             continue
         current = match.group("value").strip()
-        old_version = _semver(change.old_version)
+        verdict = _declaration_upgradable(current, change)
+        if not verdict.ok:
+            return verdict.decline or None
         new_range = _replace_range_version(current, target_version or change.new_version)
-        if old_version is None or _semver(current.lstrip("^~<>= ")) != old_version or new_range is None:
-            return None
+        if new_range is None:
+            return f"cannot rewrite the range {current!r}"
         lines[index] = (
             f"{match.group('indent')}{match.group('quote')}{change.package}"
             f"{match.group('quote')}: {new_range}{match.group('suffix')}"

@@ -31,8 +31,14 @@ class SourceKind(StrEnum):
     PYPI_DIST_TAG = "pypi_dist_tag"
     GITHUB_RELEASE = "github_release"
     OPENAPI_SPEC = "openapi_spec"
+    SMITHY_SPEC = "smithy_spec"
+    ASYNCAPI_SPEC = "asyncapi_spec"
+    REDIS_COMMANDS = "redis_commands"
+    TS_EXPORTS_DIFF = "ts_exports_diff"
+    SECURITY_ADVISORY = "security_advisory"   # NEW: OSV / GHSA vulnerability feed
     # Explicit opt-in local feed for deterministic end-to-end tests.
     FIXTURE_CHANGE = "fixture_change"
+    RUBYGEMS_DIST_TAG = "rubygems_dist_tag"
     CHANGELOG_FILE = "changelog_file"  # Week 2
     CHANGELOG_HTML = "changelog_html"  # Week 2
     RSS = "rss"  # Week 2
@@ -77,6 +83,11 @@ class SpecChangeKind(StrEnum):
     PROPERTY_ADDED = "property_added"
     ENUM_VALUE_REMOVED = "enum_value_removed"
     SCHEMA_REMOVED = "schema_removed"
+    # message-driven (AsyncAPI) and command/export shapes
+    OPERATION_MESSAGE_CHANGED = "operation_message_changed"
+    COMMAND_REMOVED = "command_removed"
+    COMMAND_ARITY_CHANGED = "command_arity_changed"
+    EXPORT_REMOVED = "export_removed"
 
 
 @dataclass(frozen=True)
@@ -104,6 +115,32 @@ class SpecChange:
         )
 
 
+@dataclass(frozen=True)
+class AdvisoryRecord:
+    """One published vulnerability affecting a package.
+
+    ``fixed_version`` is the earliest version that patches it, when the
+    advisory names one; ``None`` means "no fix published yet", which is a
+    real and important state (depfix can warn, but cannot bump to safety).
+    ``affected_symbols`` is best-effort: advisories rarely name the exact
+    vulnerable function, but when they do it drives reachability filtering.
+    """
+
+    advisory_id: str            # e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2026-1234"
+    package: str
+    ecosystem: str              # "npm" | "pypi" | ...
+    summary: str
+    severity: str               # "critical" | "high" | "moderate" | "low"
+    vulnerable_range: str       # human-readable, e.g. ">=3.0.0 <3.4.1"
+    fixed_version: str | None
+    references: tuple[str, ...] = ()
+    affected_symbols: tuple[str, ...] = ()
+
+    @property
+    def has_fix(self) -> bool:
+        return bool(self.fixed_version)
+
+
 @dataclass
 class ChangeEvent:
     """A detected change on one feed.
@@ -126,6 +163,7 @@ class ChangeEvent:
     body_url: str | None = None  # link to the release-notes page `body` came from
     severity: Severity = Severity.UNKNOWN
     spec_changes: list[SpecChange] = field(default_factory=list)
+    advisory: AdvisoryRecord | None = None   # NEW: set by the security feed
     detected_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     raw: dict[str, Any] = field(default_factory=dict)
 

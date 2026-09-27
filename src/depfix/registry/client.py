@@ -57,7 +57,7 @@ class NpmRegistryClient:
             timeout=self._timeout,
             headers={
                 "Accept": _ABBREVIATED_ACCEPT,
-                "User-Agent": "depfix/0.2 (+https://github.com/your-org/depfix)",
+                "User-Agent": "depfix/0.2 (+https://github.com/bedilk/dependency_check)",
             },
         )
 
@@ -72,6 +72,10 @@ class NpmRegistryClient:
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
 
     # -- Public API -------------------------------------------------------------
 

@@ -211,7 +211,12 @@ def _legacy_schema_revision(engine: Engine) -> str | None:
     breaking_change_columns = {
         column["name"] for column in inspector.get_columns("breaking_change")
     }
-    return "0007" if "severity" in breaking_change_columns else "0006"
+    if "severity" not in breaking_change_columns:
+        return "0006"
+    if "repo_scan_change" not in tables:
+        return "0007"
+    fix_run_columns = {column["name"] for column in inspector.get_columns("fix_run")}
+    return "0009" if "cost_classify" in fix_run_columns else "0008"
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:
@@ -238,6 +243,9 @@ def _ensure_sqlite_columns(engine: Engine) -> None:
             "confidence_tier": "VARCHAR(16) NOT NULL DEFAULT 'none'",
             "typechecked": "BOOLEAN NOT NULL DEFAULT 0",
             "escalated": "BOOLEAN NOT NULL DEFAULT 0",
+            "cost_classify": "REAL NOT NULL DEFAULT 0",
+            "cost_characterization": "REAL NOT NULL DEFAULT 0",
+            "cost_call_site_judge": "REAL NOT NULL DEFAULT 0",
         },
         "file_fix": {
             "origin": "VARCHAR(16) NOT NULL DEFAULT 'llm'",

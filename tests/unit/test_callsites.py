@@ -224,7 +224,9 @@ def test_relative_root_path_still_propagates_across_files(tmp_path: Path, monkey
 
 def test_dated_api_version_literal_is_matched(tmp_path: Path) -> None:
     (tmp_path / "client.js").write_text(
-        'const opts = { apiVersion: "2020-08-27" };\n', encoding="utf-8"
+        'import Stripe from "stripe";\n'
+        'const opts = { apiVersion: "2020-08-27" };\n',
+        encoding="utf-8",
     )
 
     result = CallSiteScanner().scan(

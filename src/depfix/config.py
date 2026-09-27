@@ -82,6 +82,24 @@ class Settings(BaseSettings):
     pypi_registry_url: str = Field(default="https://pypi.org")
     pypi_request_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
 
+    # --- RubyGems registry (used by sources.rubygems_dist_tag feeds) --------
+    rubygems_registry_url: str = Field(default="https://rubygems.org")
+    rubygems_request_timeout: float = Field(default=10.0, ge=1.0, le=60.0)
+
+    # --- Drift policy ---------------------------------------------------------
+    drift_max_major_gap: int = Field(
+        default=0,
+        ge=0,
+        description="How many major steps a registry drift may cross and still be treated as "
+        "an automatic manifest edit. 0 (default) means any major change is a draft review PR.",
+    )
+    drift_max_minor_gap: int | None = Field(
+        default=None,
+        ge=0,
+        description="Downgrade a same-major drift to a draft review PR once the minor gap "
+        "exceeds this. None (default) keeps every same-major drift automatic.",
+    )
+
     # --- change sources (Week 1) ----------------------------------------------
     providers_file: str = Field(
         default="providers.yaml", description="YAML list of providers and their feeds"
@@ -213,6 +231,12 @@ class Settings(BaseSettings):
     )
     verify_typecheck_timeout: float = Field(default=300.0, ge=1.0, le=1800.0)
     plan_dir: str = Field(default=".depfix/plans")
+    repository_observations_file: str = Field(
+        default=".depfix/repository_migrations.yaml",
+        description="Where `depfix scan` records resolved repository API usage. "
+        "Local state covered by .gitignore — scan results (and local absolute "
+        "paths) are never committed to the packaged catalog.",
+    )
     apply_min_confidence: Literal["high", "medium", "low", "none"] = Field(default="low")
     draft_below_confidence: Literal["high", "medium", "low", "none"] = Field(default="high")
     codemods_enabled: bool = Field(default=True)
@@ -220,6 +244,47 @@ class Settings(BaseSettings):
     verify_characterize_timeout: int = Field(default=120, ge=1, le=1800)
     llm_fallback_provider: str = Field(default="")
     llm_fallback_model: str = Field(default="")
+
+    # --- Always-run verification stages: characterization + smoke --------
+    characterization_always_run: bool = Field(
+        default=True,
+        description="Run the CHARACTERIZATION stage on every fix, even when "
+        "the repo already has tests covering the changed call sites. "
+        "Costs LLM tokens per run. Set False to restore the old "
+        "'only when coverage gap detected' behavior.",
+    )
+    characterization_strict: bool = Field(
+        default=False,
+        description="Promote a SKIPPED characterization result (no changed "
+        "call sites to exercise, or LLM unavailable) to FAILED, blocking "
+        "the PR. Off by default — pure library repos with no runnable "
+        "call sites should not be blocked.",
+    )
+    smoke_always_run: bool = Field(
+        default=True,
+        description="Attempt the SMOKE stage on every fix. Depfix "
+        "auto-detects a runnable entrypoint from package.json, pyproject, "
+        "Dockerfile, Go main, Rails, etc. If nothing runnable is found, "
+        "result is SKIPPED(no_entrypoint) — not a failure unless "
+        "smoke_strict=True.",
+    )
+    smoke_strict: bool = Field(
+        default=False,
+        description="Promote 'no_entrypoint' from SKIPPED to FAILED. "
+        "Useful for service repos where a missing entrypoint is itself a "
+        "bug. Do NOT enable globally if you scan libraries.",
+    )
+    smoke_window_seconds: float = Field(
+        default=8.0,
+        description="How long the smoke run keeps a server process alive "
+        "before declaring it healthy.",
+    )
+    smoke_extra_entrypoint_probes: list[str] = Field(
+        default_factory=list,
+        description="Additional commands tried as smoke entrypoints when "
+        "auto-detection finds nothing. Tried in order; first non-crashing "
+        "one wins. Example: ['python -m mypackage', './bin/serve'].",
+    )
 
     # --- Behavioural evidence: coverage + HTTP contract (Week 8) ----------------
     verify_coverage_enabled: bool = Field(
@@ -254,6 +319,45 @@ class Settings(BaseSettings):
         description="Run only the test files that reach a touched file (import graph + filename "
         "convention) instead of the whole suite. Much cheaper per fix, but a regression in an "
         "unrelated test is invisible -- opt in per fleet, never silently.",
+    )
+
+    # --- Scan strategy (deterministic / hybrid / agent) --------------------------
+    scan_strategy: Literal["deterministic", "agent", "hybrid"] = Field(
+        default="hybrid",
+        description="Which scanner produces RepoScanResult and ChangeEvent. "
+        "'hybrid' (recommended default) = deterministic scanner finds call sites "
+        "first (free, O(n)), then an LLM agent augments ONLY where the deterministic "
+        "scanner is weak: resolves LOW-confidence ambiguous bindings and finds raw "
+        "HTTP calls with no SDK import. Bills the delta to SCAN_AGENT. Costs ~$0 "
+        "when deterministic already succeeds cleanly; ~$0.01-0.05 when the agent "
+        "actually adds value. Falls back gracefully to the deterministic result if "
+        "no LLM is configured. "
+        "'deterministic' = regex/AST scanners + HTTP pollers only (fast, free, "
+        "zero-cost; excellent at well-formed SDK imports; use for offline runs). "
+        "'agent' = pure LLM scan with no deterministic pass; for ecosystems the "
+        "regex scanner genuinely cannot parse. Requires an LLM; refuses to fall "
+        "back silently.",
+    )
+    scan_agent_max_steps: int = Field(
+        default=25, ge=1, le=100,
+        description="Maximum read-only tool calls per agent invocation.",
+    )
+    scan_agent_judge_cap: int = Field(
+        default=20, ge=1, le=100,
+        description="Maximum LOW-confidence sites the CallSiteJudgeAgent will "
+        "review per repo scan in hybrid mode. Sites beyond the cap keep their "
+        "original LOW confidence without LLM review.",
+    )
+
+    # --- Version cooldown gate ----------------------------------------------------
+    version_cooldown_hours: float = Field(
+        default=72.0,
+        ge=0.0,
+        description="Minimum age (hours) a newly published version must reach before "
+        "depfix migrates a repo onto it -- a version's first hours are when a "
+        "compromised release is most likely still live. Distinct from "
+        "pipeline_retry_cooldown_hours, which paces depfix's own retries. Security "
+        "advisories bypass this gate. 0 disables it.",
     )
 
     # --- Container sandbox -------------------------------------------------------

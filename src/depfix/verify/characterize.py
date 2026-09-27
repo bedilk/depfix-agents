@@ -52,6 +52,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from depfix.core.models import BreakingChange
+from depfix.redaction import redact_text
+from depfix.obs.cost import CostLedger, CostStage
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, run_sandboxed
 
 logger = logging.getLogger(__name__)
@@ -192,10 +194,12 @@ class Characterizer:
         *,
         timeout: float = 120.0,
         max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+        ledger: CostLedger | None = None,
     ) -> None:
         self._completer = completer
         self._timeout = timeout
         self._max_output_bytes = max_output_bytes
+        self._ledger = ledger
 
     def supports(self, relpath: str) -> bool:
         return Path(relpath).suffix in _SUPPORTED_SUFFIXES
@@ -329,9 +333,15 @@ class Characterizer:
             migration_guide=change.migration_guide or "(none supplied)",
             examples=examples,
             relpath=relpath,
-            source=source[:12000],
+            source=redact_text(source)[:12000],
         )
         response = self._completer.complete(prompt, temperature=0.0)
+        if self._ledger is not None:
+            self._ledger.record(
+                CostStage.CHARACTERIZATION, response.cost_estimate,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+            )
         payload = _parse_json_object(response.text)
         for key in ("mock_old", "mock_new", "exercise"):
             value = payload.get(key)

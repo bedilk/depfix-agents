@@ -58,6 +58,7 @@ from depfix.classify import (
     classify_pending,
     discover_usage_candidates,
 )
+from depfix.classify.llm import BedrockCompleter, CostTrackingCompleter
 from depfix.clone import CloneError, CloneService
 from depfix.config import Settings, get_settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
@@ -92,6 +93,7 @@ from depfix.gh import (
     open_pull_request,
     pr_title_for,
 )
+from depfix.obs.cost import CostLedger
 from depfix.obs.logging import configure_logging, configure_sentry
 from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome, PlanArtifact
 from depfix.providers.loader import ProviderConfigError, load_providers_file
@@ -292,6 +294,14 @@ def _build_gh_auth(settings) -> GitHubAppAuth | None:
 
 
 def _build_completer(settings) -> LLMCompleter | None:
+    if settings.llm_provider == "bedrock":
+        return BedrockCompleter(
+            aws_access_key=settings.bedrock_access_key,
+            aws_secret_key=settings.bedrock_secret_key,
+            aws_region=settings.bedrock_region,
+            aws_profile=settings.bedrock_profile,
+            model=settings.bedrock_model,
+        )
     if settings.llm_provider == "gemini":
         if not settings.google_api_key:
             return None
@@ -304,6 +314,16 @@ def _build_completer(settings) -> LLMCompleter | None:
 
 
 def _build_fixer(settings):
+    if settings.llm_provider == "bedrock":
+        from depfix.fixers.bedrock import BedrockFixGenerator
+
+        return BedrockFixGenerator(
+            aws_access_key=settings.bedrock_access_key,
+            aws_secret_key=settings.bedrock_secret_key,
+            aws_region=settings.bedrock_region,
+            aws_profile=settings.bedrock_profile,
+            model=settings.bedrock_model,
+        )
     if settings.llm_provider == "gemini":
         if not settings.google_api_key:
             return None
@@ -313,6 +333,39 @@ def _build_fixer(settings):
         base_url=settings.ollama_base_url,
         timeout=settings.ollama_timeout,
     )
+
+
+def _build_scan_coordinator(
+    settings: "Settings", ledger: "CostLedger"
+) -> "object | None":
+    """Build a ScanCoordinator sharing the caller's CostLedger.
+
+    The ledger is passed in, never created here — it must be the SAME
+    ledger the command's summary reads, or agent spend records to an
+    orphan and TTS shows 0 despite real LLM usage.
+
+    Returns None when scan_strategy is not "agent", so callers can use
+    ``strategy = "agent" if coordinator is not None else "deterministic"``.
+    """
+    if settings.scan_strategy != "agent":
+        return None
+    completer = _build_completer(settings)
+    if completer is None:
+        console.print(
+            "[red]Error: SCAN_STRATEGY=agent requires an LLM "
+            "(set GOOGLE_API_KEY, LLM_PROVIDER=ollama, or configure Bedrock).[/red]"
+        )
+        return None
+    # Import lazily so the module is not loaded when strategy=deterministic.
+    from depfix.agent.scan_agent import ScanAgent
+    from depfix.classify.llm import CostTrackingCompleter
+    from depfix.obs.cost import CostStage
+
+    # Wrap the completer so every agent LLM call bills to SCAN_AGENT stage.
+    tracking = CostTrackingCompleter(completer, ledger, CostStage.SCAN_AGENT)
+    # Return the completer itself as the "coordinator" — scan_checkout
+    # receives it as agent_completer and builds a fresh ScanAgent per call.
+    return tracking
 
 
 def _apply_model_overrides(args: argparse.Namespace, settings: Settings) -> None:
@@ -505,6 +558,14 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
         for match in result.manifest_matches:
             console.print(f"  {match}")
         console.print()
+
+    if result.raw_http_only:
+        console.print(
+            "[yellow]This repo calls the provider API via raw HTTP without an SDK package "
+            "dependency. Depfix can detect these calls but cannot produce a version-drift "
+            "plan without a manifest entry. Consider adopting the official SDK for managed "
+            "upgrades.[/yellow]\n"
+        )
 
     for err in result.errors:
         console.print(f"  [yellow]{err}[/yellow]")
@@ -739,6 +800,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
 
 def _cmd_classify(args: argparse.Namespace) -> int:
     settings = get_settings()
+    ledger = CostLedger()
 
     completer: LLMCompleter | None = None
     if not args.no_llm:
@@ -749,6 +811,8 @@ def _cmd_classify(args: argparse.Namespace) -> int:
                 "only events with spec_changes will classify. Pass --no-llm to silence "
                 "this warning.[/yellow]"
             )
+        elif completer is not None:
+            completer = CostTrackingCompleter(completer, ledger)
 
     classifier = Classifier(completer, min_confidence=settings.classify_min_confidence)
 
@@ -801,11 +865,16 @@ def _cmd_classify(args: argparse.Namespace) -> int:
             console.print(f"  [green]breaking change {row.id}:[/green] {path}")
     for err in summary.errors:
         console.print(f"  [yellow]{err}[/yellow]")
+    if ledger.by_stage:
+        console.print(f"[dim]classify LLM cost:[/dim] {ledger.summary()}")
     return 0
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
     settings = get_settings()
+    ledger = CostLedger()
+    _scan_coordinator = _build_scan_coordinator(settings, ledger)
+    _scan_strategy = "agent" if _scan_coordinator is not None else "deterministic"
 
     try:
         local_path, remote_repo = _scan_location(args)
@@ -840,10 +909,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if change is None and not args.old_api:
         console.print(f"[dim]Detecting changes for {provider.id}...[/dim]")
         try:
+            _detect_completer = _build_completer(settings)
+            if _detect_completer is not None:
+                _detect_completer = CostTrackingCompleter(_detect_completer, ledger)
             created = ensure_changes_detected(
                 provider.id,
                 providers_file=providers_file,
-                completer=_build_completer(settings),
+                completer=_detect_completer,
                 min_confidence=settings.classify_min_confidence,
             )
             if created:
@@ -880,10 +952,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if settings.scan_llm_judge_enabled and scan_change is not None:
         completer = _build_completer(settings)
         if completer is not None:
+            from depfix.obs.cost import CostStage
             from depfix.scanners.judge import LLMCallSiteJudge
 
             judge = LLMCallSiteJudge(
-                completer, max_candidates=settings.scan_llm_judge_max_candidates
+                CostTrackingCompleter(completer, ledger, CostStage.CALL_SITE_JUDGE),
+                max_candidates=settings.scan_llm_judge_max_candidates
             )
 
     _print_header()
@@ -898,6 +972,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 change=scan_change, judge=judge,
                 prepare_package_manager_runtime=settings.scan_prepare_package_manager,
                 package_manager_timeout=settings.package_manager_install_timeout,
+                strategy=_scan_strategy,
+                provider=provider,
+                agent_completer=_scan_coordinator,
             )
         else:
             assert remote_repo is not None
@@ -927,6 +1004,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 judge=judge,
                 prepare_package_manager_runtime=settings.scan_prepare_package_manager,
                 package_manager_timeout=settings.package_manager_install_timeout,
+                strategy=_scan_strategy,
+                provider=provider,
+                agent_completer=_scan_coordinator,
             )
     except (CloneError, GitHubAppError, FileNotFoundError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
@@ -964,6 +1044,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if scan_change is None and result.actionable_sites:
         completer = _build_completer(settings)
         if completer is not None:
+            completer = CostTrackingCompleter(completer, ledger)
             package = provider.sdk_packages[0].name if provider.sdk_packages else provider.id
             with session_scope() as session:
                 discovered = discover_usage_candidates(
@@ -1011,6 +1092,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     )
     _print_scan_assessments(assessments)
     _print_dependency_drift_summary(result, assessments)
+    if ledger.by_stage:
+        console.print(f"[dim]LLM cost:[/dim] {ledger.summary()}")
+    else:
+        console.print("[dim]No LLM calls (scan is AST/regex-only).  TTS: 0 tokens[/dim]")
     if args.write_report:
         _write_scan_report(
             local_path=local_path,
@@ -1024,9 +1109,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         # Repository usage is recorded before plan/apply eligibility is
         # considered. The catalog's managed section preserves every resolved
         # call site, including usages for which no feed has a migration yet.
-        from depfix.catalog import canonical_providers_file, record_detected_usage
+        from depfix.catalog import record_detected_usage, repository_observations_file
 
-        catalog_path = canonical_providers_file()
+        catalog_path = repository_observations_file(settings)
         if catalog_path is not None:
             recordable_kinds = frozenset(
                 {
@@ -1063,7 +1148,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 if learned:
                     console.print(
                         f"[green]{learned} repository API usage record(s) written to "
-                        "repository_migrations[/green]"
+                        f"{catalog_path}[/green]"
                     )
         init_schema()
         with session_scope() as session:
@@ -1250,6 +1335,7 @@ def _open_pr_for_fix(
 
 def _cmd_fix(args: argparse.Namespace) -> int:
     settings = get_settings()
+    ledger = CostLedger()
     _apply_model_overrides(args, settings)
     api_key = args.api_key or settings.google_api_key
     model = args.model or settings.gemini_model
@@ -1286,8 +1372,18 @@ def _cmd_fix(args: argparse.Namespace) -> int:
         console.print(f"[red]Error: {exc}[/red]")
         return 2
 
-    fixer: FixGenerator | OllamaFixGenerator
-    if llm_provider == "gemini":
+    fixer: FixGenerator | OllamaFixGenerator | BedrockFixGenerator
+    if llm_provider == "bedrock":
+        from depfix.fixers.bedrock import BedrockFixGenerator
+
+        fixer = BedrockFixGenerator(
+            aws_access_key=settings.bedrock_access_key,
+            aws_secret_key=settings.bedrock_secret_key,
+            aws_region=settings.bedrock_region,
+            aws_profile=settings.bedrock_profile,
+            model=settings.bedrock_model,
+        )
+    elif llm_provider == "gemini":
         fixer = FixGenerator(api_key=api_key, model=model)
     else:
         fixer = OllamaFixGenerator(
@@ -1301,7 +1397,12 @@ def _cmd_fix(args: argparse.Namespace) -> int:
 
     _print_header()
     _print_breaking_change(breaking)
-    if llm_provider == "ollama":
+    if llm_provider == "bedrock":
+        console.print(
+            f"[dim]Using provider: bedrock  model: {settings.bedrock_model}  "
+            f"region: {settings.bedrock_region}[/dim]\n"
+        )
+    elif llm_provider == "ollama":
         console.print(f"[dim]Using provider: ollama  model: {ollama_model}[/dim]\n")
     else:
         console.print(f"[dim]Using provider: gemini  model: {model}[/dim]\n")
@@ -1364,6 +1465,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
                 repo_config=repo_config,
                 fixer=fixer,
                 max_retries=max_retries,
+                ledger=ledger,
             )
             result = service_result.pipeline_result
             progress.update(task, completed=True)
@@ -1384,6 +1486,8 @@ def _cmd_fix(args: argparse.Namespace) -> int:
     assert service_result is not None
     console.print()
     _print_fix_result(result)
+    if ledger.by_stage:
+        console.print(f"[dim]LLM spend this run:[/dim] {ledger.summary()}")
     if args.show_diffs:
         _print_fix_diffs(result, show_full=True)
 
@@ -1411,6 +1515,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
                 name=name,
                 result=result,
                 escalated=service_result.escalated,
+                cost_ledger=ledger,
             )
             if pr_result is not None:
                 record_pull_request(session, run, pr_result)
@@ -1540,6 +1645,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     if llm_provider == "gemini" and not api_key:
         console.print("[red]Error: GOOGLE_API_KEY not set. Use --api-key or .env[/red]")
         return 2
+    if llm_provider == "bedrock":
+        console.print(
+            f"[dim]Using provider: bedrock  model: {settings.bedrock_model}  "
+            f"region: {settings.bedrock_region}[/dim]"
+        )
 
     providers_file = args.providers_file or settings.providers_file
     try:
@@ -1671,9 +1781,17 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         gh_auth.close()
         return 0
 
-    def fixer_factory() -> FixGenerator | OllamaFixGenerator:
+    def fixer_factory() -> FixGenerator | OllamaFixGenerator | BedrockFixGenerator:
         if llm_provider == "gemini":
             return FixGenerator(api_key=api_key, model=model)
+        if llm_provider == "bedrock":
+            return BedrockFixGenerator(
+                aws_access_key=settings.bedrock_access_key,
+                aws_secret_key=settings.bedrock_secret_key,
+                aws_region=settings.bedrock_region,
+                aws_profile=settings.bedrock_profile,
+                model=settings.bedrock_model,
+            )
         return OllamaFixGenerator(
             model=ollama_model, base_url=settings.ollama_base_url, timeout=settings.ollama_timeout
         )
@@ -1693,6 +1811,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         f"[dim]Mode:[/dim] {mode}\n"
     )
 
+    _pipeline_ledger = CostLedger()
+    _pipeline_coordinator = _build_scan_coordinator(settings, _pipeline_ledger)
+
     orchestrator = Orchestrator(
         settings=settings,
         gh_auth=gh_auth,
@@ -1711,6 +1832,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         ),
         max_cost_usd=args.max_cost,
         plan_artifacts=plan_artifacts,
+        completer=_build_completer(settings),
+        agent_coordinator=_pipeline_coordinator,  # NEW — shared with ledger
+        ledger=_pipeline_ledger,                   # NEW — shared ledger
     )
 
     try:
@@ -1746,12 +1870,26 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 )
         rollup = outcome.rollup()
         if rollup.prs_planned:
-            console.print(f"\n[bold]{rollup.prs_planned} PR(s) planned[/bold]  [dim]cost:[/dim] ${rollup.total_cost_usd:.4f}")
+            acted = [c for r in outcome.repos for c in r.changes if c.plan_artifact is not None]
+            if acted and all(c.kind == ChangeKind.DEPENDENCY_VERSION_BUMP.value for c in acted):
+                cost_note = " [dim](manifest-only dependency drift; no model was asked to rewrite code)[/dim]"
+            elif rollup.total_cost_usd == 0.0:
+                cost_note = (
+                    " [dim](no billed model cost -- a local model, a deterministic codemod, "
+                    "or a replayed plan)[/dim]"
+                )
+            else:
+                cost_note = ""
+            console.print(f"\n[bold]{rollup.prs_planned} PR(s) planned[/bold]  [dim]cost:[/dim] ${rollup.total_cost_usd:.4f}{cost_note}")
             for severity, count in sorted(rollup.by_severity.items(), key=lambda item: item[0].rank, reverse=True):
                 console.print(f"  {_severity_style(severity)}: {count}")
         else:
             console.print("\n[dim]No PRs planned this run.[/dim]")
 
+    if outcome.cost_ledger is not None and outcome.cost_ledger.by_stage:
+        console.print(f"[bold]LLM spend this run:[/bold] {outcome.cost_ledger.summary()}")
+    elif outcome.cost_ledger is not None:
+        console.print(f"[dim]No LLM calls this run.  TTS: 0 tokens[/dim]")
     if outcome.stopped_early:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
     if not outcome.locked:
@@ -1772,6 +1910,7 @@ def _print_eval_report(report: EvalReport) -> None:
     table.add_column("Passed", justify="right")
     table.add_column("Skipped", justify="right")
     table.add_column("Unverified", justify="right")
+    table.add_column("Cost", justify="right")
 
     for category in EvalCategory:
         cases = report.by_category(category)
@@ -1781,17 +1920,21 @@ def _print_eval_report(report: EvalReport) -> None:
         passed = sum(1 for c in scored if c.passed)
         skipped = sum(1 for c in cases if c.skipped)
         unverified = sum(1 for c in cases if not c.verified)
+        category_cost = sum(c.cost for c in cases)
         table.add_row(
             category.value,
             str(len(cases)),
             f"{passed}/{len(scored)}",
             str(skipped),
             str(unverified),
+            f"${category_cost:.4f}" if category_cost > 0 else "-",
         )
     console.print(table)
 
-    for case in report.failures:
-        console.print(f"  [red]FAIL[/red] {case.case_id}: {case.detail}")
+    for case in report.scored_cases:
+        status = "[green]PASS[/green]" if case.passed else "[red]FAIL[/red]"
+        cost_str = f"  ${case.cost:.4f}" if case.cost > 0 else ""
+        console.print(f"  {status} {case.case_id}{cost_str}: {case.detail}")
 
     console.print(
         f"\n[dim]{report.summary_line}[/dim]  "
@@ -1923,7 +2066,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--provider",
         type=str,
-        choices=["gemini", "ollama"],
+        choices=["gemini", "ollama", "bedrock"],
         default=None,
         help="LLM backend (default: LLM_PROVIDER env, else gemini)",
     )
@@ -2194,7 +2337,7 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_p.add_argument(
         "--llm-provider",
         type=str,
-        choices=["gemini", "ollama"],
+        choices=["gemini", "ollama", "bedrock"],
         default=None,
         help="LLM backend (default: LLM_PROVIDER env, else gemini)",
     )
@@ -2246,7 +2389,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Proceed without the advisory lock; intended only for deliberate parallel runs.",
     )
     workflow_p.add_argument("--no-codemods", action="store_true")
-    workflow_p.add_argument("--fallback-provider", choices=["gemini", "ollama"], default=None)
+    workflow_p.add_argument("--container-image", default=None)
+    workflow_p.add_argument("--container-runtime", choices=["docker", "podman"], default=None)
+    workflow_p.add_argument(
+        "--fallback-provider", choices=["gemini", "ollama", "bedrock"], default=None
+    )
     workflow_p.add_argument("--fallback-model", default=None)
     workflow_p.add_argument(
         "--show-skips",

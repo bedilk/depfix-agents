@@ -25,7 +25,10 @@ from depfix.gh import GitHubAppAuth
 from depfix.providers.models import ProviderSpec
 from depfix.scanners.callsites import CallSiteScanner
 from depfix.scanners.manifest import scan_manifests
-from depfix.scanners.models import DeclaredDependency, RepoScanResult, ScanTarget
+from depfix.scanners.models import (
+    CallSite, CallSiteKind, DeclaredDependency, MatchConfidence,
+    RepoScanResult, ScanTarget, dedupe_call_sites,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -226,79 +229,75 @@ def scan_checkout(
     judge: object | None = None,
     prepare_package_manager_runtime: bool = False,
     package_manager_timeout: float = 90.0,
+    # NEW: opt-in agent strategy
+    strategy: str = "deterministic",
+    agent_completer: object | None = None,
+    provider: ProviderSpec | None = None,
+    ledger: object | None = None,
 ) -> RepoScanResult:
     """Scan an already-acquired checkout for manifests + call sites.
 
-    Dispatches on the checkout's detected ecosystem: JavaScript keeps the
-    binding-aware :class:`CallSiteScanner` + npm lockfile resolution;
-    every other known ecosystem goes through the generic import scanner
-    and its own manifest parsers (:mod:`depfix.ecosystems`). An unknown
-    ecosystem still runs the JS scanner -- the historical behavior, and
-    the right conservative default for polyglot or unmarked trees.
+    Two strategies:
+
+    - ``deterministic`` (default): the historical path — regex/AST
+      scanners in :mod:`depfix.scanners.callsites` plus lockfile-aware
+      manifest parsing.
+    - ``agent`` (opt-in): a bounded LLM agent (see
+      :mod:`depfix.agent.scan_agent`) reads per-provider and per-repo
+      skill files and drives a read-only toolset to produce the same
+      RepoScanResult shape. Requires ``provider`` and ``agent_completer``.
+
+    Both strategies produce identical output types, so every downstream
+    consumer (classifier, assessor, orchestrator, fix pipeline) is
+    strategy-agnostic. The deterministic path is preserved unchanged;
+    the agent path is a peer, not a replacement.
 
     ``scanner`` lets a caller (e.g. the CLI, wiring in ``scan_max_file_bytes``/
     ``scan_max_files`` from :class:`depfix.config.Settings`) supply a
     pre-configured :class:`CallSiteScanner`; a default is constructed when
     omitted so tests and simple callers don't have to.
     """
-    ecosystem_id = ecosystems_registry.detect(checkout.path)
-    spec = ecosystems_registry.get(ecosystem_id)
-    dependencies: list[DeclaredDependency] = []
-    preparation: object | None = None
-
-    if prepare_package_manager_runtime and (spec is None or spec.id == "javascript"):
-        from depfix.verify.manager import prepare_package_manager
-
-        preparation = prepare_package_manager(checkout.path, timeout=package_manager_timeout)
-
-    if spec is not None and spec.id != "javascript":
-        from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
-
-        call_site_result = GenericImportScanner(spec).scan(checkout.path, target)
-        if spec.scan_dependencies is not None:
-            packages = packages_for_spec(target, spec)
-            for declaration in spec.scan_dependencies(checkout.path, packages):
-                dependencies.append(
-                    DeclaredDependency(
-                        package=declaration.package,
-                        manifest_path=declaration.manifest_path,
-                        declared_range=declaration.declared_version,
-                        resolved_version=declaration.resolved_version,
-                        source=declaration.source,
-                    )
+    if strategy in ("agent", "hybrid"):
+        if agent_completer is None or provider is None:
+            if strategy == "agent":
+                raise ValueError(
+                    "SCAN_STRATEGY=agent but no agent completer was provided to scan_checkout. "
+                    "This usually means no LLM is configured (set GOOGLE_API_KEY, "
+                    "LLM_PROVIDER=ollama, or configure Bedrock). Refusing to silently fall "
+                    "back to the deterministic scanner — set "
+                    "SCAN_STRATEGY=deterministic explicitly if that is what you want."
                 )
-    else:
-        manifest_scan = scan_manifests(checkout.path, _npm_package_names(target))
-        call_site_result = (scanner or CallSiteScanner()).scan(checkout.path, target)
-        dependencies = [
-            DeclaredDependency(
-                package=match.package,
-                manifest_path=match.manifest_path,
-                declared_range=match.declared_range,
-                resolved_version=match.resolved_version,
-                source=match.source,
+            # hybrid with no LLM configured: fall back gracefully to deterministic
+            logger.info(
+                "SCAN_STRATEGY=hybrid but no LLM available for %s — "
+                "using deterministic scanner only", repo_full_name or "local"
             )
-            for match in manifest_scan.matches
-        ]
+        else:
+            if strategy == "hybrid":
+                # HYBRID: run deterministic first (free, O(n)), then augment
+                baseline = _scan_checkout_deterministic(
+                    checkout, target, repo_full_name=repo_full_name, scanner=scanner,
+                    change=change, judge=None,  # judge is now the agent's job
+                    prepare_package_manager_runtime=prepare_package_manager_runtime,
+                    package_manager_timeout=package_manager_timeout,
+                )
+                return _scan_checkout_agent_augment(
+                    baseline, provider, agent_completer,
+                    checkout_path=checkout.path, ledger=ledger,
+                )
+            else:
+                # PURE AGENT: skip deterministic entirely
+                return _scan_checkout_agent(
+                    checkout, target, provider, agent_completer,
+                    repo_full_name=repo_full_name, ledger=ledger,
+                )
 
-    if judge is not None and change is not None and call_site_result.call_sites:
-        call_site_result.call_sites = judge.judge(change, call_site_result.call_sites, checkout.path)
-
-    manifest_matches = [
-        f"{dependency.package}@{dependency.resolved_version or dependency.declared_range or '?'} "
-        f"({dependency.source}, {dependency.manifest_path})"
-        for dependency in dependencies
-    ]
-
-    return RepoScanResult(
-        repo_full_name=repo_full_name,
-        commit_sha=_current_commit_sha(checkout.path),
-        call_sites=call_site_result.call_sites,
-        manifest_matches=manifest_matches,
-        dependencies=dependencies,
-        files_scanned=call_site_result.files_scanned,
-        errors=call_site_result.errors,
-        package_manager_preparation=preparation,
+    # Deterministic path
+    return _scan_checkout_deterministic(
+        checkout, target, repo_full_name=repo_full_name, scanner=scanner,
+        change=change, judge=judge,
+        prepare_package_manager_runtime=prepare_package_manager_runtime,
+        package_manager_timeout=package_manager_timeout,
     )
 
 
@@ -312,6 +311,10 @@ def scan_path(
     judge: object | None = None,
     prepare_package_manager_runtime: bool = False,
     package_manager_timeout: float = 90.0,
+    strategy: str = "deterministic",
+    agent_completer: object | None = None,
+    provider: ProviderSpec | None = None,
+    ledger: object | None = None,
 ) -> RepoScanResult:
     """Scan a local directory directly, with no clone/GitHub App involved."""
     checkout = CloneService().local(path)
@@ -319,6 +322,10 @@ def scan_path(
         checkout, target, repo_full_name=repo_full_name, scanner=scanner, change=change, judge=judge,
         prepare_package_manager_runtime=prepare_package_manager_runtime,
         package_manager_timeout=package_manager_timeout,
+        strategy=strategy,
+        agent_completer=agent_completer,
+        provider=provider,
+        ledger=ledger,
     )
 
 
@@ -335,6 +342,10 @@ def scan_repo(
     judge: object | None = None,
     prepare_package_manager_runtime: bool = False,
     package_manager_timeout: float = 90.0,
+    strategy: str = "deterministic",
+    agent_completer: object | None = None,
+    provider: ProviderSpec | None = None,
+    ledger: object | None = None,
 ) -> RepoScanResult:
     """Resolve the App installation for ``owner/repo``, mint a
     least-privilege token, shallow-clone, scan, and clean up -- always,
@@ -350,6 +361,332 @@ def scan_repo(
             checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner, change=change, judge=judge,
             prepare_package_manager_runtime=prepare_package_manager_runtime,
             package_manager_timeout=package_manager_timeout,
+            strategy=strategy,
+            agent_completer=agent_completer,
+            provider=provider,
+            ledger=ledger,
         )
     finally:
         clone_service.cleanup(checkout)
+
+
+def _scan_checkout_deterministic(
+    checkout: Checkout,
+    target: ScanTarget,
+    *,
+    repo_full_name: str = "",
+    scanner: CallSiteScanner | None = None,
+    change: BreakingChange | None = None,
+    judge: object | None = None,
+    prepare_package_manager_runtime: bool = False,
+    package_manager_timeout: float = 90.0,
+) -> RepoScanResult:
+    """Pure deterministic scan — O(n) regex/AST path across all languages.
+
+    The JS/TS binding-aware scanner runs as before. For every other
+    language detected in the checkout (Python, Go, Java/Kotlin, Ruby),
+    the language-specific binding-aware scanner in
+    depfix.scanners.languages runs in parallel and its call sites are
+    merged into the same RepoScanResult.
+
+    Extracted so both the standalone 'deterministic' strategy and the
+    hybrid first-pass can call it without duplicating the body.
+    """
+    from depfix.scanners.models import dedupe_call_sites as _dedupe
+
+    ecosystem_id = ecosystems_registry.detect(checkout.path)
+    spec = ecosystems_registry.get(ecosystem_id)
+    dependencies: list[DeclaredDependency] = []
+    preparation: object | None = None
+    all_call_sites: list[CallSite] = []
+    total_files_scanned = 0
+    errors: list[str] = []
+
+    if prepare_package_manager_runtime and (spec is None or spec.id == "javascript"):
+        from depfix.verify.manager import prepare_package_manager
+        preparation = prepare_package_manager(checkout.path, timeout=package_manager_timeout)
+
+    # --- JS/TS path (binding-aware, unchanged) --------------------------------
+    if spec is None or spec.id == "javascript":
+        manifest_scan = scan_manifests(checkout.path, _npm_package_names(target))
+        call_site_result = (scanner or CallSiteScanner()).scan(checkout.path, target)
+        dependencies = [
+            DeclaredDependency(
+                package=match.package,
+                manifest_path=match.manifest_path,
+                declared_range=match.declared_range,
+                resolved_version=match.resolved_version,
+                source=match.source,
+            )
+            for match in manifest_scan.matches
+        ]
+        all_call_sites.extend(call_site_result.call_sites)
+        total_files_scanned += call_site_result.files_scanned
+        errors.extend(call_site_result.errors)
+
+    # --- Non-JS ecosystem path (existing generic scanner) ---------------------
+    elif spec is not None:
+        from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
+        call_site_result = GenericImportScanner(spec).scan(checkout.path, target)
+        all_call_sites.extend(call_site_result.call_sites)
+        total_files_scanned += call_site_result.files_scanned
+        errors.extend(call_site_result.errors)
+        if spec.scan_dependencies is not None:
+            packages = packages_for_spec(target, spec)
+            for declaration in spec.scan_dependencies(checkout.path, packages):
+                dependencies.append(
+                    DeclaredDependency(
+                        package=declaration.package,
+                        manifest_path=declaration.manifest_path,
+                        declared_range=declaration.declared_version,
+                        resolved_version=declaration.resolved_version,
+                        source=declaration.source,
+                    )
+                )
+
+    # --- Language-specific binding-aware scanners (Python/Go/Java/Ruby) ------
+    lang_sites, lang_files, lang_errors = _run_language_scanners(checkout.path, target)
+    all_call_sites.extend(lang_sites)
+    total_files_scanned += lang_files
+    errors.extend(lang_errors)
+
+    if judge is not None and change is not None and all_call_sites:
+        all_call_sites = judge.judge(change, all_call_sites, checkout.path)
+
+    manifest_matches = [
+        f"{d.package}@{d.resolved_version or d.declared_range or '?'} "
+        f"({d.source}, {d.manifest_path})"
+        for d in dependencies
+    ]
+
+    return RepoScanResult(
+        repo_full_name=repo_full_name,
+        commit_sha=_current_commit_sha(checkout.path),
+        call_sites=_dedupe(all_call_sites),
+        manifest_matches=manifest_matches,
+        dependencies=dependencies,
+        files_scanned=total_files_scanned,
+        errors=errors,
+        package_manager_preparation=preparation,
+    )
+
+
+def _run_language_scanners(
+    checkout_root: Path, target: ScanTarget,
+) -> tuple[list[CallSite], int, list[str]]:
+    """Run binding-aware scanners for Python/Go/Java/Ruby and return
+    (call_sites, files_scanned, errors). Returns empty lists when the
+    registry has no packages for a detected language.
+
+    JS/TS is handled by the existing CallSiteScanner above; this function
+    only covers the non-JS registry entries.
+    """
+    from depfix.scanners.registry import scanner_registry
+    from depfix.scanners.language import BindingKind
+
+    # Build ecosystem → package list from sdk_package_refs
+    ecosystem_packages: dict[str, list[str]] = {}
+    if target.sdk_package_refs:
+        for name, ecosystem in target.sdk_package_refs:
+            if ecosystem not in ("npm",):  # npm is the JS scanner's job
+                ecosystem_packages.setdefault(ecosystem, []).append(name)
+    elif target.sdk_packages:
+        # Legacy callers have no ecosystem tags; skip — JS scanner covers them.
+        pass
+
+    # Map ecosystem registry names to language keys
+    eco_to_lang = {
+        "pypi": "python",
+        "go": "go",
+        "maven": "java",
+        "kotlin": "kotlin",
+        "rubygems": "ruby",
+        "hex": "elixir",
+        "packagist": "php",
+    }
+
+    all_sites: list[CallSite] = []
+    total_files = 0
+    errors: list[str] = []
+
+    for ecosystem, packages in ecosystem_packages.items():
+        language = eco_to_lang.get(ecosystem)
+        if language is None or not scanner_registry.has(language):
+            continue
+        if not packages:
+            continue
+        try:
+            lang_scanner = scanner_registry.build(language, packages)
+            lang_result = lang_scanner.scan_repo(checkout_root)
+        except Exception as exc:
+            logger.warning("language scanner %s failed: %s", language, exc)
+            errors.append(f"{language}: {exc}")
+            continue
+
+        total_files += lang_result.files_scanned
+        errors.extend(lang_result.errors)
+        all_sites.extend(
+            _resolve_call_sites(lang_result, target)
+        )
+
+    return all_sites, total_files, errors
+
+
+def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSite]:
+    """Convert (bindings, uses) from a LanguageScanResult into CallSite objects.
+
+    Confidence rules — uniform across all languages:
+    - HIGH   : use in same file as a DIRECT/ALIASED/NAMED binding
+    - MEDIUM : binding is WILDCARD/DOT, or no direct binding found in this
+               file but the local_name matches a binding elsewhere (one hop)
+    - LOW    : symbol appears with no traceable binding
+    """
+    from depfix.scanners.language import BindingKind
+
+    # Index bindings by file
+    bindings_by_file: dict[str, list] = {}
+    for b in lang_result.bindings:
+        bindings_by_file.setdefault(b.filepath, []).append(b)
+
+    # Build a cross-file index for one-hop detection
+    all_local_names: set[str] = {b.local_name for b in lang_result.bindings}
+
+    narrowing = set(target.symbols or ())
+    sites: list[CallSite] = []
+
+    for use in lang_result.uses:
+        if narrowing and not any(
+            use.attribute_path.startswith(s) or use.attribute_path == s
+            for s in narrowing
+        ):
+            continue
+
+        file_bindings = bindings_by_file.get(use.filepath, [])
+        direct_match = [b for b in file_bindings if b.local_name == use.local_name]
+
+        if direct_match:
+            binding = direct_match[0]
+            if binding.kind in (BindingKind.WILDCARD, BindingKind.DOT):
+                confidence = MatchConfidence.MEDIUM
+            else:
+                confidence = MatchConfidence.HIGH
+            evidence = (
+                f"{binding.kind.value} import at {binding.filepath}:{binding.line_number}"
+            )
+            package = binding.package
+        elif use.local_name in all_local_names:
+            # Binding exists in a different file (re-export / one hop)
+            confidence = MatchConfidence.MEDIUM
+            evidence = "binding found via cross-file re-export"
+            # Find the package from any binding with this name
+            pkg_b = next(
+                (b for b in lang_result.bindings if b.local_name == use.local_name), None
+            )
+            package = pkg_b.package if pkg_b else target.provider_id
+        else:
+            confidence = MatchConfidence.LOW
+            evidence = "bare symbol use, no traceable binding"
+            package = target.provider_id
+
+        # Determine call site kind from attribute_path shape
+        if "." in use.attribute_path or "::" in use.attribute_path:
+            kind = CallSiteKind.METHOD_CALL
+        else:
+            kind = CallSiteKind.BARE_SYMBOL
+
+        # Derive the symbol name: package + attribute chain after local_name
+        attr_suffix = use.attribute_path[len(use.local_name):]
+        symbol = package + attr_suffix if attr_suffix else package
+
+        sites.append(CallSite(
+            filepath=use.filepath,
+            line_number=use.line_number,
+            column=use.column,
+            line_content=use.line_content,
+            kind=kind,
+            confidence=confidence,
+            symbol=symbol,
+            provider_id=target.provider_id,
+            evidence=evidence,
+        ))
+
+    return sites
+
+
+def _scan_checkout_agent_augment(
+    baseline: RepoScanResult,
+    provider: ProviderSpec,
+    completer: object,
+    *,
+    checkout_path: Path,
+    ledger: object | None,
+) -> RepoScanResult:
+    """Hybrid second pass: let the agent augment the deterministic baseline.
+
+    Only costs tokens when the baseline has LOW-confidence ambiguous sites
+    or when the provider has raw-HTTP anchors to chase. Returns baseline
+    unchanged when neither condition holds.
+    """
+    from depfix.agent.scan_agent import ScanAgent
+    from depfix.agent.scan_tools import ScanToolset
+    from depfix.sources.factory import SourceDeps
+
+    with SourceDeps.from_settings() as deps:
+        toolset = ScanToolset(
+            checkout_root=checkout_path,  # needed so judge agent can read files
+            http=deps.http,
+            npm=deps.npm,
+            pypi=deps.pypi,
+            github_api_url=deps.github_api_url,
+        )
+        agent = ScanAgent(completer, ledger=ledger)
+        target = ScanTarget(provider_id=provider.id)
+        augmented = agent.augment_baseline(
+            provider, target, toolset, baseline,
+            repo_full_name=baseline.repo_full_name,
+        )
+        low_before = sum(1 for s in baseline.call_sites if not s.is_actionable)
+        low_after = sum(1 for s in augmented.call_sites if not s.is_actionable)
+        logger.info(
+            "hybrid augment %s/%s: %d actionable before → %d after "
+            "(low sites %d → %d)",
+            baseline.repo_full_name, provider.id,
+            len(baseline.actionable_sites), len(augmented.actionable_sites),
+            low_before, low_after,
+        )
+        return augmented
+
+
+def _scan_checkout_agent(
+    checkout: Checkout,
+    target: ScanTarget,
+    provider: ProviderSpec,
+    completer: object,
+    *,
+    repo_full_name: str,
+    ledger: object | None,
+) -> RepoScanResult:
+    """Dispatch to the agent scanner. Isolated so the deterministic path
+    has zero new imports at module load time."""
+    from depfix.agent.scan_agent import ScanAgent
+    from depfix.agent.scan_tools import ScanToolset
+    from depfix.sources.factory import SourceDeps
+
+    with SourceDeps.from_settings() as deps:
+        toolset = ScanToolset(
+            checkout_root=checkout.path,
+            http=deps.http,
+            npm=deps.npm,
+            pypi=deps.pypi,
+            github_api_url=deps.github_api_url,
+        )
+        agent = ScanAgent(completer, ledger=ledger)
+        result, transcript = agent.scan_repo(
+            provider, target, toolset, repo_full_name=repo_full_name
+        )
+        logger.info(
+            "agent scan %s: %d step(s), %d tool call(s), stopped=%s",
+            provider.id, transcript.steps_used, len(transcript.tool_calls),
+            transcript.stopped_reason or "final",
+        )
+        return result

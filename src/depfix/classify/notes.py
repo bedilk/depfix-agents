@@ -20,6 +20,7 @@ import re
 from typing import Any
 
 from depfix.classify.llm import LLMCompleter
+from depfix.codemods.symbols import normalize_api
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ class NotesClassifier:
     def __init__(self, completer: LLMCompleter, *, min_confidence: float = 0.5) -> None:
         self._completer = completer
         self._min_confidence = min_confidence
+        self.last_cost: float = 0.0
 
     def classify(
         self,
@@ -109,6 +111,7 @@ class NotesClassifier:
             body=body[:12000],
         )
         response = self._completer.complete(prompt, temperature=0.0)
+        self.last_cost = response.cost_estimate
         candidates = _parse_llm_json(response.text)
 
         out: list[BreakingChange] = []
@@ -157,6 +160,8 @@ class NotesClassifier:
         new_api = str(candidate.get("new_api") or "").strip()
         description = str(candidate.get("description") or "").strip() or old_api
 
+        hints = [s for s in (normalize_api(old_api), normalize_api(new_api)) if s]
+
         try:
             change = BreakingChange(
                 package=package,
@@ -172,6 +177,7 @@ class NotesClassifier:
                 source_url=source_url,
                 evidence=evidence,
                 confidence=0.75,
+                call_site_hints=hints,
             )
         except ValueError:
             return None

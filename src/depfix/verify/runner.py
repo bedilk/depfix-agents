@@ -38,11 +38,15 @@ def _read_package_json(root: Path) -> dict:
 def has_test_script(root: str | Path, ecosystem: str = "javascript") -> bool:
     """True if ``root`` has a runnable test setup for its ecosystem --
     a real npm ``test`` script (not the "no test specified" placeholder),
-    or a pytest configuration/convention for python."""
+    or a pytest configuration/convention for python, or RSpec/minitest for ruby."""
     if ecosystem == "python":
         from depfix.ecosystems.python_runtime import has_pytest_setup
 
         return has_pytest_setup(root)
+    if ecosystem == "ruby":
+        from depfix.ecosystems.ruby_runtime import has_test_setup
+
+        return has_test_setup(root)
     pkg = _read_package_json(Path(root))
     script = pkg.get("scripts", {}).get("test", "")
     return bool(script) and _NO_TEST_SPECIFIED not in script
@@ -127,6 +131,10 @@ def run_tests(
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     test_cwd: str | Path | None = None,
     ecosystem: str = "javascript",
+    coverage_dir: Path | None = None,
+    contract_log_path: Path | None = None,
+    contract_shim_path: Path | None = None,
+    selective_test_files: list[Path] | None = None,
 ) -> TestRunResult:
     """Run ``root``'s ``test`` script under a JSON-ish reporter and parse
     the result. Never raises -- any failure to detect/run/parse is folded
@@ -142,6 +150,8 @@ def run_tests(
     root = Path(root)
     effective_cwd = Path(test_cwd) if test_cwd else root
 
+    if ecosystem == "ruby":
+        return _run_ruby_tests(effective_cwd, timeout=timeout, max_output_bytes=max_output_bytes)
     if ecosystem == "python":
         return _run_pytest(effective_cwd, timeout=timeout, max_output_bytes=max_output_bytes)
 
@@ -169,11 +179,19 @@ def run_tests(
         # CI=1 stops Jest/Vitest/Mocha from defaulting to interactive watch
         # mode when stdin isn't a TTY, which would otherwise hang until the
         # timeout on every single run.
+        extra_env = {"CI": "1"}
+        if coverage_dir is not None:
+            extra_env["NODE_V8_COVERAGE"] = str(coverage_dir)
+        if contract_shim_path is not None:
+            # Prepend our shim to NODE_OPTIONS so it loads before the test suite
+            existing = extra_env.get("NODE_OPTIONS", "")
+            extra_env["NODE_OPTIONS"] = f"--require {contract_shim_path} {existing}".strip()
+
         result = run_sandboxed(
             argv,
             cwd=effective_cwd,
             timeout=timeout,
-            extra_env={"CI": "1"},
+            extra_env=extra_env,
             max_output_bytes=max_output_bytes,
         )
 
@@ -258,6 +276,56 @@ def _run_pytest(
         duration_ms=result.duration_ms,
         cases=cases,
         parse_error=parse_error,
+        used_fallback_parser=used_fallback,
+        raw_output_tail=(result.stdout[-2000:] + result.stderr[-2000:]),
+    )
+
+
+def _run_ruby_tests(cwd: Path, *, timeout: float, max_output_bytes: int) -> TestRunResult:
+    """Run RSpec or minitest via bundler and parse the output.
+
+    RSpec emits JSON to stdout when ``--format json`` is passed. Minitest
+    is asked for JUnit XML via minitest-reporters env vars when available;
+    the plain ``rake test`` fallback still yields aggregate counts the
+    fallback parser can read.
+    """
+    from depfix.ecosystems.ruby_runtime import minitest_junit_env, test_argv
+    from depfix.ecosystems.specs import RUBY
+
+    with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
+        junit = Path(tmp) / "results.xml"
+        argv = test_argv(cwd, junit)
+        if argv is None:
+            return TestRunResult(
+                framework=TestFramework.RSPEC,
+                parse_error="no bundler or no rspec/minitest setup",
+                used_fallback_parser=True,
+            )
+        is_rspec = "rspec" in argv
+        extra_env = {"CI": "1"}
+        if not is_rspec:
+            extra_env.update(minitest_junit_env(junit))
+        result = run_sandboxed(
+            argv, cwd=cwd, timeout=timeout, extra_env=extra_env,
+            max_output_bytes=max_output_bytes, extra_allowlist=RUBY.env_allowlist_extra,
+        )
+        if result.timed_out:
+            return TestRunResult(
+                framework=TestFramework.RSPEC, command=result.argv,
+                exit_code=result.exit_code, duration_ms=result.duration_ms,
+                timed_out=True, raw_output_tail=result.stdout[-2000:] + result.stderr[-2000:],
+            )
+        # RSpec JSON is on stdout; minitest-reporters JUnit is in the file.
+        framework = TestFramework.RSPEC if is_rspec else TestFramework.MINITEST
+        report_input = result.stdout
+        if not is_rspec and junit.is_file():
+            report_input = junit.read_text(encoding="utf-8")
+        cases, parse_error, used_fallback = parse_output(
+            framework, report_input, result.stderr
+        )
+    return TestRunResult(
+        framework=framework, command=result.argv, exit_code=result.exit_code,
+        duration_ms=result.duration_ms, cases=cases, parse_error=parse_error,
         used_fallback_parser=used_fallback,
         raw_output_tail=(result.stdout[-2000:] + result.stderr[-2000:]),
     )

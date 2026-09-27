@@ -23,6 +23,7 @@ from depfix.apply.workspace import WorkspaceEditor
 from depfix.codemods import CodemodRegistry
 from depfix.core.models import BreakingChange, FileUsage
 from depfix.fixers.gemini import FixGenerator
+from depfix.redaction import RedactionError
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.retry.loop import RetryLoop
 from depfix.scanners.models import RepoScanResult
@@ -257,6 +258,20 @@ class FixPipeline:
             kwargs = {"toolset": self._toolset} if isinstance(self._fixer, FixAgent) else {}
             fixed_code, confidence, _llm_call = self._fixer.generate_fix(
                 file_usage, breaking_change, **kwargs
+            )
+        except RedactionError as exc:
+            # The model dropped or invented a secret placeholder. Writing this
+            # output would delete (or fabricate) a credential. Not retried:
+            # a second sample of the same prompt is no safer.
+            logger.error("redaction guard rejected output for %s: %s", file_usage.filepath, exc)
+            return FileEdit(
+                relpath=file_usage.filepath,
+                original_content=file_usage.file_content,
+                fixed_content=file_usage.file_content,
+                diff="",
+                verdict=EditVerdict.SKIPPED,
+                error_message=f"redacted secret was not preserved: {exc}",
+                derivation_trace=f"Redaction guard refused the model output: {exc}",
             )
         except Exception as exc:
             logger.error("fix generation failed for %s: %s", file_usage.filepath, exc)

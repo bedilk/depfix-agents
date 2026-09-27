@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from depfix.core.models import BreakingChange, ChangeKind
-from depfix.scanners.manifest import _parse_semver, affects_version, range_allows_major
+from depfix.scanners.manifest import _parse_semver, affects_version, declared_major, range_allows_major
 from depfix.scanners.models import DeclaredDependency
 
 
@@ -63,8 +63,8 @@ def _decide_one(dep: DeclaredDependency, change: BreakingChange) -> Applicabilit
                 )
     if dep.declared_range:
         old = _parse_semver(change.old_version)
-        declared = _parse_semver(dep.declared_range)
-        if is_drift and declared is not None and declared[0] != new[0]:
+        current_major = declared_major(dep.declared_range)
+        if is_drift and current_major is not None and current_major != new[0]:
             return ApplicabilityVerdict(
                 Applicability.APPLIES,
                 f"{dep.manifest_path} pins {dep.package} to {dep.declared_range}; "
@@ -72,11 +72,18 @@ def _decide_one(dep: DeclaredDependency, change: BreakingChange) -> Applicabilit
             )
         target_major = new[0] if is_drift else (old[0] if old is not None else new[0])
         if range_allows_major(dep.declared_range, target_major) is False:
-            return ApplicabilityVerdict(
-                Applicability.NOT_AFFECTED,
-                f"{dep.manifest_path} pins {dep.package} {dep.declared_range!r}, "
-                f"which cannot resolve to major {target_major}",
-            )
+            if current_major is not None and current_major != target_major:
+                reason = (
+                    f"{dep.manifest_path} pins {dep.package} to {dep.declared_range!r} (major {current_major}), "
+                    f"which cannot resolve to major {target_major}. This crosses a major version boundary and "
+                    "requires manual review before upgrading."
+                )
+            else:
+                reason = (
+                    f"{dep.manifest_path} pins {dep.package} {dep.declared_range!r}, "
+                    f"which cannot resolve to major {target_major}"
+                )
+            return ApplicabilityVerdict(Applicability.NOT_AFFECTED, reason)
         return ApplicabilityVerdict(
             Applicability.UNKNOWN,
             f"{dep.manifest_path} has no resolved lockfile version for {dep.package}",

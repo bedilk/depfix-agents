@@ -84,6 +84,10 @@ class VerificationReport:
     #: New failures that did NOT reproduce on every re-run -- reported, but
     #: never blamed on the fix. (Step 3)
     flaky_test_identities: tuple[str, ...] = ()
+    #: Structured results for always-run stages (smoke, characterization).
+    #: Each entry carries status + skip_reason so callers and PR bodies
+    #: can surface skips rather than silently hiding them.
+    stage_results: tuple["StageResult", ...] = ()
 
     @property
     def new_failure_count(self) -> int:
@@ -137,6 +141,7 @@ class Verifier:
         static_check_enabled: bool = True,
         static_check_timeout: float = 300.0,
         selective_tests: bool = False,
+        frozen_install: bool = True,
     ) -> None:
         self._editor = editor
         self._ecosystem = ecosystem
@@ -153,6 +158,7 @@ class Verifier:
         self._static_check_enabled = static_check_enabled
         self._static_check_timeout = static_check_timeout
         self._selective_tests = selective_tests
+        self._frozen_install = frozen_install
         self._evidence_dir: Path | None = None
         self._contract_paths: dict[str, Path] = {}
         self._coverage_dir: Path | None = None
@@ -214,6 +220,7 @@ class Verifier:
             ignore_scripts=self._ignore_scripts,
             max_output_bytes=self._max_output_bytes,
             ecosystem=self._ecosystem,
+            frozen=self._frozen_install,
         )
         if not install.ok:
             return self._decide_without_tests(
@@ -349,8 +356,12 @@ class Verifier:
     # -- test-oracle plumbing --------------------------------------------------
 
     def _run_tests_on_baseline(
-        self, touched_relpaths: tuple[str, ...], package_manager: str
+        self, touched_relpaths: tuple[str, ...], package_manager: str, **_kwargs
     ) -> TestRunResult:
+        """Delegate to the unified phase runner. Kept for callers written
+        against the pre-Week-8 signature; every argument goes through
+        ``_run_phase`` so the coverage/contract/selective-tests plumbing
+        added in Step 8e applies uniformly."""
         for relpath in touched_relpaths:
             self._editor.revert(relpath)
         return self._run_phase("baseline", touched_relpaths, package_manager)
@@ -360,7 +371,11 @@ class Verifier:
         touched_relpaths: tuple[str, ...],
         edit_by_relpath: dict[str, FileEdit],
         package_manager: str,
+        **_kwargs,
     ) -> TestRunResult:
+        """After-fix counterpart of _run_tests_on_baseline. Writes each edit
+        back to disk before delegating to _run_phase so the phase runner
+        sees the same tree the tests will actually exercise."""
         for relpath in touched_relpaths:
             self._editor.write_fix(relpath, edit_by_relpath[relpath].fixed_content)
         return self._run_phase("after_fix", touched_relpaths, package_manager)
@@ -398,6 +413,7 @@ class Verifier:
                 root, touched_relpaths, ecosystem=self._ecosystem
             )
 
+        selective_files = list(Path(root) / f for f in only_files) if only_files else None
         return run_tests(
             root,
             timeout=self._test_timeout,
@@ -406,8 +422,8 @@ class Verifier:
             test_cwd=self._test_cwd(touched_relpaths[0]),
             ecosystem=self._ecosystem,
             coverage_dir=coverage_dir,
-            contract_out=contract_out,
-            only_files=only_files,
+            contract_log_path=contract_out,
+            selective_test_files=selective_files,
         )
 
     # -- flake handling --------------------------------------------------------
@@ -540,10 +556,20 @@ class Verifier:
             tc_baseline: TypecheckResult | None = None,
             tc_after: TypecheckResult | None = None,
         ) -> VerificationReport:
-            characterization = self._characterize_when_available(on_disk, resolved_install)
+            from depfix.verify.models import StageResult, StageStatus
+            from depfix.verify.smoke import SmokeStage, run_smoke_check
+
+            stage_results: list[StageResult] = []
+
+            # --- Characterization: always attempt, emit structured result ----
+            characterization = self._characterize_always(on_disk, resolved_install)
+            char_stage = self._characterization_stage_result(characterization)
+            stage_results.append(char_stage)
+
             settled = tuple(self._mark_suspect(e) for e in edits)
             tier = ConfidenceTier.LOW
             reason = tier_reason
+
             if characterization is not None and characterization.confirmed:
                 settled = tuple(
                     self._settle(e, EditVerdict.KEPT)
@@ -554,7 +580,7 @@ class Verifier:
                 tier = ConfidenceTier.MEDIUM
                 reason = "characterization fixture preserved the pre-migration behaviour"
             else:
-                from depfix.verify.smoke import run_smoke_check
+                # --- Per-file module-load smoke (existing oracle) ---------------
                 smoke_failures: list[str] = []
                 for edit in on_disk:
                     smoke = run_smoke_check(typecheck_root, edit.relpath)
@@ -570,6 +596,21 @@ class Verifier:
                         )
                 if smoke_failures:
                     reason = f"{tier_reason}; smoke check failed: {'; '.join(smoke_failures)}"
+
+            # --- Whole-app boot smoke: always attempt, structured result ------
+            smoke_stage = SmokeStage(self)
+            smoke_result = smoke_stage.run(checkout_path=root)
+            stage_results.append(smoke_result)
+            if smoke_result.blocks_pr:
+                reason = f"{reason}; app smoke failed: {smoke_result.detail}"
+
+            try:
+                from depfix.obs.metrics import verification_stage_outcomes
+                for sr in stage_results:
+                    verification_stage_outcomes.record_stage_result(sr)
+            except Exception:
+                pass  # never let metrics break verification
+
             return VerificationReport(
                 ran=ran,
                 skipped_reason=skipped_reason,
@@ -582,6 +623,7 @@ class Verifier:
                 tier=tier,
                 tier_reason=reason,
                 characterization=characterization,
+                stage_results=tuple(stage_results),
             )
 
         if not self._typecheck_enabled:
@@ -615,6 +657,7 @@ class Verifier:
                 ignore_scripts=self._ignore_scripts,
                 max_output_bytes=self._max_output_bytes,
                 ecosystem=self._ecosystem,
+                frozen=self._frozen_install,
             )
         if not resolved_install.ok:
             return suspect(
@@ -802,6 +845,75 @@ class Verifier:
                 else f"`{after.tool}` reported {len(added)} new diagnostic(s), "
                 f"{len(unattributed)} outside any edited file"
             ),
+        )
+
+    def _characterize_always(
+        self, on_disk: list[FileEdit], install: InstallResult | None
+    ) -> CharacterizationReport | None:
+        """Always-attempt characterization wrapper.
+
+        When ``characterization_always_run`` is True (default), attempts
+        for every fix regardless of existing test coverage. When False,
+        delegates to the original gated helper.
+        """
+        if not getattr(self, "characterization_always_run", True):
+            return self._characterize_when_available(on_disk, install)
+        # Same preconditions as the original — just skip the coverage-gap gate.
+        if (
+            self._characterizer is None
+            or self._change is None
+            or len(on_disk) != 1
+            or install is None
+            or not install.ok
+        ):
+            return None
+        edit = on_disk[0]
+        if not self._characterizer.supports(edit.relpath):
+            return None
+        return self._characterizer.characterize(
+            root=self._editor.checkout.path,
+            relpath=edit.relpath,
+            original_source=edit.original_content,
+            change=self._change,
+            apply_fix=lambda: self._editor.write_fix(edit.relpath, edit.fixed_content),
+            revert_fix=lambda: self._editor.revert(edit.relpath),
+        )
+
+    def _characterization_stage_result(
+        self, report: CharacterizationReport | None
+    ) -> "StageResult":
+        """Convert a CharacterizationReport (or None) to a StageResult."""
+        from depfix.verify.models import StageResult, StageStatus
+        if report is None:
+            # No report = stage couldn't run — structured skip.
+            strict = getattr(self, "characterization_strict", False)
+            status = StageStatus.FAILED if strict else StageStatus.SKIPPED
+            return StageResult(
+                stage="characterization", status=status,
+                skip_reason="preconditions_not_met" if status == StageStatus.SKIPPED else None,
+                detail=(
+                    "characterizer unavailable, multiple files, or no install"
+                    if status == StageStatus.SKIPPED
+                    else "characterization_strict=True; preconditions not met"
+                ),
+            )
+        if not report.ran:
+            strict = getattr(self, "characterization_strict", False)
+            status = StageStatus.FAILED if strict else StageStatus.SKIPPED
+            return StageResult(
+                stage="characterization", status=status,
+                skip_reason=report.skipped_reason or "not_ran" if status == StageStatus.SKIPPED else None,
+                detail=report.skipped_reason,
+            )
+        if report.confirmed:
+            return StageResult(
+                stage="characterization", status=StageStatus.PASSED,
+                detail="fixture preserved pre-migration behaviour",
+                duration_seconds=report.cost_usd,  # cost as a proxy; real duration not stored
+            )
+        return StageResult(
+            stage="characterization", status=StageStatus.FAILED,
+            detail=report.rejected_reason or "fixture failed",
         )
 
     def _characterize_when_available(

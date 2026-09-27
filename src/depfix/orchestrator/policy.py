@@ -36,10 +36,15 @@ class SkipReason(enum.StrEnum):
     TENANT_IGNORED = "tenant_ignored"
     PIPELINE_DISABLED = "pipeline_disabled"
     PROVIDER_NOT_ALLOWED = "provider_not_allowed"
+    TRIAGE_DISMISSED = "triage_dismissed"
+    TRIAGE_SNOOZED = "triage_snoozed"
 
     # -- capability: can depfix act on this at all --------------------------
     UNKNOWN_PROVIDER = "unknown_provider"
     NO_REPLACEMENT_API = "no_replacement_api"
+
+    # -- supply-chain safety -----------------------------------------------
+    VERSION_TOO_NEW = "version_too_new"
 
     # -- bookkeeping: --force exists specifically to override these --------
     ALREADY_TERMINAL = "already_terminal"
@@ -92,6 +97,7 @@ def decide(
     changes_processed_this_run: int,
     settings: Settings,
     force: bool = False,
+    target_version_age_hours: float | None = None,
 ) -> SkipReason | None:
     """``None`` means "go ahead and process this change"; otherwise the
     reason not to.
@@ -110,14 +116,37 @@ def decide(
     if not repo_config.providers.allows(change.provider_id):
         return SkipReason.PROVIDER_NOT_ALLOWED
 
+    from depfix.classify.triage import TriageAction, evaluate_triage
+
+    verdict = evaluate_triage(change, repo_config.triage_rules)
+    if verdict is not None:
+        if verdict.action is TriageAction.DISMISS:
+            return SkipReason.TRIAGE_DISMISSED
+        if verdict.action is TriageAction.SNOOZE:
+            return SkipReason.TRIAGE_SNOOZED
+
     # -- capability: can we act on this at all ------------------------------
+    from depfix.core.models import ChangeKind
+
     if change.provider_id not in known_provider_ids:
         return SkipReason.UNKNOWN_PROVIDER
-    if not change.new_api.strip():
+    # A security advisory with no published fix has an empty new_api by
+    # design. It is still the most important thing an operator can hear, so
+    # it proceeds to a report-only outcome rather than being filtered out
+    # here as "nothing to migrate to".
+    if change.kind is not ChangeKind.SECURITY_ADVISORY and not change.new_api.strip():
         return SkipReason.NO_REPLACEMENT_API
 
     # -- bookkeeping: force-bypassable ---------------------------------------
     if not force:
+        if (
+            change.kind is not ChangeKind.SECURITY_ADVISORY
+            and settings.version_cooldown_hours > 0
+            and target_version_age_hours is not None
+            and target_version_age_hours < settings.version_cooldown_hours
+        ):
+            return SkipReason.VERSION_TOO_NEW
+
         if attempt is not None and AttemptStatus(attempt.status).is_terminal:
             return SkipReason.ALREADY_TERMINAL
         if attempt is not None and attempt.attempts_used >= settings.pipeline_max_attempts:
@@ -171,6 +200,15 @@ def decide_with_detail(**kwargs: object) -> SkipDetail | None:
         message = "enabled: false in .depfix.yml"
     elif reason is SkipReason.PROVIDER_NOT_ALLOWED:
         message = "provider excluded by .depfix.yml"
+    elif reason is SkipReason.TRIAGE_DISMISSED:
+        message = "dismissed by a triage rule in .depfix.yml"
+    elif reason is SkipReason.TRIAGE_SNOOZED:
+        message = "snoozed by a triage rule in .depfix.yml"
+    elif reason is SkipReason.VERSION_TOO_NEW:
+        message = (
+            f"target version is newer than the {settings.version_cooldown_hours:.0f}h cooldown; "
+            "will proceed once it ages, or use --force"
+        )
     elif reason is SkipReason.UNKNOWN_PROVIDER:
         message = "provider is not configured"
     elif reason is SkipReason.NO_REPLACEMENT_API:
