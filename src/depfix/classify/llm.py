@@ -20,6 +20,7 @@ from typing import Protocol
 import httpx
 
 from depfix.fixers.gemini import GEMINI_PRICING
+from depfix.obs.cost import CostLedger, CostStage
 
 try:
     from google import genai
@@ -186,3 +187,35 @@ class OllamaCompleter:
             cost_estimate=0.0,
             duration_ms=duration_ms,
         )
+
+
+class CostTrackingCompleter:
+    """An ``LLMCompleter`` that records every call's cost against a ledger.
+
+    Wraps any completer so the classify-time seams (notes, synthesis,
+    usage-candidate discovery, the judge) are charged without each call site
+    knowing the ledger exists.
+    """
+
+    def __init__(
+        self, inner: LLMCompleter, ledger: CostLedger, stage: CostStage = CostStage.CLASSIFY
+    ) -> None:
+        self._inner = inner
+        self._ledger = ledger
+        self._stage = stage
+
+    def complete(self, prompt: str, *, temperature: float = 0.0) -> LLMResponse:
+        response = self._inner.complete(prompt, temperature=temperature)
+        self._ledger.record(
+            self._stage, response.cost_estimate,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+        )
+        return response
+
+    def for_stage(self, stage: CostStage) -> CostTrackingCompleter:
+        return CostTrackingCompleter(self._inner, self._ledger, stage)
+
+    @property
+    def unwrapped(self) -> LLMCompleter:
+        return self._inner

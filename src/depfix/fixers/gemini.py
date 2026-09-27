@@ -18,6 +18,7 @@ from depfix.core.models import (
     LLMCall,
     Usage,
 )
+from depfix.redaction import RedactionError, redact_file_usage
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,14 @@ class FixGenerator:
         at fixing this file was rejected (syntax error or test regression),
         appended to the prompt so the model can course-correct on retry.
         """
-        prompt = self._build_prompt(file_usage, breaking_change, feedback=feedback)
+        safe_usage, redaction = redact_file_usage(file_usage)
+        safe_feedback = redaction.cover(feedback) if feedback else None
+        if redaction.redacted:
+            logger.info(
+                "Redacted %d secret value(s) in %s before sending to %s",
+                len(redaction.secrets), file_usage.filepath, self.model,
+            )
+        prompt = self._build_prompt(safe_usage, breaking_change, feedback=safe_feedback)
 
         for attempt in range(self.max_retries):
             try:
@@ -100,8 +108,6 @@ class FixGenerator:
                         parts = getattr(response.candidates[0].content, "parts", None) or []
                         raw_text = "".join(getattr(p, "text", "") for p in parts)
 
-                fixed_code = self._extract_code(raw_text)
-
                 # Token usage from usage_metadata
                 input_tokens = 0
                 output_tokens = 0
@@ -112,7 +118,7 @@ class FixGenerator:
                     output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0)
                     cost = self._calculate_cost(input_tokens, output_tokens)
 
-                # Create LLM call record
+                # Create LLM call record (prompt is already redacted)
                 llm_call = LLMCall(
                     timestamp=datetime.now(),
                     prompt=prompt,
@@ -125,22 +131,25 @@ class FixGenerator:
                 )
                 self.llm_calls.append(llm_call)
 
-                # Calculate confidence based on response analysis
+                fixed_code = redaction.restore(self._extract_code(raw_text))
+
                 confidence = self._calculate_confidence(
                     file_usage.file_content, fixed_code, file_usage.usages, breaking_change
                 )
 
                 logger.info(
-                    f"Generated fix for {file_usage.filepath} "
-                    f"(tokens: {input_tokens}+{output_tokens}, cost: ${cost:.4f})"
+                    "Generated fix for %s (tokens: %d+%d, cost: $%.4f)",
+                    file_usage.filepath, input_tokens, output_tokens, cost,
                 )
 
                 return fixed_code, confidence, llm_call
 
+            except RedactionError:
+                raise
             except Exception as e:
-                logger.warning(f"API error on attempt {attempt + 1}: {e}")
+                logger.warning("API error on attempt %d: %s", attempt + 1, e)
                 if attempt < self.max_retries - 1:
-                    time.sleep(2**attempt)  # Exponential backoff
+                    time.sleep(2**attempt)
                     continue
                 else:
                     raise
@@ -203,6 +212,7 @@ REQUIREMENTS:
 3. Maintain the same code style and formatting
 4. Do not add any comments about the migration
 5. Do not change any imports unless necessary for the new API
+6. Tokens of the form DEPFIX_REDACTED_<hex> stand for redacted secrets: copy each one through unchanged, exactly where it appears
 {feedback_section}
 OUTPUT:
 Return ONLY the complete updated code. No explanations, no markdown code blocks, just the raw code.

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from depfix.clone import Checkout
+from depfix.redaction import redact_text
 from depfix.scanners import CallSiteScanner
 from depfix.scanners.models import ScanTarget
 
@@ -48,7 +49,8 @@ class FixToolset:
             return ToolResult.error(f"path {relpath!r} is outside the repository")
         if not path.is_file() or path.stat().st_size > self._max_file_bytes:
             return ToolResult.error(f"{relpath!r} does not exist or is too large to read")
-        text = path.read_text(encoding="utf-8", errors="replace")
+        # Redact before truncating so a secret can never be cut in half and slip past detection.
+        text = redact_text(path.read_text(encoding="utf-8", errors="replace"))
         if len(text.encode()) > _MAX_TOOL_OUTPUT_BYTES:
             text = text.encode()[:_MAX_TOOL_OUTPUT_BYTES].decode("utf-8", errors="ignore")
             text += "\n… [truncated]"
@@ -62,7 +64,7 @@ class FixToolset:
         if not result.call_sites:
             return ToolResult(ok=True, content=f"no usages of {symbol!r} found")
         lines = [
-            f"{site.filepath}:{site.line_number}: {site.line_content.strip()}"
+            f"{site.filepath}:{site.line_number}: {redact_text(site.line_content.strip())}"
             for site in result.call_sites[:50]
         ]
         return ToolResult(ok=True, content="\n".join(lines))

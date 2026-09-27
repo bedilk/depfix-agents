@@ -38,6 +38,9 @@ COMMON_SKIP_DIRS = frozenset(
      ".venv", "venv", ".depfix-venv", "vendor", "target", ".tox", ".mypy_cache"}
 )
 
+#: Credit for a monorepo with no root manifest but depth-1 or depth-2 manifests
+_NESTED_MANIFEST_WEIGHT = 3
+
 
 @dataclass(frozen=True)
 class DependencyDeclaration:
@@ -105,15 +108,48 @@ class EcosystemSpec:
         return self.skip_dirs | COMMON_SKIP_DIRS
 
     def matches_score(self, root: Path) -> int:
-        """Marker-file score for ``root`` -- higher wins in detection."""
-        score = 0
-        for marker, weight in self.markers:
-            if marker.startswith("*"):
-                if next(root.glob(marker), None) is not None:
-                    score += weight
-            elif (root / marker).exists():
-                score += weight
-        return score
+        """Marker-file score for ``root`` -- higher wins in detection.
+
+        A glob marker never counts a hit inside a skipped directory: a
+        vendored ``yarn.lock`` under ``node_modules/`` says nothing about what
+        this repo is written in.
+        """
+        skip = self.all_skip_dirs()
+        score = sum(
+            weight
+            for marker, weight in self.markers
+            if (self._glob_hit(root, marker, skip) if "*" in marker
+                else (root / marker).exists())
+        )
+        return score + self._nested_manifest_score(root, skip)
+
+    def _nested_manifest_score(self, root: Path, skip: frozenset[str]) -> int:
+        """Depth-bounded credit for a monorepo with no root manifest.
+
+        Derived from ``manifest_names`` so every ecosystem gets it: a Go
+        monorepo must not resolve to whichever spec remembered to add a
+        ``**/`` marker. Bounded to two levels (``packages/*``, ``apps/*/``)
+        rather than ``**`` so a miss costs a directory listing, not a walk of
+        an installed dependency tree.
+        """
+        if any((root / name).exists() for name in self.manifest_names if "*" not in name):
+            return 0
+        return next(
+            (
+                _NESTED_MANIFEST_WEIGHT
+                for depth in ("*/", "*/*/")
+                for name in self.manifest_names
+                if self._glob_hit(root, f"{depth}{name}", skip)
+            ),
+            0,
+        )
+
+    @staticmethod
+    def _glob_hit(root: Path, pattern: str, skip: frozenset[str]) -> bool:
+        return any(
+            not any(part in skip for part in match.relative_to(root).parts[:-1])
+            for match in root.glob(pattern)
+        )
 
 
 def compile_all(patterns: list[str]) -> tuple[re.Pattern[str], ...]:

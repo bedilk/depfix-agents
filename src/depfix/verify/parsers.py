@@ -150,17 +150,48 @@ def parse_junit_xml(raw: str) -> list[TestCase]:
     return cases
 
 
+def parse_rspec_json(raw: str) -> list[TestCase]:
+    """Parse RSpec's ``--format json`` output.
+
+    Identity is ``file_path::full_description``, stable across runs the same
+    way Jest's ``fullName`` is. RSpec statuses are passed/failed/pending.
+    """
+    data = json.loads(raw)
+    cases: list[TestCase] = []
+    for example in data.get("examples", []):
+        status_str = example.get("status", "failed")
+        status = _RSPEC_STATUS_MAP.get(status_str, TestStatus.FAILED)
+        name = example.get("full_description") or example.get("description") or "<unnamed>"
+        file = example.get("file_path", "") or ""
+        message = ""
+        if status is TestStatus.FAILED:
+            exc = example.get("exception") or {}
+            message = str(exc.get("message", "")) if isinstance(exc, dict) else ""
+        cases.append(TestCase(name=name, file=file, status=status, message=message))
+    return cases
+
+
+_RSPEC_STATUS_MAP = {
+    "passed": TestStatus.PASSED,
+    "failed": TestStatus.FAILED,
+    "pending": TestStatus.SKIPPED,
+}
+
+
 #: Best-effort aggregate counters for the human-readable default reporters
-#: of Jest/Vitest/Mocha/pytest, e.g. "Tests: 2 failed, 8 passed, 10 total"
-#: (Jest), "10 passing (1s)" / "2 failing" (Mocha), or pytest's
-#: "==== 2 failed, 8 passed in 1.23s ====" summary line.
+#: of Jest/Vitest/Mocha/pytest/RSpec, e.g. "Tests: 2 failed, 8 passed, 10 total"
+#: (Jest), "10 passing (1s)" / "2 failing" (Mocha), pytest's
+#: "==== 2 failed, 8 passed in 1.23s ====" summary line, or RSpec's
+#: "3 examples, 1 failure" (note: "examples" is total, not passed count).
 _COUNT_PATTERNS: tuple[tuple[TestStatus, re.Pattern[str]], ...] = (
+    (TestStatus.FAILED, re.compile(r"(?P<n>\d+)\s+failures?")),
     (TestStatus.FAILED, re.compile(r"(?P<n>\d+)\s+failing")),
     (TestStatus.FAILED, re.compile(r"Tests:.*?(?P<n>\d+)\s+failed")),
     (TestStatus.FAILED, re.compile(r"(?P<n>\d+)\s+failed")),
     (TestStatus.PASSED, re.compile(r"(?P<n>\d+)\s+passing")),
     (TestStatus.PASSED, re.compile(r"Tests:.*?(?P<n>\d+)\s+passed")),
     (TestStatus.PASSED, re.compile(r"(?P<n>\d+)\s+passed")),
+    (TestStatus.PASSED, re.compile(r"(?P<n>\d+)\s+examples?")),  # RSpec total; see note
 )
 
 
@@ -228,4 +259,6 @@ _STRUCTURED_PARSERS = {
     TestFramework.MOCHA: parse_mocha_json,
     TestFramework.NODE_TEST: parse_tap,
     TestFramework.PYTEST: parse_junit_xml,
+    TestFramework.RSPEC: parse_rspec_json,
+    TestFramework.MINITEST: parse_junit_xml,  # via minitest-reporters
 }

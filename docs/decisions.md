@@ -751,3 +751,50 @@ the registry return at time T" for something other than debugging.
 - **Locked containers.** Docker and CI install fully pinned, hashed runtime
   dependencies from `requirements.lock`; `pyproject.toml` retains readable
   minimum versions for library users.
+
+# Reconciliation Decisions — what the session notes claimed vs. what exists
+
+Two features described in session notes as "implemented" were found absent
+from the codebase after a full audit. Neither is being built now; this
+section records why.
+
+## Hybrid scan agent / `scan_strategy` config
+
+Session notes claimed a `ScanAgent`/`CallSiteJudgeAgent` that runs after
+`_scan_checkout_deterministic()` and augments LOW-confidence sites via an
+LLM agent loop, governed by `scan_strategy: "hybrid"` in config.
+
+**Not building it.** The notes' own run data is the argument against it:
+pure-agent scanning found 0 call sites across all tested repos while costing
+$3.16 — worse than deterministic on both measures. The useful slice of
+"LLM judgement on ambiguous sites" is already covered by
+`scanners/judge.py` (`LLMCallSiteJudge`), which the deterministic scan
+already calls on LOW-confidence sites when `scan_llm_judge_enabled` is set.
+A second, agent-loop-based augmentation layer on top would add complexity
+with no measured recall benefit and a non-trivial cost floor even for repos
+with no ambiguous sites.
+
+**Trigger for revisiting:** if `scanners/judge.py`'s precision on
+LOW-confidence sites drops below `scan_min_recall` (default 0.85) on a
+real eval corpus, the scan-agent path becomes worth the cost again.
+
+## Binding-aware per-language scanners (`scanners/languages/`)
+
+Session notes claimed a `ScannerRegistry` with separate scanner modules for
+Python, Go, Java, Kotlin, Ruby, Elixir, and PHP — each doing AST/regex
+import-binding extraction and use-site matching.
+
+**Not building it.** `ecosystems/callsites.py` already does import-level
+scanning for all nine languages (Python, JavaScript/TypeScript, Java,
+Kotlin, Go, Rust, Ruby, PHP, C#, Swift) via the same binding-propagation
+logic described in the Week 3 ADR above. A second implementation of the
+same concept in a different module tree would be two maintenance surfaces
+for one recall number, and the existing implementation already drives the
+call-site results for every real-repo test run on record.
+
+**Trigger for revisiting:** if the `call_sites` eval category's recall for
+a specific language drops below `scan_min_recall` and `callsites.py`'s
+regex approach is the measured root cause, a proper tree-sitter-backed
+scanner for that language becomes worth the cost. The language is then
+added to the `scanners/languages/` tree *as a replacement*, not alongside
+the existing `callsites.py` path.

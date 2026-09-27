@@ -146,6 +146,22 @@ class RepoScanResult:
     def actionable_sites(self) -> list[CallSite]:
         return [s for s in self.call_sites if s.is_actionable]
 
+    @property
+    def raw_http_only(self) -> bool:
+        """True when the repo calls a provider's API via raw HTTP but has no
+        SDK package dependency. Useful for advising SDK adoption."""
+        actionable = self.actionable_sites
+        if not actionable:
+            return False
+        has_raw = any(s.kind == CallSiteKind.RAW_HTTP for s in actionable)
+        has_sdk = any(
+            s.kind in (CallSiteKind.SDK_IMPORT, CallSiteKind.METHOD_CALL,
+                       CallSiteKind.BARE_SYMBOL, CallSiteKind.CLIENT_CONSTRUCTION,
+                       CallSiteKind.WRAPPER_IMPORT)
+            for s in actionable
+        )
+        return has_raw and not has_sdk and not self.dependencies
+
     def to_file_usages(self, root: str | Path) -> list[FileUsage]:
         """Bridge to the Week 1 ``FileUsage`` shape so actionable sites can
         be handed to the existing ``FixGenerator``/``FixValidator``

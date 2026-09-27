@@ -64,7 +64,7 @@ being deleted. **Bedil: use your own key** — `cp .env.example .env`, paste you
 `GOOGLE_API_KEY` (https://aistudio.google.com/app/apikey), keep
 `GEMINI_MODEL=gemini-3-flash-preview` and `LLM_FALLBACK_MODEL=gemini-2.5-pro`
 (the tested configuration). `.env` is gitignored; never commit a key. Sanity
-check after: `depfix doctor` should show "llm (gemini): key present", and
+check after: `depfix init --offline` should show "llm (gemini): key present", and
 `depfix eval` should reproduce ~90% for about a cent.
 
 ## Decisions needed from Bedil

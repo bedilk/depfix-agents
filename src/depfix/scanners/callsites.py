@@ -118,15 +118,23 @@ _EXPORTS_PROP_RE = re.compile(r"""(?<!module\.)exports\.(\w+)\s*=\s*(\w+)\b""")
 _MEMBER_CALL_RE = re.compile(r"""\b(\w+)((?:\.\w+)+)\s*\(""")
 _BARE_CALL_RE = re.compile(r"""(?<![.\w])(\w+)\s*\(""")
 _FETCH_LIKE_RE = re.compile(r"""\b(?:fetch|axios(?:\.\w+)?|got|request)\s*\(""")
-_VERSION_PIN_RE = re.compile(
-    r"""(?:apiVersion|api_version|Stripe-Version)\s*[:=]\s*['"]([^'"]+)['"]""",
-    re.IGNORECASE,
-)
+
+
+def _version_pin_re(provider_id: str) -> re.Pattern[str]:
+    """``apiVersion``/``api_version`` plus this provider's own dated version
+    header, derived rather than enumerated so a new provider needs no
+    scanner edit (``Stripe-Version``, ``anthropic-version``)."""
+    keys = ["apiVersion", "api_version"]
+    if provider_id:
+        keys.append(re.escape(f"{provider_id}-Version"))
+    return re.compile(rf"(?:{'|'.join(keys)})\s*[:=]\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
+
+
 # ``apiVersion``/``api_version`` are common field names on config objects
 # with nothing to do with any provider this scanner targets (Kubernetes
 # manifests-as-JS and plenty of unrelated SDKs both use ``apiVersion:
-# "apps/v1"``-shaped literals) -- unlike ``Stripe-Version``, which is
-# unambiguous. Gate the generic field names on the literal actually looking
+# "apps/v1"``-shaped literals) -- unlike provider-specific headers like
+# ``Stripe-Version``, which are unambiguous. Gate the generic field names on the literal actually looking
 # like a dated API version pin (``"2020-08-27"``, ``"2023-05-15-preview"``,
 # ...) -- the convention this scanner is meant to catch per
 # ``CallSiteKind.API_VERSION_PIN`` -- so a same-named-but-unrelated config
@@ -566,17 +574,34 @@ class CallSiteScanner:
                         )
                     )
 
-        for match in _VERSION_PIN_RE.finditer(source):
+        has_any_sdk_binding = bool(facts.direct_bindings)
+        version_pin_re = _version_pin_re(target.provider_id)
+        for match in version_pin_re.finditer(source):
             literal = match.group(1)
-            is_stripe_header = "stripe-version" in match.group(0).lower()
-            if not is_stripe_header and not _DATED_VERSION_RE.search(literal):
+            # Check if this is a provider-specific header (e.g., "Stripe-Version")
+            # derived from provider_id, rather than generic apiVersion/api_version
+            is_provider_header = f"{target.provider_id}-version" in match.group(0).lower()
+
+            if not is_provider_header and not _DATED_VERSION_RE.search(literal):
                 continue
+
+            # Generic ``apiVersion``/``api_version`` dated pins are common
+            # across many SDKs. Report them at MEDIUM confidence when the file
+            # has at least one SDK import binding (from any provider), or at LOW
+            # confidence when it doesn't -- a Stripe config in config/stripe.ts
+            # that doesn't itself import the SDK is a real pin worth reporting,
+            # just not actionable for auto-fix.
+            confidence = (
+                MatchConfidence.MEDIUM
+                if is_provider_header or has_any_sdk_binding
+                else MatchConfidence.LOW
+            )
             sites.append(
                 self._make_site(
                     facts,
                     match.start(),
                     kind=CallSiteKind.API_VERSION_PIN,
-                    confidence=MatchConfidence.MEDIUM,
+                    confidence=confidence,
                     symbol=f"{target.provider_id}.<api_version_pin>",
                     provider_id=target.provider_id,
                     evidence=f"API version literal {match.group(1)!r}",

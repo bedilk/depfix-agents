@@ -54,6 +54,7 @@ class ChangeKind(StrEnum):
     #: A registry reported a newer SDK version.  Unlike an API migration,
     #: this is a manifest-level fact and may have no source call site.
     DEPENDENCY_VERSION_BUMP = "dependency_version_bump"
+    SECURITY_ADVISORY = "security_advisory"
     UNKNOWN = "unknown"
 
 
@@ -68,6 +69,13 @@ REMOVAL_KINDS: frozenset[ChangeKind] = frozenset(
     }
 )
 
+# Kinds allowed to carry an empty ``new_api``. REMOVAL_KINDS is about
+# *API shape* (the call site must be deleted, not redirected) and is read by
+# the classifiers; a security advisory with no published fix is a different
+# thing -- a real finding with no upgrade path yet -- so it is listed here
+# only, and never leaks into removal-shaped classification logic.
+_NEW_API_OPTIONAL_KINDS: frozenset[ChangeKind] = REMOVAL_KINDS | {ChangeKind.SECURITY_ADVISORY}
+
 
 class ClassificationSource(StrEnum):
     """Where a ``BreakingChange`` came from, and therefore how much to trust it."""
@@ -77,6 +85,7 @@ class ClassificationSource(StrEnum):
     LLM_SYNTHESIS = "llm_synthesis"  # grounded structural-diff migration spec
     MANUAL = "manual"  # hand-written (eval corpus, CLI --change-file)
     REGISTRY = "registry"  # deterministic package-registry version movement
+    SECURITY = "security"  # sourced from an advisory database (OSV/GHSA)
 
 
 @dataclass
@@ -100,6 +109,7 @@ class BreakingChange:
     confidence: float = 1.0
     call_site_hints: list[str] = field(default_factory=list)
     examples: list[tuple[str, str]] = field(default_factory=list)
+    advisory_severity: str | None = None
 
     def __post_init__(self):
         """Validate the breaking change data."""
@@ -107,9 +117,10 @@ class BreakingChange:
             raise ValueError("Package name is required")
         if not self.old_api:
             raise ValueError("old_api is required")
-        if not self.new_api and self.kind not in REMOVAL_KINDS:
+        if not self.new_api and self.kind not in _NEW_API_OPTIONAL_KINDS:
             raise ValueError(
-                f"new_api is required unless kind is a removal kind, got kind={self.kind.value}"
+                f"new_api is required unless kind is a removal kind or an unfixed "
+                f"security advisory, got kind={self.kind.value}"
             )
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(f"confidence must be within [0.0, 1.0], got {self.confidence}")

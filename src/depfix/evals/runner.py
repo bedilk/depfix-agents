@@ -139,10 +139,11 @@ class EvalRunner:
         outcome = self._classifier.classify(event)
         if outcome.errors:
             return CaseResult(
-                case.id, case.category, False, case.verified, "; ".join(outcome.errors)
+                case.id, case.category, False, case.verified, "; ".join(outcome.errors),
+                cost=outcome.cost,
             )
         passed, detail = score_classification(case.expected_changes, outcome.changes)
-        return CaseResult(case.id, case.category, passed, case.verified, detail)
+        return CaseResult(case.id, case.category, passed, case.verified, detail, cost=outcome.cost)
 
     def _run_fix(self, case: EvalCase) -> CaseResult:
         if self._fixer is None:

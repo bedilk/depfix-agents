@@ -152,14 +152,14 @@ def _suspect_hint(verification) -> str:
     if verification.after_fix is not None and verification.after_fix.used_fallback_parser:
         return (
             "depfix could not parse this repo's test output -- check the `test` script emits "
-            "TAP/JSON (run `depfix doctor` to probe the local runner)"
+            "TAP/JSON (run `depfix init --offline` to probe the local runner)"
         )
     if verification.install is not None and not verification.install.ok:
         return (
             "dependencies could not be installed, so neither tests nor a typecheck could run; "
             "check the lockfile installs cleanly with --ignore-scripts"
         )
-    return "run `depfix doctor` to check the local test/typecheck toolchain"
+    return "run `depfix init --offline` to check the local test/typecheck toolchain"
 
 
 def explain_rejections(result: FixPipelineResult) -> list[RejectionExplanation]:

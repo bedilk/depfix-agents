@@ -21,6 +21,7 @@ from depfix.config import Settings
 from depfix.core.models import BreakingChange, FileUsage, LLMCall
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
+from depfix.redaction import redact_file_usage
 
 logger = logging.getLogger(__name__)
 
@@ -65,25 +66,33 @@ class FixAgent:
             self.llm_calls.append(call)
             return code, confidence, call
 
+        # Build prompts from the redacted copy; restore secrets in the output.
+        safe_usage, redaction = redact_file_usage(file_usage)
+        safe_feedback = redaction.cover(feedback) if feedback else None
+
         transcript = AgentTranscript()
         self.last_transcript = transcript
         context: list[str] = []
         for step in range(self._max_steps):
             transcript.steps_used = step + 1
             response, call = self._complete(
-                self._prompt(file_usage, breaking_change, feedback, context, final=False)
+                self._prompt(safe_usage, breaking_change, safe_feedback, context, final=False)
             )
             parsed = self._json_response(response)
             tool = parsed.get("tool")
             if tool is None:
                 code = str(parsed.get("code", ""))
                 if code:
-                    return self._proposal(code, file_usage, breaking_change, call)
+                    return self._proposal(
+                        redaction.restore(code), file_usage, breaking_change, call
+                    )
                 context.append("The previous response was invalid; return the required JSON object.")
                 continue
             result = self._dispatch(toolset, str(tool), parsed.get("arguments", {}))
             transcript.tool_calls.append((str(tool), json.dumps(parsed.get("arguments", {}), sort_keys=True)))
-            context.append(f"TOOL {tool} RESULT (ok={result.ok}):\n{result.content}")
+            context.append(
+                f"TOOL {tool} RESULT (ok={result.ok}):\n{redaction.cover(result.content)}"
+            )
             if self._is_stalling(toolset):
                 transcript.stopped_reason = "stall detected"
                 break
@@ -91,12 +100,12 @@ class FixAgent:
             transcript.stopped_reason = "max_steps reached"
 
         response, call = self._complete(
-            self._prompt(file_usage, breaking_change, feedback, context, final=True)
+            self._prompt(safe_usage, breaking_change, safe_feedback, context, final=True)
         )
         code = self._json_response(response).get("code")
         if not isinstance(code, str) or not code:
             raise RuntimeError("fix agent did not return a complete replacement file")
-        return self._proposal(code, file_usage, breaking_change, call)
+        return self._proposal(redaction.restore(code), file_usage, breaking_change, call)
 
     def _complete(self, prompt: str) -> tuple[str, LLMCall]:
         """Complete one constrained JSON turn and account for its cost."""
@@ -208,7 +217,8 @@ Target usages:\n{locations}
 Current file ({usage.filepath}):\n{usage.file_content}
 Read-only tools: {json.dumps(tool_specs())}
 Collected context:\n{context_text}{feedback_text}
-You may only request the listed tools. Preserve unrelated code. {mode}"""
+You may only request the listed tools. Preserve unrelated code.
+Tokens of the form DEPFIX_REDACTED_<hex> stand for redacted secrets; copy each one through unchanged. {mode}"""
 
 
 def make_fix_strategy(

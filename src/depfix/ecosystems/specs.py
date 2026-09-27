@@ -197,6 +197,10 @@ RUBY = EcosystemSpec(
     block_comments=(("=begin", "=end"),),
     import_regexes=_ruby_import_regexes,
     scan_dependencies=manifests.scan_ruby_dependencies,
+    fix_supported=True,
+    env_allowlist_extra=frozenset({
+        "GEM_HOME", "GEM_PATH", "BUNDLE_PATH", "BUNDLE_GEMFILE",
+    }),
 )
 
 PHP = EcosystemSpec(

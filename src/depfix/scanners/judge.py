@@ -9,6 +9,7 @@ from pathlib import Path
 
 from depfix.classify.llm import LLMCompleter
 from depfix.core.models import BreakingChange
+from depfix.redaction import redact_text
 from depfix.scanners.models import CallSite, MatchConfidence
 
 
@@ -59,7 +60,7 @@ class LLMCallSiteJudge:
                 f"Old SDK API: {change.old_api}; replacement: {change.replacement}.\n"
                 f"Only judge these lines in {relpath}: {[site.line_number for site in missing]}.\n"
                 "Return JSON array of {line, affected, why}; never include other lines.\n\n"
-                + source[:12000]
+                + redact_text(source)[:12000]
             )
             response = self._completer.complete(prompt, temperature=0.0)
             self.total_cost_usd += response.cost_estimate

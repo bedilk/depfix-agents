@@ -37,7 +37,7 @@ from depfix.verify.confidence import ConfidenceTier
 #: Bumped from 1 when the embedded ``change`` became mandatory. A v1
 #: artifact has no way to tell ``apply`` which change it is for, so it is
 #: rejected with an actionable message rather than half-read.
-ARTIFACT_VERSION = 2
+ARTIFACT_VERSION = 3
 
 DEFAULT_PLAN_DIR = ".depfix/plans"
 logger = logging.getLogger(__name__)
@@ -80,6 +80,7 @@ class PlanArtifact:
     #: a plan reviewed as ``low`` must not present itself as anything else.
     confidence: str = ConfidenceTier.NONE.value
     verified_by: str = ""
+    impact_summary: str = ""
     created_at: str = field(default_factory=_utcnow_iso)
 
     @property
@@ -96,6 +97,7 @@ class PlanArtifact:
             "change": breaking_change_to_dict(self.change),
             "confidence": self.confidence,
             "verified_by": self.verified_by,
+            "impact_summary": self.impact_summary,
             "created_at": self.created_at,
             "edits": [e.__dict__ for e in self.edits],
         }
@@ -117,6 +119,8 @@ class PlanArtifact:
         repo: str,
         base_sha: str,
         result: FixPipelineResult,
+        *,
+        impact_summary: str = "",
     ) -> PlanArtifact:
         return cls(
             repo_full_name=repo,
@@ -131,6 +135,7 @@ class PlanArtifact:
             ),
             confidence=result.confidence.value,
             verified_by=result.confidence_reason,
+            impact_summary=impact_summary,
         )
 
     def write(self, path: str | Path) -> Path:
@@ -163,7 +168,7 @@ class PlanArtifact:
     def read(cls, path: str | Path) -> PlanArtifact:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         version = raw.get("version")
-        if version != ARTIFACT_VERSION:
+        if version not in (2, ARTIFACT_VERSION):
             raise ValueError(
                 f"unsupported plan artifact version {version!r} (this depfix writes "
                 f"version {ARTIFACT_VERSION}); re-run `depfix plan` to regenerate it"
@@ -175,6 +180,7 @@ class PlanArtifact:
             edits=tuple(PlannedEdit(**e) for e in raw["edits"]),
             confidence=raw.get("confidence", ConfidenceTier.NONE.value),
             verified_by=raw.get("verified_by", ""),
+            impact_summary=raw.get("impact_summary", ""),
             created_at=raw.get("created_at", ""),
         )
 

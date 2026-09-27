@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from depfix.obs.cost import CostLedger
 from depfix.orchestrator.plan import PlanArtifact
 from depfix.orchestrator.policy import SkipReason
 from depfix.severity import EvidenceKind, Severity
@@ -32,6 +33,10 @@ class ChangeOutcome:
     detail: str = ""
     skip_detail_text: str = ""
     pr_url: str = ""
+    #: The ChangeKind value ("migration", "deprecation", "drift") for
+    #: provenance tracking -- lets cost display distinguish manifest-only
+    #: drift from model-driven rewrites.
+    kind: str = ""
     #: ``True`` when this outcome describes what the orchestrator *would*
     #: have done under ``--dry-run``, rather than something it actually did
     #: -- no ledger row was written and no branch/PR was created for it.
@@ -50,6 +55,10 @@ class ChangeOutcome:
     impact_summary: str = ""
     severity: Severity | None = None
     severity_evidence: EvidenceKind | None = None
+    reachability: str = ""
+    reachability_reason: str = ""
+    deferred_edits: list = field(default_factory=list)
+    fix_result: object | None = None
 
     @property
     def skipped(self) -> bool:
@@ -127,6 +136,7 @@ class OrchestratorOutcome:
     #: batch wasn't exhaustive.
     stopped_early: bool = False
     merge_rate: dict[str, int | float | None] | None = None
+    cost_ledger: CostLedger | None = None
 
     @property
     def failures(self) -> list[RepoOutcome]:
@@ -142,6 +152,8 @@ class OrchestratorOutcome:
 
     @property
     def total_cost_usd(self) -> float:
+        if self.cost_ledger is not None:
+            return self.cost_ledger.total
         return sum(c.cost_usd for r in self.repos for c in r.changes)
 
     def rollup(self) -> OrchestratorRollup:

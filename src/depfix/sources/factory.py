@@ -11,6 +11,7 @@ import httpx
 from depfix.config import get_settings
 from depfix.registry.client import NpmRegistryClient
 from depfix.registry.pypi_client import PypiRegistryClient
+from depfix.registry.rubygems_client import RubyGemsClient
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
 from depfix.sources.changelog_html import ChangelogHtmlSource
 from depfix.sources.fixture_change import FixtureChangeSource
@@ -18,8 +19,14 @@ from depfix.sources.github_release import GitHubReleaseSource
 from depfix.sources.http import build_http_client
 from depfix.sources.models import SourceKind
 from depfix.sources.npm_dist_tag import NpmDistTagSource
+from depfix.sources.asyncapi_spec import AsyncApiSpecSource
 from depfix.sources.openapi_spec import OpenApiSpecSource
 from depfix.sources.pypi_dist_tag import PypiDistTagSource
+from depfix.sources.redis_commands import RedisCommandsSource
+from depfix.sources.smithy_spec import SmithySpecSource
+from depfix.sources.ts_exports import TsExportsSource
+from depfix.sources.rubygems_dist_tag import RubyGemsDistTagSource
+from depfix.sources.security_advisory import SecurityAdvisorySource
 
 
 class FeedLike(Protocol):
@@ -45,6 +52,7 @@ class SourceDeps:
     http: httpx.Client
     npm: NpmRegistryClient
     pypi: PypiRegistryClient
+    rubygems: RubyGemsClient
     spec_cache_dir: Path
     max_spec_bytes: int
     github_api_url: str
@@ -56,6 +64,7 @@ class SourceDeps:
             http=build_http_client(),
             npm=NpmRegistryClient(),
             pypi=PypiRegistryClient(),
+            rubygems=RubyGemsClient(),
             spec_cache_dir=Path(settings.spec_cache_dir),
             max_spec_bytes=settings.max_spec_bytes,
             github_api_url=settings.github_api_url,
@@ -65,6 +74,7 @@ class SourceDeps:
         self.http.close()
         self.npm.close()
         self.pypi.close()
+        self.rubygems.close()
 
     def __enter__(self) -> SourceDeps:
         return self
@@ -92,14 +102,37 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
         )
     if feed.kind is SourceKind.GITHUB_RELEASE:
         return GitHubReleaseSource(provider_id, feed.config, deps.http, deps.github_api_url)
-    if feed.kind is SourceKind.OPENAPI_SPEC:
-        return OpenApiSpecSource(
+    if feed.kind in (
+        SourceKind.OPENAPI_SPEC,
+        SourceKind.SMITHY_SPEC,
+        SourceKind.ASYNCAPI_SPEC,
+        SourceKind.REDIS_COMMANDS,
+    ):
+        source_cls = {
+            SourceKind.OPENAPI_SPEC: OpenApiSpecSource,
+            SourceKind.SMITHY_SPEC: SmithySpecSource,
+            SourceKind.ASYNCAPI_SPEC: AsyncApiSpecSource,
+            SourceKind.REDIS_COMMANDS: RedisCommandsSource,
+        }[feed.kind]
+        return source_cls(
             provider_id,
             feed.config,
             deps.http,
             deps.spec_cache_dir,
             deps.max_spec_bytes,
         )
+    if feed.kind is SourceKind.TS_EXPORTS_DIFF:
+        return TsExportsSource(provider_id, feed.config, deps.http, deps.npm)
+    if feed.kind is SourceKind.RUBYGEMS_DIST_TAG:
+        return RubyGemsDistTagSource(
+            provider_id,
+            feed.config,
+            deps.rubygems,
+            http=deps.http,
+            github_api_url=deps.github_api_url,
+        )
+    if feed.kind is SourceKind.SECURITY_ADVISORY:
+        return SecurityAdvisorySource(provider_id, feed.config, deps.http)
     if feed.kind is SourceKind.FIXTURE_CHANGE:
         return FixtureChangeSource(provider_id, feed.config)
     if feed.kind is SourceKind.CHANGELOG_HTML:

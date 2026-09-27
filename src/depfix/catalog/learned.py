@@ -68,7 +68,7 @@ def record_detected_usage(
         for symbol in symbols
     ]
     catalog_path = Path(path)
-    original = catalog_path.read_text(encoding="utf-8")
+    original = catalog_path.read_text(encoding="utf-8") if catalog_path.is_file() else ""
     prefix, marker, managed = original.partition(_MANAGED_MARKER)
     loaded_entries = _load_entries(managed) if marker else []
     existing = _normalize_existing_entries(loaded_entries)
@@ -92,9 +92,11 @@ def record_detected_usage(
         document = yaml.safe_dump(
             {_MANAGED_KEY: updated_entries}, sort_keys=False, allow_unicode=True
         )
-        updated = f"{prefix.rstrip()}\n\n{_MANAGED_MARKER}{document}"
+        head = f"{prefix.rstrip()}\n\n" if prefix.strip() else ""
+        updated = f"{head}{_MANAGED_MARKER}{document}"
     else:
-        updated = f"{prefix.rstrip()}\n"
+        updated = f"{prefix.rstrip()}\n" if prefix.strip() else ""
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = catalog_path.with_suffix(f"{catalog_path.suffix}.tmp")
     temporary.write_text(updated, encoding="utf-8")
     os.replace(temporary, catalog_path)

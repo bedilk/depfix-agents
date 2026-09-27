@@ -12,6 +12,52 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
+# ---------------------------------------------------------------------------
+# Stage-level status (characterization, smoke, typecheck, …)
+# ---------------------------------------------------------------------------
+
+class StageStatus(StrEnum):
+    PASSED = "passed"
+    FAILED = "failed"
+    # Stage ran but couldn't produce a signal (no entrypoint, no call sites,
+    # etc.). Whether this blocks the PR depends on the *_strict flag.
+    SKIPPED = "skipped"
+    # Stage was turned off entirely by config — not the same as SKIPPED.
+    DISABLED = "disabled"
+
+
+@dataclass
+class StageResult:
+    stage: str                          # 'characterization' | 'smoke' | 'typecheck' | …
+    status: StageStatus
+    duration_seconds: float = 0.0
+    skip_reason: str | None = None      # set when status == SKIPPED
+    detail: str | None = None
+    artifacts: list[str] = field(default_factory=list)
+
+    @property
+    def blocks_pr(self) -> bool:
+        return self.status == StageStatus.FAILED
+
+    def as_pr_line(self) -> str:
+        emoji = {
+            StageStatus.PASSED: "✅",
+            StageStatus.FAILED: "❌",
+            StageStatus.SKIPPED: "⚠️",
+            StageStatus.DISABLED: "➖",
+        }
+        line = f"{emoji[self.status]} **{self.stage}**"
+        if self.status == StageStatus.SKIPPED and self.skip_reason:
+            line += f" — skipped: {self.skip_reason}"
+        elif self.detail:
+            line += f" — {self.detail}"
+        return line
+
+
+# ---------------------------------------------------------------------------
+# Test-run level status (unchanged from before)
+# ---------------------------------------------------------------------------
+
 class TestStatus(StrEnum):
     """Outcome of one test case in one run."""
 
@@ -30,6 +76,8 @@ class TestFramework(StrEnum):
     MOCHA = "mocha"
     NODE_TEST = "node_test"
     PYTEST = "pytest"
+    RSPEC = "rspec"
+    MINITEST = "minitest"
     UNKNOWN = "unknown"
 
 

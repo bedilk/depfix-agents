@@ -100,6 +100,23 @@ def check_npm() -> Check:
     return _ok("npm", version or path)
 
 
+def check_ruby(settings: Settings) -> Check:
+    ruby_path, ruby_version = _binary_version("ruby", "--version")
+    bundle_path = shutil.which("bundle")
+    if ruby_path is None:
+        return _warn(
+            "ruby", "not on PATH",
+            "required only for Ruby fix generation (ruby -c syntax check + bundle install/test); "
+            "scan-only Ruby works without it",
+        )
+    if bundle_path is None:
+        return _warn(
+            "ruby", f"{ruby_version}, but bundler missing",
+            "install bundler (`gem install bundler`) to verify Ruby fixes against the repo's suite",
+        )
+    return _ok("ruby", f"{ruby_version}, bundler present")
+
+
 def check_node_test_reporter() -> Check:
     """Probe that ``node --test --test-reporter=tap`` produces output
     :func:`depfix.verify.parsers.parse_tap` can actually read.
@@ -290,6 +307,29 @@ def check_github_app(settings: Settings) -> list[Check]:
 
 
 def check_llm(settings: Settings) -> Check:
+    if settings.llm_provider == "bedrock":
+        try:
+            from depfix.classify.llm import BedrockCompleter
+
+            c = BedrockCompleter(
+                aws_access_key=settings.bedrock_access_key,
+                aws_secret_key=settings.bedrock_secret_key,
+                aws_region=settings.bedrock_region,
+                aws_profile=settings.bedrock_profile,
+                model=settings.bedrock_model,
+            )
+            resp = c.complete("ping", temperature=0.1)
+            return _ok(
+                "llm (bedrock)",
+                f"region={settings.bedrock_region}, model={settings.bedrock_model}",
+            )
+        except Exception as exc:
+            return _fail(
+                "llm (bedrock)",
+                f"Bedrock unreachable: {exc}",
+                "check AWS credentials/profile and BEDROCK_REGION",
+            )
+
     if settings.llm_provider == "gemini":
         if not settings.google_api_key:
             return _fail(
@@ -368,6 +408,7 @@ def run_checks(settings: Settings, *, skip_network: bool = False) -> list[Check]
         check_git(),
         check_node(),
         check_npm(),
+        check_ruby(settings),
         check_node_test_reporter(),
         check_typecheck_tool(),
         check_clone_dir(settings),

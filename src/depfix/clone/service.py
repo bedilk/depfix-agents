@@ -186,12 +186,17 @@ class CloneService:
         ref: str | None = None,
         token: str | None = None,
         url: str | None = None,
+        max_repo_mb: int | None = None,
     ) -> Checkout:
         """Shallow-clone ``owner/repo`` at ``ref`` (default branch if unset).
 
         ``url`` overrides the derived ``https://github.com/...`` clone URL;
         it exists so tests can point this at a local bare repo instead of
         the real GitHub host.
+
+        ``max_repo_mb`` overrides the instance cap for this one clone only,
+        and only upward -- a repo's own .depfix.yml can widen its limit but
+        not tighten the fleet's.
         """
         if self._git_path is None:
             raise CloneError("git is not available on PATH")
@@ -241,12 +246,15 @@ class CloneService:
             self._cleanup(dest)
             raise CloneError(f"git clone failed for {owner}/{repo}: {_scrub(result.stderr, token)}")
 
+        effective_cap = max(max_repo_mb, self._max_repo_mb) if max_repo_mb else self._max_repo_mb
         size_mb = _dir_size_bytes(dest) / (1024 * 1024)
-        if size_mb > self._max_repo_mb:
+        if size_mb > effective_cap:
             self._cleanup(dest)
             raise CloneError(
                 f"{owner}/{repo} checkout is {size_mb:.0f}MB, exceeds the "
-                f"{self._max_repo_mb}MB cap (clone_max_repo_mb)"
+                f"{effective_cap}MB cap. Raise it for this repo only by adding "
+                f"`max_repo_mb: {int(size_mb) + 50}` to its .depfix.yml, "
+                f"or fleet-wide via CLONE_MAX_REPO_MB."
             )
 
         return Checkout(path=dest, is_temporary=True)

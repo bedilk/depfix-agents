@@ -146,8 +146,11 @@ def test_dependency_drift_does_not_rewrite_a_manifest_at_another_version(tmp_pat
 
     plan = build_dependency_drift_plan(root, change)
 
-    assert plan.bumps == []
-    assert plan.declines == []
+    assert len(plan.bumps) == 1
+    assert plan.bumps[0].new_range == "^7.19.0"
+    assert plan.cross_major is True
+    assert len(plan.declines) == 1
+    assert "crosses a major boundary" in plan.declines[0]
 
 
 def test_dependency_drift_updates_the_pnpm_catalog_not_consuming_package_json(

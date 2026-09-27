@@ -56,6 +56,7 @@ from depfix.config import Settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import BreakingChange, ChangeKind
 from depfix.core.pipeline import FixPipelineResult
+from depfix.fixers.bedrock import BedrockFixGenerator
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh import (
@@ -69,6 +70,8 @@ from depfix.gh import (
     open_pull_request,
     pr_title_for,
 )
+from depfix.classify.llm import CostTrackingCompleter
+from depfix.obs.cost import CostLedger
 from depfix.obs.logging import log_context
 from depfix.orchestrator.budget import RunBudget
 from depfix.orchestrator.models import ChangeOutcome, OrchestratorOutcome, RepoOutcome
@@ -79,6 +82,7 @@ from depfix.repoconfig.loader import RepoConfigError, parse_repo_config
 from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
 from depfix.scanners import CallSiteScanner, build_scan_target, scan_checkout, upsert_repo
 from depfix.scanners.models import RepoScanResult
+from depfix.classify.llm import LLMCompleter
 from depfix.storage import (
     AttemptStatus,
     ChangeAttemptRow,
@@ -101,13 +105,17 @@ _NO_WORK_STATUSES = frozenset(
 )
 
 
-def _is_major_dependency_review(change: BreakingChange) -> bool:
+def _is_major_dependency_review(change: BreakingChange, settings: Settings | None = None) -> bool:
     """Whether a registry major drift must be opened as a draft review PR."""
     if change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
         return False
     from depfix.codemods.lockfile import dependency_drift_policy
 
-    return dependency_drift_policy(change) == "review_pr"
+    kwargs: dict = {}
+    if settings is not None:
+        kwargs["max_major_gap"] = settings.drift_max_major_gap
+        kwargs["max_minor_gap"] = settings.drift_max_minor_gap
+    return dependency_drift_policy(change, **kwargs) == "review_pr"
 
 
 class Orchestrator:
@@ -127,7 +135,7 @@ class Orchestrator:
         gh_auth: GitHubAppAuth,
         clone_service: CloneService,
         providers: list[ProviderSpec],
-        fixer_factory: Callable[[], FixGenerator | OllamaFixGenerator],
+        fixer_factory: Callable[[], BedrockFixGenerator | FixGenerator | OllamaFixGenerator],
         force: bool = False,
         dry_run: bool = False,
         no_pr: bool = False,
@@ -135,6 +143,9 @@ class Orchestrator:
         max_duration_seconds: float | None = None,
         max_cost_usd: float | None = None,
         plan_artifacts: dict[tuple[str, str], PlanArtifact] | None = None,
+        completer: LLMCompleter | None = None,
+        agent_coordinator: object | None = None,  # NEW
+        ledger: CostLedger | None = None,          # NEW — shared with CLI
     ) -> None:
         self._settings = settings
         self._gh_auth = gh_auth
@@ -152,7 +163,15 @@ class Orchestrator:
         self._max_duration_seconds = max_duration_seconds
         self._max_cost_usd = max_cost_usd
         self._plan_artifacts = plan_artifacts or {}
+        self._completer = completer
+        self._agent_coordinator = agent_coordinator  # NEW
+        # Use the caller's shared ledger when provided so agent-scan spend,
+        # classify spend, and fix-generation spend all land in the same place.
+        self._shared_ledger: CostLedger | None = ledger
         self._budget = RunBudget(None)  # replaced at the top of every run()
+        # (package, version) -> age in hours. One registry lookup per target
+        # version per run, not one per (repo, change) pair.
+        self._version_age_cache: dict[tuple[str, str], float | None] = {}
 
     def run(
         self, repo_full_names: list[str], changes: list[BreakingChange]
@@ -166,6 +185,11 @@ class Orchestrator:
         ``error``.
         """
         init_schema()
+        # Use the shared ledger from the CLI when provided, so agent-scan
+        # spend and fix-generation spend all appear in the same summary.
+        self._ledger = self._shared_ledger if self._shared_ledger is not None else CostLedger()
+        if self._completer is not None:
+            self._completer = CostTrackingCompleter(self._completer, self._ledger)
         outcome = OrchestratorOutcome(run_id=uuid4().hex)
         engine = get_engine()
         lock_ctx = advisory_lock(engine) if self._use_lock else contextlib.nullcontext(True)
@@ -209,6 +233,7 @@ class Orchestrator:
                 except Exception as exc:
                     logger.exception("repo %s failed", repo_full_name)
                     outcome.repos.append(RepoOutcome(repo_full_name=repo_full_name, error=str(exc)))
+        outcome.cost_ledger = self._ledger
         return outcome
 
     def _run_repo(self, repo_full_name: str, changes: list[BreakingChange]) -> RepoOutcome:
@@ -305,6 +330,7 @@ class Orchestrator:
                 changes_processed_this_run=changes_processed,
                 settings=self._settings,
                 force=self._force,
+                target_version_age_hours=self._target_version_age_hours(change),
             )
             if skip is not None:
                 change_outcomes.append(
@@ -314,6 +340,7 @@ class Orchestrator:
                         old_api=change.old_api,
                         skip_reason=skip.reason,
                         skip_detail_text=skip.one_line(),
+                        kind=change.kind.value,
                     )
                 )
                 continue
@@ -322,6 +349,7 @@ class Orchestrator:
             # processing this change commits or rolls back only this
             # change's own ledger write, never a prior change's already
             # -committed work in the same repo.
+            before_cost = self._ledger.total
             with session_scope() as session:
                 change_outcome = self._process_change(
                     session,
@@ -336,7 +364,7 @@ class Orchestrator:
                     attempt=attempt,
                 )
             change_outcomes.append(change_outcome)
-            self._budget.record_cost(change_outcome.cost_usd)
+            self._budget.record_cost(self._ledger.total - before_cost)
             if change_outcome.attempt_status not in _NO_WORK_STATUSES:
                 changes_processed += 1
             if change_outcome.attempt_status == AttemptStatus.PR_OPENED:
@@ -409,7 +437,8 @@ class Orchestrator:
         current_ref_sha: str,
     ) -> ChangeOutcome:
         outcome = ChangeOutcome(
-            dedupe_key=change.dedupe_key, package=change.package, old_api=change.old_api
+            dedupe_key=change.dedupe_key, package=change.package, old_api=change.old_api,
+            kind=change.kind.value
         )
         checkout: Checkout | None = None
         try:
@@ -423,7 +452,10 @@ class Orchestrator:
                 max_files=self._settings.scan_max_files,
             )
             scan_result = scan_checkout(
-                checkout, target, repo_full_name=repo_full_name, scanner=scanner
+                checkout, target, repo_full_name=repo_full_name, scanner=scanner,
+                strategy=("agent" if self._agent_coordinator is not None else "deterministic"),
+                provider=self._providers.get(change.provider_id),
+                agent_completer=self._agent_coordinator,
             )
 
             # Repo-scoped path filter applies *before* any fix is
@@ -493,6 +525,43 @@ class Orchestrator:
             if (
                 assessment.status is ScanMatchStatus.NO_CALL_SITES
                 and change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP
+                and scan_result.actionable_sites
+                and self._completer is not None
+            ):
+                from depfix.classify.usage_candidates import discover_usage_candidates
+
+                provider = self._providers.get(change.provider_id)
+                package = (
+                    provider.sdk_packages[0].name
+                    if provider and provider.sdk_packages
+                    else change.package
+                )
+                observed = [site.symbol for site in scan_result.actionable_sites]
+                discovered = discover_usage_candidates(
+                    session,
+                    provider_id=change.provider_id,
+                    package=package,
+                    observed_symbols=observed,
+                    completer=self._completer,
+                )
+                if discovered:
+                    logger.info(
+                        "%d feed-proven candidate(s) discovered for %s",
+                        len(discovered),
+                        repo_full_name,
+                    )
+                    for disc_change in discovered:
+                        reassessment = assess_scan_change(
+                            scan_result, disc_change, provider_id=disc_change.provider_id
+                        )
+                        if reassessment.status is ScanMatchStatus.ACTIONABLE:
+                            assessment = reassessment
+                            change = disc_change
+                            break
+
+            if (
+                assessment.status is ScanMatchStatus.NO_CALL_SITES
+                and change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP
             ):
                 if not self._dry_run:
                     touch_recheck_on_change(
@@ -513,6 +582,11 @@ class Orchestrator:
                     if suppressed_call_sites
                     else ""
                 )
+                if scan_result.raw_http_only:
+                    outcome.detail += (
+                        "; this repo calls the provider over raw HTTP with no SDK package "
+                        "in its manifest, so there is no version to anchor a plan against"
+                    )
                 outcome.planned = self._dry_run
                 return outcome
 
@@ -615,7 +689,10 @@ class Orchestrator:
                     change=change,
                     fix_result=fix_result,
                     edits=committable,
-                    draft=repo_config.draft_pr or _is_major_dependency_review(change),
+                    drift_review=_is_major_dependency_review(change, self._settings),
+                    draft=(repo_config.draft_pr
+                           or _is_major_dependency_review(change, self._settings)
+                           or fix_service_result.cross_major_drift),
                     escalated=fix_service_result.escalated,
                     plan_digest=plan_digest,
                 )
@@ -686,6 +763,56 @@ class Orchestrator:
         finally:
             if checkout is not None:
                 self._clone_service.cleanup(checkout)
+    def _target_version_age_hours(self, change: BreakingChange) -> float | None:
+        """How old the version this change would adopt is, in hours.
+
+        Best-effort by construction: any failure returns ``None``, which the
+        policy reads as "old enough". One registry GET per distinct target
+        version per run (not per repo).
+        """
+        if self._settings.version_cooldown_hours <= 0 or not change.new_version:
+            return None
+
+        key = (change.package, change.new_version)
+        if key in self._version_age_cache:
+            return self._version_age_cache[key]
+
+        ecosystem = self._ecosystem_for_package(change)
+        age: float | None = None
+        if ecosystem is not None:
+            import httpx
+
+            from depfix.sources.release_age import version_age_hours, version_published_at
+
+            try:
+                with httpx.Client(timeout=self._settings.http_timeout) as http:
+                    age = version_age_hours(
+                        version_published_at(
+                            http,
+                            ecosystem=ecosystem,
+                            package=change.package,
+                            version=change.new_version,
+                            npm_registry_url=self._settings.npm_registry_url,
+                            pypi_registry_url=self._settings.pypi_registry_url,
+                        )
+                    )
+            except Exception:
+                logger.debug("release-age lookup failed for %s", key, exc_info=True)
+                age = None
+
+        self._version_age_cache[key] = age
+        return age
+
+    def _ecosystem_for_package(self, change: BreakingChange) -> str | None:
+        """Which registry this change's package lives in, per providers.yaml."""
+        provider = self._providers.get(change.provider_id)
+        if provider is None:
+            return None
+        for sdk in provider.sdk_packages:
+            if sdk.name == change.package:
+                return sdk.ecosystem
+        return None
+
     def _apply_plan_artifact(
         self, checkout: Checkout, scan_result: RepoScanResult, change: BreakingChange, artifact: PlanArtifact
     ) -> FixServiceResult:
@@ -728,6 +855,7 @@ class Orchestrator:
             settings=self._settings,
             repo_config=repo_config,
             fixer=fixer,
+            ledger=self._ledger,
         )
 
     def _open_pr(
@@ -743,6 +871,7 @@ class Orchestrator:
         draft: bool,
         escalated: bool = False,
         plan_digest: str = "",
+        drift_review: bool = False,
     ) -> PullRequest:
         write_token = self._gh_auth.installation_token(
             installation_id,
@@ -774,6 +903,7 @@ class Orchestrator:
                 edits=edits,
                 escalated=escalated,
                 plan_digest=plan_digest,
+                drift_review=drift_review,
             ),
             draft=draft or auto_draft,
             api_url=self._settings.github_api_url,

@@ -111,7 +111,7 @@ def run_impact_check(
         return ImpactReport(ran=False, skipped_reason=f"budget of {max_seconds:.0f}s exhausted before {phase}")
     if not checkout.is_temporary:
         return ImpactReport(ran=False, skipped_reason="checkout is not disposable")
-    if ecosystem not in ("javascript", "python"):
+    if ecosystem not in ("javascript", "python", "ruby"):
         return ImpactReport(ran=False, skipped_reason=f"no impact runner for {ecosystem}")
     if not has_test_script(root, ecosystem):
         return ImpactReport(ran=False, skipped_reason="repo has no test setup")
@@ -153,13 +153,15 @@ def run_impact_check(
                 checkout, editor, touched,
                 timeout=install_timeout, ignore_scripts=ignore_scripts,
             )
+        if ecosystem == "ruby":
+            _regenerate_ruby_lockfile(checkout, editor, touched, timeout=install_timeout)
 
         if (over := budget_exhausted("the bumped install")) is not None:
             return over
         logger.info("impact check: bumping %s to %s and reinstalling", change.package, change.new_version)
         bumped_install = install_dependencies(
             root, timeout=install_timeout, ignore_scripts=ignore_scripts,
-            max_output_bytes=max_output_bytes, ecosystem=ecosystem,
+            max_output_bytes=max_output_bytes, ecosystem=ecosystem, frozen=False,
         )
         if not bumped_install.ok:
             return ImpactReport(
@@ -221,6 +223,13 @@ def _manifest_bump_contents(
         return {
             bump.manifest_relpath: bump.fixed_content
             for bump in build_manifest_bumps(root, change)
+        }
+    if ecosystem == "ruby":
+        from depfix.ecosystems.ruby_manifests import build_ruby_dependency_drift_bumps
+
+        return {
+            bump.manifest_relpath: bump.fixed_content
+            for bump in build_ruby_dependency_drift_bumps(root, change)
         }
     return _python_requirement_bumps(root, change)
 
@@ -295,6 +304,37 @@ def _regenerate_js_lockfile(
             # Re-write via the editor with the ORIGINAL captured first:
             # write_fix snapshots current-on-disk as "original", so restore
             # the pre-regen text, register the edit, then apply the new one.
+            lockfile.write_text(before[relpath], encoding="utf-8")
+            editor.write_fix(relpath, after)
+            touched.append(relpath)
+
+
+def _regenerate_ruby_lockfile(
+    checkout: Checkout, editor: WorkspaceEditor, touched: list[str], *, timeout: float
+) -> None:
+    """Refresh Gemfile.lock after the Gemfile bump so the bumped install
+    resolves the new version; record the changed lockfile with the editor
+    so the ``finally`` revert restores it too."""
+    from depfix.ecosystems.ruby_lockfile import ruby_lockfile_paths, try_refresh_ruby_lockfile
+
+    before: dict[str, str] = {}
+    for lockfile in ruby_lockfile_paths(Path(checkout.path)):
+        try:
+            before[lockfile.relative_to(checkout.path).as_posix()] = lockfile.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+    ok, message = try_refresh_ruby_lockfile(Path(checkout.path), timeout=timeout)
+    if not ok:
+        logger.debug("impact check: Gemfile.lock not regenerated: %s", message)
+        return
+    for lockfile in ruby_lockfile_paths(Path(checkout.path)):
+        relpath = lockfile.relative_to(checkout.path).as_posix()
+        try:
+            after = lockfile.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if relpath in before and after != before[relpath]:
             lockfile.write_text(before[relpath], encoding="utf-8")
             editor.write_fix(relpath, after)
             touched.append(relpath)

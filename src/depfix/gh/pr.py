@@ -11,7 +11,7 @@ import logging
 import httpx
 
 from depfix.apply.models import EditOrigin, EditVerdict, FileEdit
-from depfix.core.models import BreakingChange
+from depfix.core.models import BreakingChange, ChangeKind
 from depfix.core.pipeline import FixPipelineResult
 from depfix.gh.app import GitHubAppError
 from depfix.gh.models import PullRequest
@@ -31,6 +31,9 @@ def pr_title_for(change: BreakingChange) -> str:
 def build_pr_body(
     change: BreakingChange, result: FixPipelineResult, *, edits: list[FileEdit] | None = None,
     escalated: bool = False, plan_digest: str = "",
+    grouped_members: list | None = None,
+    plan_impact_summary: str = "",
+    drift_review: bool | None = None,
 ) -> str:
     """Markdown PR body: change summary, migration guide, source evidence
     (when present), a per-file table of edits, and the verification
@@ -60,14 +63,28 @@ def build_pr_body(
         lines += ["", "### Evidence", "", f"> {change.evidence}"]
     if change.source_url:
         lines += ["", f"Source: {change.source_url}"]
-    if _is_major_dependency_review(change):
+    if change.kind is ChangeKind.SECURITY_ADVISORY:
+        lines += [
+            "",
+            "### ⚠️ Security advisory",
+            "",
+            f"This PR addresses a known vulnerability ({change.description.split(':')[0] if ':' in change.description else 'see description'}). "
+            "Review the advisory references and upgrade guidance before merging.",
+        ]
+    needs_review = (
+        drift_review if drift_review is not None else _is_major_dependency_review(change)
+    )
+    if needs_review:
+        from depfix.codemods.lockfile import describe_drift
+
         lines += [
             "",
             "### Human review required",
             "",
-            "This is a registry-confirmed major dependency update. Depfix opened "
-            "this as a draft PR after validation/verification; review the provider's "
-            "migration guidance before merging.",
+            f"This is a registry-confirmed dependency update spanning "
+            f"**{describe_drift(change)}**. Depfix opened this as a draft after "
+            "validation and verification; review the provider's migration guidance "
+            "before merging.",
         ]
 
     lines += ["", "### Files changed", "", "| File | Verdict | Author | Usages fixed |", "| --- | --- | --- | --- |"]
@@ -82,6 +99,9 @@ def build_pr_body(
     lines += ["", "### Confidence", "", result.confidence.summary]
     if result.confidence_reason:
         lines.append(f"_{result.confidence_reason}._")
+
+    if plan_impact_summary:
+        lines += ["", "### Local impact check", "", plan_impact_summary]
 
     verification = result.verification
     lines += ["", "### Verification"]
@@ -107,11 +127,42 @@ def build_pr_body(
             f"reproduce on re-run and were treated as flaky: {flaky}._"
         )
 
+    # Always-run stage results (smoke, characterization) — shown when present.
+    # Skipped stages are visible here so reviewers know WHY a stage didn't run.
+    if verification is not None and getattr(verification, "stage_results", ()):
+        from depfix.verify.models import StageStatus
+        stage_lines = [sr.as_pr_line() for sr in verification.stage_results]
+        has_skips = any(
+            sr.status == StageStatus.SKIPPED for sr in verification.stage_results
+        )
+        lines += ["", "### Verification stages", ""]
+        lines.extend(stage_lines)
+        if has_skips:
+            lines += [
+                "",
+                "> ⚠️ One or more stages could not produce a full signal (see `skipped:` "
+                "reasons above). Enable `characterization_strict=True` or `smoke_strict=True` "
+                "in your repo config to make these stages block the PR instead of warn.",
+            ]
+
     lines.append("")
     if result.codemod_notes:
         lines += ["", "### Codemod notes", *[f"- {note}" for note in result.codemod_notes[:20]]]
+    if grouped_members:
+        lines += ["", "### Grouped changes", "",
+                  "| Change | Confidence | Files |", "| --- | --- | --- |"]
+        for member_change, member_result, member_edits in grouped_members:
+            lines.append(
+                f"| {member_change.package}: `{member_change.old_api}` → "
+                f"`{member_change.replacement}` "
+                f"| `{member_result.confidence.value}` | {len(member_edits)} |"
+            )
+        lines += ["",
+                  "_This PR groups several related changes. Each row's confidence "
+                  "tier is independent; review lower-confidence rows carefully._"]
+
     lines.append("")
-    lines.append("_Opened automatically by [depfix](https://github.com/)._")
+    lines.append("_Opened automatically by [depfix](https://github.com/bedilk/dependency_check)._")
     if escalated:
         lines.append("_A fallback model was used after the primary produced no committable edits._")
     if plan_digest:

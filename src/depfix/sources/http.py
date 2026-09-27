@@ -11,7 +11,7 @@ import httpx
 
 from depfix.config import get_settings
 
-USER_AGENT = "depfix/0.3 (+https://github.com/your-org/depfix)"
+USER_AGENT = "depfix/0.3 (+https://github.com/bedilk/dependency_check)"
 
 
 def build_http_client(timeout: float | None = None) -> httpx.Client:

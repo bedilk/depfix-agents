@@ -152,8 +152,11 @@ def prepare_package_manager(
         "npm", "install", "--ignore-scripts", "--prefix", str(prefix),
         "--no-save", f"{package}@{version}",
     ]
+    # Package-manager bootstrap must reach npm's registry.
+    net_allowlist = frozenset({"http_proxy", "https_proxy", "no_proxy", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"})
     result = run_sandboxed(
-        argv, cwd=workspace, timeout=timeout, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES
+        argv, cwd=workspace, timeout=timeout, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES,
+        extra_allowlist=net_allowlist,
     )
     if not result.ok:
         message = result.error or result.stderr.strip() or f"exit code {result.exit_code}"
@@ -211,9 +214,12 @@ def _is_yarn_berry(version: str) -> bool:
 
 
 def _install_argv(
-    package_manager: str, root: Path, *, ignore_scripts: bool, version: str = ""
+    package_manager: str, root: Path, *, ignore_scripts: bool, version: str = "",
+    frozen: bool = True,
 ) -> list[str]:
-    has_lockfile = any((root / lockfile).is_file() for lockfile, mgr in _LOCKFILE_MANAGERS if mgr == package_manager)
+    has_lockfile = frozen and any(
+        (root / lockfile).is_file() for lockfile, mgr in _LOCKFILE_MANAGERS if mgr == package_manager
+    )
     yarn_berry = package_manager == "yarn" and _is_yarn_berry(version)
 
     if package_manager == "bun":
@@ -230,19 +236,22 @@ def _install_argv(
         argv = ["pnpm", "install"]
         if has_lockfile:
             argv.append("--frozen-lockfile")
+        elif not frozen:
+            argv.append("--prefer-offline")
     else:
         argv = ["npm", "install"]
 
     if yarn_berry and ignore_scripts:
-        # Yarn Berry has no `--ignore-scripts` flag. Its documented
-        # dependency-installer equivalent avoids package build scripts.
         argv.append("--mode=skip-build")
     elif ignore_scripts:
         argv.append("--ignore-scripts")
     return argv
 
 
-def build_install_argv(root: str | Path, *, ignore_scripts: bool, package_manager: str | None = None) -> list[str]:
+def build_install_argv(
+    root: str | Path, *, ignore_scripts: bool, package_manager: str | None = None,
+    frozen: bool = True,
+) -> list[str]:
     """Public entry point for the install command :func:`install_dependencies`
     would run for ``root``, for callers (e.g. :mod:`depfix.codemods.lockfile`)
     that need to regenerate a lockfile without duplicating the detection
@@ -254,6 +263,7 @@ def build_install_argv(root: str | Path, *, ignore_scripts: bool, package_manage
         root,
         ignore_scripts=ignore_scripts,
         version=_declared_manager_version(root, manager),
+        frozen=frozen,
     )
 
 
@@ -265,6 +275,7 @@ def install_dependencies(
     package_manager: str | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     ecosystem: str = "javascript",
+    frozen: bool = True,
 ) -> InstallResult:
     """Install ``root``'s dependencies, defaulting to ``--ignore-scripts``
     so a hostile ``postinstall``/``preinstall`` in a dependency (or the repo
@@ -281,6 +292,10 @@ def install_dependencies(
     if ecosystem == "python":
         return _install_python_dependencies(
             root, timeout=timeout, max_output_bytes=max_output_bytes
+        )
+    if ecosystem == "ruby":
+        return _install_ruby_dependencies(
+            root, timeout=timeout, max_output_bytes=max_output_bytes, frozen=frozen
         )
 
     if not (root / "package.json").is_file():
@@ -299,6 +314,7 @@ def install_dependencies(
         install_root,
         ignore_scripts=ignore_scripts,
         version=prepared.version,
+        frozen=frozen,
     )
     # Preserve the familiar bare command when it was already installed. A
     # managed runtime needs its absolute path because its cache directory is
@@ -347,6 +363,25 @@ def _python_has_manifest(root: Path) -> bool:
     from depfix.ecosystems.python_runtime import has_installable_manifest
 
     return has_installable_manifest(root)
+
+
+def _install_ruby_dependencies(
+    root: Path, *, timeout: float, max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    frozen: bool = True,
+) -> InstallResult:
+    from depfix.ecosystems.ruby_runtime import build_ruby_install_argv, bundler
+
+    if bundler() is None:
+        return InstallResult(package_manager="bundler", skipped_reason="bundler not on PATH")
+    if not (root / "Gemfile").is_file():
+        return InstallResult(package_manager="bundler", skipped_reason="no Gemfile found")
+    argv = build_ruby_install_argv(root, frozen=frozen)
+    from depfix.ecosystems.specs import RUBY
+    result = run_sandboxed(
+        argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+        extra_allowlist=RUBY.env_allowlist_extra,
+    )
+    return InstallResult(package_manager="bundler", sandbox=result)
 
 
 def _which(executable: str) -> str | None:

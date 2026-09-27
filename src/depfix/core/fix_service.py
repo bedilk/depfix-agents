@@ -20,6 +20,7 @@ from depfix.clone import Checkout
 from depfix.codemods import CodemodRegistry
 from depfix.config import Settings
 from depfix.core.models import BreakingChange, ChangeKind
+from depfix.obs.cost import CostLedger, CostStage
 from depfix.core.pipeline import FixPipeline, FixPipelineResult
 from depfix.fixers.bedrock import BedrockFixGenerator
 from depfix.fixers.gemini import FixGenerator
@@ -146,6 +147,7 @@ def run_fix_for_change(
     repo_config: RepoConfig,
     fixer: BedrockFixGenerator | FixGenerator | OllamaFixGenerator,
     max_retries: int | None = None,
+    ledger: CostLedger | None = None,
 ) -> FixServiceResult:
     """Run a fix, escalating once when the primary has no committable edit."""
     from depfix.ecosystems import fixable_ids
@@ -155,7 +157,17 @@ def run_fix_for_change(
     # Dependency drift is not a source-code migration.  It therefore has no
     # call sites to hand to an LLM: make a deterministic manifest edit, then
     # use the same verification and commit policy as every other fix.
-    if change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP:
+    if change.kind in (ChangeKind.DEPENDENCY_VERSION_BUMP, ChangeKind.SECURITY_ADVISORY):
+        if change.kind is ChangeKind.SECURITY_ADVISORY and (
+            not change.new_api.strip() or not change.new_version.strip()
+        ):
+            result = FixPipelineResult(
+                repo_full_name=scan_result.repo_full_name, breaking_change=change,
+                files_scanned=scan_result.files_scanned, files_affected=0, edits=(),
+                total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+                codemod_notes=("security advisory has no published fix; reported for review",),
+            )
+            return FixServiceResult(result, [], repo_config.verify and settings.verify_enabled)
         return _run_dependency_drift(checkout, scan_result, change, settings, repo_config)
 
     ecosystem = detect_repo_ecosystem(checkout.path)
@@ -193,6 +205,7 @@ def run_fix_for_change(
                 completer,
                 timeout=float(settings.verify_characterize_timeout),
                 max_output_bytes=settings.verify_max_output_bytes,
+                ledger=ledger,
             )
 
     primary = _run_once(
@@ -200,6 +213,8 @@ def run_fix_for_change(
         repo_config=repo_config, fixer=fixer, max_retries=max_retries,
         characterizer=characterizer, ecosystem=ecosystem,
     )
+    if ledger is not None:
+        ledger.record(CostStage.FIX_GENERATION, primary.pipeline_result.total_cost)
     if primary.committable:
         return primary
 
@@ -223,6 +238,8 @@ def run_fix_for_change(
         repo_config=repo_config, fixer=fallback, max_retries=max_retries,
         characterizer=characterizer, ecosystem=ecosystem,
     )
+    if ledger is not None:
+        ledger.record(CostStage.RETRY, escalated.pipeline_result.total_cost)
     if escalated.committable:
         return FixServiceResult(
             pipeline_result=escalated.pipeline_result,
@@ -250,7 +267,11 @@ def _run_dependency_drift(
     from depfix.scanners.repo import detect_repo_ecosystem
 
     verify_required = repo_config.verify and settings.verify_enabled
-    policy = dependency_drift_policy(change)
+    policy = dependency_drift_policy(
+        change,
+        max_major_gap=settings.drift_max_major_gap,
+        max_minor_gap=settings.drift_max_minor_gap,
+    )
     ecosystem = detect_repo_ecosystem(checkout.path)
     if ecosystem == "typescript":
         ecosystem = "javascript"
@@ -294,6 +315,17 @@ def _run_dependency_drift(
             )
             for bump in build_pypi_dependency_drift_bumps(checkout.path, change)
         ]
+    elif ecosystem == "ruby":
+        from depfix.ecosystems.ruby_manifests import build_ruby_dependency_drift_bumps
+
+        drift_bumps = [
+            (
+                bump.manifest_relpath, bump.fixed_content, bump.note,
+                f"Registry drift: {bump.package} {bump.old_spec} -> {bump.new_spec} "
+                f"in {bump.manifest_relpath}.",
+            )
+            for bump in build_ruby_dependency_drift_bumps(checkout.path, change)
+        ]
     else:
         from depfix.ecosystems import get as get_ecosystem
 
@@ -303,13 +335,19 @@ def _run_dependency_drift(
         )
         return report_only(
             f"dependency drift detected for {pretty}; automatic manifest writers are "
-            "currently available for npm and PyPI only. This drift is reported for review "
-            "until a manifest, lockfile, and verification adapter exists for this ecosystem."
+            "currently available for npm, PyPI, and RubyGems only. This drift is reported "
+            "for review until a manifest, lockfile, and verification adapter exists for "
+            "this ecosystem."
         )
 
     editor = WorkspaceEditor(checkout)
     edits: list[FileEdit] = []
     notes: list[str] = plan.declines if ecosystem == "javascript" else []
+    if not drift_bumps and not notes:
+        notes.append(
+            f"{change.package} drift detected via registry feed but no manifest in this "
+            f"repo declares it (may be transitive, or {ecosystem} manifest format not yet supported)"
+        )
     for relpath, fixed_content, note, trace in drift_bumps:
         edit = editor.write_fix(
             relpath, fixed_content, confidence=1.0,
@@ -391,6 +429,7 @@ def _run_dependency_drift(
             static_check_enabled=settings.verify_static_check_enabled,
             static_check_timeout=settings.verify_static_check_timeout,
             selective_tests=settings.verify_selective_tests,
+            frozen_install=False,
         )
         verification = verifier.verify(edits, change=change)
         edits = list(verification.edits)
@@ -429,6 +468,40 @@ def _run_dependency_drift(
                 lock_edit = dataclasses.replace(
                     lock_edit,
                     derivation_trace=f"Lockfile refreshed after manifest drift: {message}.",
+                )
+                edits.append(lock_edit)
+
+    if (
+        ecosystem == "ruby"
+        and settings.lockfile_regenerate
+        and checkout.is_temporary
+        and any(edit.is_on_disk for edit in edits)
+    ):
+        from depfix.ecosystems.ruby_lockfile import (
+            ruby_lockfile_paths,
+            try_refresh_ruby_lockfile,
+        )
+
+        ok, message = try_refresh_ruby_lockfile(
+            checkout.path, timeout=settings.verify_install_timeout,
+        )
+        notes.append(message)
+        if ok:
+            for lockfile in ruby_lockfile_paths(checkout.path):
+                relpath = lockfile.relative_to(checkout.path).as_posix()
+                try:
+                    content = lockfile.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                lock_edit = editor.write_fix(
+                    relpath, content, confidence=1.0,
+                    origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                )
+                if not lock_edit.changed:
+                    continue
+                lock_edit = dataclasses.replace(
+                    lock_edit,
+                    derivation_trace=f"Gemfile.lock refreshed after manifest drift: {message}.",
                 )
                 edits.append(lock_edit)
 

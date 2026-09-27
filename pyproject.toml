@@ -60,8 +60,8 @@ dev = [
 depfix = "depfix.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/depfix"
-Issues   = "https://github.com/your-org/depfix/issues"
+Homepage = "https://github.com/bedilk/dependency_check"
+Issues   = "https://github.com/bedilk/dependency_check/issues"
 
 # ============================================================================
 #  Setuptools: src-layout package discovery

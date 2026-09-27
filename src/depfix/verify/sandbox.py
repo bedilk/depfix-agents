@@ -120,6 +120,8 @@ def run_sandboxed(
     extra_env: dict[str, str] | None = None,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     extra_allowlist: frozenset[str] | None = None,
+    container_image: str = "",
+    container_runtime: str = "docker",
 ) -> SandboxResult:
     """Run ``argv`` (a fixed arg list, never a shell string) inside ``cwd``
     with an allowlisted environment, killing the whole process group if it
@@ -129,14 +131,34 @@ def run_sandboxed(
     non-npm ecosystem admits its own tooling vars (``VIRTUAL_ENV``,
     ``PIP_*``, ...; see ``EcosystemSpec.env_allowlist_extra``) without the
     base allowlist growing a union of every ecosystem's needs.
+
+    If ``container_image`` is set, the command runs inside that container
+    (using ``container_runtime``: docker, podman, ...) with ``cwd`` mounted
+    at /workspace.
     """
     argv = tuple(argv)
+    env = _sandboxed_env(extra_env, extra_allowlist)
+
+    # Wrap in container if requested
+    if container_image:
+        container_argv = [container_runtime, "run", "--rm"]
+        # Mount the working directory
+        abs_cwd = str(Path(cwd).resolve())
+        container_argv.extend(["-v", f"{abs_cwd}:/workspace", "-w", "/workspace"])
+        # Pass environment variables
+        for key, value in env.items():
+            container_argv.extend(["-e", f"{key}={value}"])
+        # Add the image and original command
+        container_argv.append(container_image)
+        container_argv.extend(argv)
+        argv = tuple(container_argv)
+
     start = time.monotonic() * 1000.0
     try:
         proc = subprocess.Popen(
             argv,
-            cwd=str(cwd),
-            env=_sandboxed_env(extra_env, extra_allowlist),
+            cwd=str(cwd) if not container_image else None,
+            env=env if not container_image else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,  # own process group, for killpg on timeout

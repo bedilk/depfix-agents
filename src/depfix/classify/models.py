@@ -26,6 +26,7 @@ class ClassifyOutcome:
     changes: list[BreakingChange] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     unclassifiable: bool = False
+    cost: float = 0.0
 
     @property
     def ok(self) -> bool:

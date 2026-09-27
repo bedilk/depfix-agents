@@ -38,6 +38,11 @@ _KIND_MAP: dict[tuple[SpecChangeKind, str], ChangeKind] = {
     (SpecChangeKind.ENUM_VALUE_REMOVED, "request"): ChangeKind.ENUM_VALUE_REMOVED,
     (SpecChangeKind.ENUM_VALUE_REMOVED, "response"): ChangeKind.ENUM_VALUE_REMOVED,
     (SpecChangeKind.SCHEMA_REMOVED, "n/a"): ChangeKind.RESPONSE_SHAPE_CHANGED,
+    # AsyncAPI / Redis / TS-export kinds map onto the nearest existing ChangeKind.
+    (SpecChangeKind.OPERATION_MESSAGE_CHANGED, "n/a"): ChangeKind.RESPONSE_SHAPE_CHANGED,
+    (SpecChangeKind.COMMAND_REMOVED, "n/a"): ChangeKind.METHOD_REMOVED,
+    (SpecChangeKind.COMMAND_ARITY_CHANGED, "n/a"): ChangeKind.PARAM_TYPE_CHANGED,
+    (SpecChangeKind.EXPORT_REMOVED, "n/a"): ChangeKind.METHOD_REMOVED,
 }
 
 # Additive by construction — never worth surfacing as a breaking change

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from depfix.validators.javascript import FixValidator, create_unified_diff
 from depfix.validators.python import PythonFixValidator
+from depfix.validators.ruby import RubyFixValidator
 from depfix.validators.typescript import TypeScriptSyntaxValidator, is_typescript
 
 
@@ -26,6 +27,8 @@ def validator_for_ecosystem(
     """
     if ecosystem_id == "python":
         return PythonFixValidator(use_ast_validation=use_ast_validation)
+    if ecosystem_id == "ruby":
+        return RubyFixValidator(use_ast_validation=use_ast_validation)
     return FixValidator(
         use_ast_validation=use_ast_validation,
         checkout_root=checkout_root,
@@ -35,6 +38,7 @@ def validator_for_ecosystem(
 __all__ = [
     "FixValidator",
     "PythonFixValidator",
+    "RubyFixValidator",
     "TypeScriptSyntaxValidator",
     "create_unified_diff",
     "is_typescript",
