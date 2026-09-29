@@ -42,6 +42,7 @@ class SkipReason(enum.StrEnum):
     # -- capability: can depfix act on this at all --------------------------
     UNKNOWN_PROVIDER = "unknown_provider"
     NO_REPLACEMENT_API = "no_replacement_api"
+    REMOVAL_ALREADY_REPORTED = "removal_already_reported"
 
     # -- supply-chain safety -----------------------------------------------
     VERSION_TOO_NEW = "version_too_new"
@@ -126,7 +127,7 @@ def decide(
             return SkipReason.TRIAGE_SNOOZED
 
     # -- capability: can we act on this at all ------------------------------
-    from depfix.core.models import ChangeKind
+    from depfix.core.models import ChangeKind, is_method_removal
 
     if change.provider_id not in known_provider_ids:
         return SkipReason.UNKNOWN_PROVIDER
@@ -134,7 +135,14 @@ def decide(
     # design. It is still the most important thing an operator can hear, so
     # it proceeds to a report-only outcome rather than being filtered out
     # here as "nothing to migrate to".
-    if change.kind is not ChangeKind.SECURITY_ADVISORY and not change.new_api.strip():
+    # METHOD_REMOVED changes are also exempt: they pass through to the
+    # orchestrator for reporting in the PR artifact even when there is no
+    # replacement API to migrate to.
+    if (
+        change.kind is not ChangeKind.SECURITY_ADVISORY
+        and not is_method_removal(change)
+        and not (change.new_api or "").strip()
+    ):
         return SkipReason.NO_REPLACEMENT_API
 
     # -- bookkeeping: force-bypassable ---------------------------------------

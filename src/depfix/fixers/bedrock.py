@@ -230,7 +230,9 @@ Return ONLY the complete updated code. No explanations, no markdown code blocks,
         return max(0.0, min(1.0, confidence))
 
     def _calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
-        pricing = BEDROCK_PRICING.get(self.model, {"input": 15.0, "output": 75.0})
+        # Fall back to Sonnet-tier rates for unknown model IDs rather than
+        # Opus rates, which over-estimate cost by ~5× for most models.
+        pricing = BEDROCK_PRICING.get(self.model, {"input": 3.0, "output": 15.0})
         return (input_tokens / 1_000_000) * pricing["input"] + (
             output_tokens / 1_000_000
         ) * pricing["output"]

@@ -344,17 +344,19 @@ def _build_scan_coordinator(
     ledger the command's summary reads, or agent spend records to an
     orphan and TTS shows 0 despite real LLM usage.
 
-    Returns None when scan_strategy is not "agent", so callers can use
-    ``strategy = "agent" if coordinator is not None else "deterministic"``.
+    Returns None when scan_strategy is "deterministic" OR when no LLM is
+    configured. For "agent" the missing LLM is a hard error; for "hybrid"
+    it is a graceful fallback to the deterministic result.
     """
-    if settings.scan_strategy != "agent":
+    if settings.scan_strategy not in ("agent", "hybrid"):
         return None
     completer = _build_completer(settings)
     if completer is None:
-        console.print(
-            "[red]Error: SCAN_STRATEGY=agent requires an LLM "
-            "(set GOOGLE_API_KEY, LLM_PROVIDER=ollama, or configure Bedrock).[/red]"
-        )
+        if settings.scan_strategy == "agent":
+            console.print(
+                "[red]Error: SCAN_STRATEGY=agent requires an LLM "
+                "(set GOOGLE_API_KEY, LLM_PROVIDER=ollama, or configure Bedrock).[/red]"
+            )
         return None
     # Import lazily so the module is not loaded when strategy=deterministic.
     from depfix.agent.scan_agent import ScanAgent

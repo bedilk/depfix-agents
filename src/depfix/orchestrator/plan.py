@@ -32,12 +32,13 @@ from pathlib import Path
 from depfix.core.models import BreakingChange
 from depfix.core.pipeline import FixPipelineResult
 from depfix.core.serde import breaking_change_from_dict, breaking_change_to_dict
+from depfix.scanners.removals import RemovalNotice
 from depfix.verify.confidence import ConfidenceTier
 
 #: Bumped from 1 when the embedded ``change`` became mandatory. A v1
 #: artifact has no way to tell ``apply`` which change it is for, so it is
 #: rejected with an actionable message rather than half-read.
-ARTIFACT_VERSION = 3
+ARTIFACT_VERSION = 4
 
 DEFAULT_PLAN_DIR = ".depfix/plans"
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ class PlanArtifact:
     verified_by: str = ""
     impact_summary: str = ""
     created_at: str = field(default_factory=_utcnow_iso)
+    removals: tuple = ()
 
     @property
     def change_dedupe_key(self) -> str:
@@ -100,6 +102,7 @@ class PlanArtifact:
             "impact_summary": self.impact_summary,
             "created_at": self.created_at,
             "edits": [e.__dict__ for e in self.edits],
+            "removals": [r.to_dict() for r in self.removals],
         }
 
     @property
@@ -136,6 +139,7 @@ class PlanArtifact:
             confidence=result.confidence.value,
             verified_by=result.confidence_reason,
             impact_summary=impact_summary,
+            removals=(),
         )
 
     def write(self, path: str | Path) -> Path:
@@ -168,7 +172,7 @@ class PlanArtifact:
     def read(cls, path: str | Path) -> PlanArtifact:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         version = raw.get("version")
-        if version not in (2, ARTIFACT_VERSION):
+        if version not in (2, 3, ARTIFACT_VERSION):
             raise ValueError(
                 f"unsupported plan artifact version {version!r} (this depfix writes "
                 f"version {ARTIFACT_VERSION}); re-run `depfix plan` to regenerate it"
@@ -182,6 +186,7 @@ class PlanArtifact:
             verified_by=raw.get("verified_by", ""),
             impact_summary=raw.get("impact_summary", ""),
             created_at=raw.get("created_at", ""),
+            removals=tuple(RemovalNotice.from_dict(r) for r in raw.get("removals", [])),
         )
 
     @classmethod

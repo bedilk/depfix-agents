@@ -113,8 +113,12 @@ class ScanAgent:
         ambiguity and no raw-HTTP anchors to chase, this returns immediately
         spending $0.
         """
+        # Only METHOD_CALL, BARE_SYMBOL, and WRAPPER_IMPORT sites qualify for
+        # the judge loop. ANCHOR, RAW_HTTP, and API_VERSION_PIN sites are not
+        # judgeable — a raw-HTTP grep alone must never trigger the judge loop.
+        _JUDGEABLE = frozenset({CallSiteKind.METHOD_CALL, CallSiteKind.BARE_SYMBOL, CallSiteKind.WRAPPER_IMPORT})
         high_medium = [s for s in baseline.call_sites if s.is_actionable]
-        low_sites = [s for s in baseline.call_sites if not s.is_actionable]
+        low_sites = [s for s in baseline.call_sites if not s.is_actionable and s.kind in _JUDGEABLE]
         needs_judge = bool(low_sites)
         needs_anchor = _has_raw_http_anchors(provider, target)
 
@@ -127,6 +131,12 @@ class ScanAgent:
             return baseline
 
         augmented = list(baseline.call_sites)
+        # Non-judgeable non-actionable sites (RAW_HTTP, API_VERSION_PIN, …) are
+        # preserved unchanged and appended after judging.
+        non_judgeable_low = [
+            s for s in baseline.call_sites
+            if not s.is_actionable and s.kind not in _JUDGEABLE
+        ]
 
         if needs_judge and low_sites:
             judge = CallSiteJudgeAgent(
@@ -136,7 +146,7 @@ class ScanAgent:
                 ledger=self._ledger,
             )
             kept = judge.run(provider, low_sites[:judge_cap], toolset)
-            augmented = high_medium + kept + low_sites[judge_cap:]
+            augmented = high_medium + kept + low_sites[judge_cap:] + non_judgeable_low
 
         if needs_anchor:
             anchor_sites = self._find_raw_http_sites(provider, target, toolset, repo_full_name)

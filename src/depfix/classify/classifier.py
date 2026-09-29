@@ -103,14 +103,11 @@ class Classifier:
                           f"to {event.new_token}"),
             )])
 
-        if event.spec_changes and event.body.strip() and self._synthesizer is not None:
-            result = self._synthesizer.synthesize(event, package=package)
-            if result.change is not None:
-                return ClassifyOutcome(changes=[result.change], cost=result.cost_usd)
-            logger.info("synthesis for %s did not pass gates: %s", package, result.reason)
-
         if event.spec_changes:
-            changes = classify_spec_changes(
+            # Run the deterministic classifier first.  If it already produced
+            # at least one actionable symbol pair, skip the LLM synthesizer
+            # entirely — there is nothing for it to add.
+            det_changes = classify_spec_changes(
                 event.spec_changes,
                 package=package,
                 old_version=event.old_token or "",
@@ -118,7 +115,14 @@ class Classifier:
                 provider_id=event.provider_id,
                 source_url=event.source_url,
             )
-            return ClassifyOutcome(changes=changes)
+            if any(c.old_api for c in det_changes):
+                return ClassifyOutcome(changes=det_changes)
+            if event.body.strip() and self._synthesizer is not None:
+                result = self._synthesizer.synthesize(event, package=package)
+                if result.change is not None:
+                    return ClassifyOutcome(changes=[result.change], cost=result.cost_usd)
+                logger.info("synthesis for %s did not pass gates: %s", package, result.reason)
+            return ClassifyOutcome(changes=det_changes)
 
         if not event.body.strip():
             return ClassifyOutcome(unclassifiable=True)
@@ -127,6 +131,12 @@ class Classifier:
             return ClassifyOutcome(
                 errors=["no spec_changes and no LLM configured for the release-notes path"]
             )
+
+        # Skip the LLM entirely when the body contains no breaking-change
+        # markers — patch/minor prose is almost certainly additive noise.
+        from depfix.classify.notes import _BREAKING_MARKERS_RE
+        if not _BREAKING_MARKERS_RE.search(event.body):
+            return ClassifyOutcome()
 
         changes = self._notes.classify(
             event.body,

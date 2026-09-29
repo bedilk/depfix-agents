@@ -34,6 +34,7 @@ def build_pr_body(
     grouped_members: list | None = None,
     plan_impact_summary: str = "",
     drift_review: bool | None = None,
+    removals: list | None = None,
 ) -> str:
     """Markdown PR body: change summary, migration guide, source evidence
     (when present), a per-file table of edits, and the verification
@@ -161,6 +162,10 @@ def build_pr_body(
                   "_This PR groups several related changes. Each row's confidence "
                   "tier is independent; review lower-confidence rows carefully._"]
 
+    removal_section = _removal_lines(removals or [])
+    if removal_section:
+        lines += removal_section
+
     lines.append("")
     lines.append("_Opened automatically by [depfix](https://github.com/bedilk/dependency_check)._")
     if escalated:
@@ -169,6 +174,45 @@ def build_pr_body(
         lines.append(f"_Applied from plan artifact `{plan_digest}`._")
     lines += ["", _pr_state_trailer(change=change, result=result, plan_digest=plan_digest)]
     return "\n".join(lines)
+
+
+def _removal_lines(removals) -> list[str]:
+    blocking = [r for r in removals if r.blocks_merge]
+    upcoming = [r for r in removals if r.reachable and r.impact == "upcoming"]
+    if not blocking and not upcoming:
+        return []
+    label = {
+        "breaks_on_upgrade": "❌ breaks with this upgrade",
+        "already_removed":   "❌ already gone in the installed version",
+    }
+    lines = ["", "### ⚠️ Removed APIs still called by this repository", ""]
+    if blocking:
+        lines += [
+            "These methods no longer exist upstream. **depfix did not rewrite them** — "
+            "migrate these call sites before merging.",
+            "",
+            "| Removed API | Removed in | Status | Call sites | What to use instead |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for r in blocking:
+            sites = ", ".join(f"`{s}`" for s in r.sites[:5]) + (
+                f" (+{len(r.sites)-5} more)" if len(r.sites) > 5 else "")
+            match_note = " _(suffix match)_" if r.match == "suffix" else ""
+            guidance = (r.guidance or "—").replace("|", "\\|")[:160]
+            lines.append(
+                f"| `{r.old_api}`{match_note} | {r.removed_in or '?'} "
+                f"| {label.get(r.impact, r.impact)} | {sites} | {guidance} |"
+            )
+    if upcoming:
+        lines += [
+            "",
+            f"<details><summary>Scheduled removals in later versions ({len(upcoming)})</summary>",
+            "",
+        ]
+        lines += [f"- `{r.old_api}` removed in {r.removed_in}: {', '.join(r.sites[:3])}"
+                  for r in upcoming]
+        lines += ["", "</details>"]
+    return lines
 
 
 def _author_label(edit: FileEdit) -> str:

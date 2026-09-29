@@ -590,6 +590,16 @@ class Orchestrator:
                 outcome.planned = self._dry_run
                 return outcome
 
+            # Filter scan_result to only the sites that matched this change so
+            # the fixer does not spend tokens on RAW_HTTP/API_VERSION_PIN sites
+            # or judge-promoted anchors that are not part of the actionable set.
+            if assessment.status is ScanMatchStatus.ACTIONABLE and change.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
+                scan_result = dataclasses.replace(
+                    scan_result,
+                    call_sites=[*assessment.matched_sites,
+                                *(s for s in scan_result.call_sites if not s.is_actionable)],
+                )
+
             # Plan-time impact check: before any fix is generated, measure
             # whether the change actually breaks this repo's own tests when
             # the dependency is bumped -- evidence for the plan output, not

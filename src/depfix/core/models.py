@@ -76,6 +76,14 @@ REMOVAL_KINDS: frozenset[ChangeKind] = frozenset(
 # only, and never leaks into removal-shaped classification logic.
 _NEW_API_OPTIONAL_KINDS: frozenset[ChangeKind] = REMOVAL_KINDS | {ChangeKind.SECURITY_ADVISORY}
 
+# Kinds that represent a method/function/operation that was removed entirely.
+METHOD_REMOVAL_KINDS: frozenset = frozenset({ChangeKind.METHOD_REMOVED})
+
+
+def is_method_removal(change: "BreakingChange") -> bool:
+    """A method/function/operation/export that no longer exists upstream."""
+    return change.kind in METHOD_REMOVAL_KINDS
+
 
 class ClassificationSource(StrEnum):
     """Where a ``BreakingChange`` came from, and therefore how much to trust it."""

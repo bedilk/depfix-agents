@@ -59,6 +59,7 @@ class ChangeOutcome:
     reachability_reason: str = ""
     deferred_edits: list = field(default_factory=list)
     fix_result: object | None = None
+    removals: list = field(default_factory=list)
 
     @property
     def skipped(self) -> bool:

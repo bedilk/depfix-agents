@@ -438,12 +438,13 @@ class Settings(BaseSettings):
         "that repo's own .depfix.yml max_changes_per_run.",
     )
     pipeline_max_cost_usd_per_run: float | None = Field(
-        default=None,
+        default=2.0,
         ge=0.0,
         description="Wall-clock budget's cost-ceiling counterpart: once this run's "
         "cumulative FixPipelineResult.total_cost crosses this, the orchestrator stops "
         "before the next repo/change the same way an expired --max-duration does. "
-        "None (default) means uncapped -- only the --max-duration wall clock applies.",
+        "Defaults to $2.00 per run as a safe guard against runaway spend. "
+        "Set to None to disable the cost cap (only --max-duration wall clock applies).",
     )
     pipeline_default_change_limit: int = Field(
         default=50,

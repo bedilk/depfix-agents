@@ -140,7 +140,9 @@ class BedrockCompleter:
         text = message.content[0].text if message.content else ""
         input_tokens = message.usage.input_tokens
         output_tokens = message.usage.output_tokens
-        pricing = self.PRICING.get(self.model, {"input": 15.0, "output": 75.0})
+        # Fall back to Sonnet-tier rates for unknown Bedrock model IDs rather
+        # than Opus rates, which over-estimate cost by ~5× for most models.
+        pricing = self.PRICING.get(self.model, {"input": 3.0, "output": 15.0})
         cost = (input_tokens / 1_000_000) * pricing["input"] + (
             output_tokens / 1_000_000
         ) * pricing["output"]
