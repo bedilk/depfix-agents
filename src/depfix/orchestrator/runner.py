@@ -96,7 +96,14 @@ from depfix.storage import (
     touch_recheck_on_change,
 )
 from depfix.storage.lock import advisory_lock
+from depfix.storage.attempt_store import worst_attempt_across
 from depfix.verify.confidence import ConfidenceTier
+from depfix.core.upgrade import UpgradePlan, build_upgrade_plan
+from depfix.core.upgrade_service import UpgradeResult, run_upgrade
+from depfix.gh.branch import branch_name_for_key
+from depfix.scanners.removals import narrow_to_symbols
+from depfix.scanners.repo import symbols_for_change
+from depfix.storage.attempt_store import record_change_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +179,9 @@ class Orchestrator:
         # (package, version) -> age in hours. One registry lookup per target
         # version per run, not one per (repo, change) pair.
         self._version_age_cache: dict[tuple[str, str], float | None] = {}
+        self._provider_change_cache: dict[str, list[BreakingChange]] = {}
+        self._run_changes: list[BreakingChange] = []
+        self._covered_this_run: set[tuple[str, str]] = set()
 
     def run(
         self, repo_full_names: list[str], changes: list[BreakingChange]
@@ -185,6 +195,9 @@ class Orchestrator:
         ``error``.
         """
         init_schema()
+        self._run_changes = changes
+        self._provider_change_cache.clear()
+        self._covered_this_run.clear()
         # Use the shared ledger from the CLI when provided, so agent-scan
         # spend and fix-generation spend all appear in the same summary.
         self._ledger = self._shared_ledger if self._shared_ledger is not None else CostLedger()
@@ -309,10 +322,23 @@ class Orchestrator:
         changes_processed = 0
         stopped_early = False
 
-        for change in changes:
+        ordered = sorted(
+            changes,
+            key=lambda c: (0 if c.kind is ChangeKind.DEPENDENCY_VERSION_BUMP else 1,))
+
+        for change in ordered:
             if self._budget.expired:
                 stopped_early = True
                 break
+
+            if (repo_full_name, change.dedupe_key) in self._covered_this_run:
+                change_outcomes.append(ChangeOutcome(
+                    dedupe_key=change.dedupe_key, package=change.package,
+                    old_api=change.old_api, kind=change.kind.value,
+                    skip_reason=SkipReason.ALREADY_TERMINAL,
+                    skip_detail_text="already shipped by an upgrade PR in this run",
+                ))
+                continue
 
             logger.info(
                 "considering %s: %s %s -> %s",
@@ -364,6 +390,8 @@ class Orchestrator:
                     attempt=attempt,
                 )
             change_outcomes.append(change_outcome)
+            self._covered_this_run.update(
+                (repo_full_name, key) for key in change_outcome.member_dedupe_keys)
             self._budget.record_cost(self._ledger.total - before_cost)
             if change_outcome.attempt_status not in _NO_WORK_STATUSES:
                 changes_processed += 1
@@ -475,6 +503,44 @@ class Orchestrator:
                 len(scan_result.actionable_sites),
                 f", {suppressed_call_sites} path-suppressed" if suppressed_call_sites else "",
             )
+
+            ecosystem = self._ecosystem_for_package(change)
+            provider_changes = self._provider_changes(change.provider_id)
+            upgrade: UpgradePlan | None = None
+            if self._settings.upgrade_plans_enabled:
+                try:
+                    upgrade = build_upgrade_plan(
+                        scan_result, provider_changes,
+                        provider_id=change.provider_id, package=change.package,
+                        ecosystem=ecosystem,
+                        target_version=(change.new_version
+                                        if change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP
+                                        else None),
+                    )
+                except Exception:
+                    logger.exception("upgrade plan assembly failed for %s", repo_full_name)
+                    upgrade = None
+
+            if upgrade is not None:
+                gate = self._gate_upgrade(session, upgrade, repo_full_name, current_ref_sha)
+                if gate is not None:
+                    outcome.skip_reason, outcome.skip_detail_text = gate
+                    outcome.upgrade, outcome.member_dedupe_keys = upgrade, upgrade.member_dedupe_keys
+                    return outcome
+                if upgrade.has_source_work or change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP:
+                    artifact = None
+                    try:
+                        if (repo_full_name, upgrade.dedupe_key) in self._plan_artifacts:
+                            artifact = self._plan_artifacts[(repo_full_name, upgrade.dedupe_key)]
+                    except (TypeError, KeyError):
+                        pass
+                    return self._process_upgrade(
+                        session, owner=owner, name=name, repo_full_name=repo_full_name,
+                        installation_id=installation_id, checkout=checkout, full_scan=scan_result,
+                        plan=upgrade, repo_config=repo_config, base_branch=base_branch,
+                        current_ref_sha=current_ref_sha, artifact=artifact, outcome=outcome,
+                    )
+                outcome.removals = upgrade.removals
 
             from depfix.scanners.matching import ScanMatchStatus, assess_scan_change
 
@@ -822,6 +888,237 @@ class Orchestrator:
             if sdk.name == change.package:
                 return sdk.ecosystem
         return None
+
+    def _provider_changes(self, provider_id: str) -> list[BreakingChange]:
+        """Every classified change for a provider, run-cached."""
+        if provider_id not in self._provider_change_cache:
+            pool = {c.dedupe_key: c for c in self._run_changes
+                    if c.provider_id == provider_id}
+            try:
+                from depfix.core.shortcuts import all_changes_for_provider
+                for change in all_changes_for_provider(provider_id):
+                    pool.setdefault(change.dedupe_key, change)
+            except Exception:
+                logger.debug("could not load changes for %s", provider_id, exc_info=True)
+            self._provider_change_cache[provider_id] = list(pool.values())
+        return self._provider_change_cache[provider_id]
+
+    def _version_age_hours_for(self, package: str, version: str) -> float | None:
+        """Age of a package version in hours (cached)."""
+        key = (package, version)
+        if key not in self._version_age_cache:
+            from depfix.sources import sources_for_package
+            from datetime import UTC, datetime
+            try:
+                sources = sources_for_package(package)
+                now = datetime.now(tz=UTC)
+                for source in sources:
+                    release = source.release_for_version(version)
+                    if release is not None:
+                        age = (now - release.published_at).total_seconds() / 3600
+                        self._version_age_cache[key] = age
+                        return age
+            except Exception:
+                logger.debug("could not fetch version age for %s@%s", package, version, exc_info=True)
+            self._version_age_cache[key] = None
+        return self._version_age_cache[key]
+
+    def _gate_upgrade(
+        self, session: Session, plan: UpgradePlan, repo_full_name: str, ref_sha: str
+    ) -> tuple[SkipReason, str] | None:
+        """Checks that only become possible once the upgrade's members are known."""
+        if len(plan.migrations) > self._settings.upgrade_max_migrations:
+            return (SkipReason.MAX_CHANGES_PER_RUN_REACHED,
+                    f"{len(plan.migrations)} migrations in the "
+                    f"{plan.installed_version or '?'} → {plan.target_version} window exceeds "
+                    f"upgrade_max_migrations={self._settings.upgrade_max_migrations}; "
+                    "this span needs human review, not an automated PR")
+
+        if not self._force:
+            attempt = worst_attempt_across(
+                session, repo_id=repo_full_name, dedupe_keys=plan.member_dedupe_keys)
+            if attempt is not None and AttemptStatus(attempt.status).is_terminal:
+                return (SkipReason.ALREADY_TERMINAL,
+                        f"a member of this upgrade is already {attempt.status}; use --force")
+            if attempt is not None and attempt.attempts_used >= self._settings.pipeline_max_attempts:
+                return (SkipReason.MAX_ATTEMPTS_REACHED,
+                        f"{attempt.attempts_used}/{self._settings.pipeline_max_attempts} "
+                        "attempts used across this upgrade's members; use --force")
+
+            age = self._version_age_hours_for(plan.package, plan.target_version)
+            cooldown = self._settings.version_cooldown_hours
+            if cooldown > 0 and age is not None and age < cooldown:
+                return (SkipReason.VERSION_TOO_NEW,
+                        f"{plan.package}@{plan.target_version} is {age:.0f}h old, under the "
+                        f"{cooldown:.0f}h cooldown; will proceed once it ages, or use --force")
+        return None
+
+    def _as_pipeline_result(
+        self, plan: UpgradePlan, result: UpgradeResult, scan: RepoScanResult
+    ) -> FixPipelineResult:
+        """Adapt an upgrade to the row shape ``record_fix_run`` already persists."""
+        carrier = plan.drift_change or plan.migrations[0]
+        return FixPipelineResult(
+            repo_full_name=scan.repo_full_name,
+            breaking_change=carrier,
+            files_scanned=scan.files_scanned,
+            files_affected=len({e.relpath for e in result.committable}),
+            edits=tuple(result.edits),
+            total_usages_fixed=sum(e.usages_fixed for e in result.committable),
+            total_cost=result.total_cost,
+            total_tokens=result.total_tokens,
+            duration_ms=0,
+            verification=result.verification,
+            codemod_notes=tuple(result.notes),
+        )
+
+    def _open_upgrade_pr(
+        self, *, owner, name, installation_id, base_branch, plan, result, draft,
+        plan_digest: str = "",
+    ) -> PullRequest:
+        write_token = self._gh_auth.installation_token(
+            installation_id, repositories=(name,),
+            permissions={"contents": "write", "pull_requests": "write"})
+        head_branch = branch_name_for_key(plan.dedupe_key)
+        with BranchWriter(write_token.token, owner, name,
+                          api_url=self._settings.github_api_url) as writer:
+            writer.commit_edits(
+                branch=head_branch, base_branch=base_branch,
+                message=(f"depfix: upgrade {plan.package} "
+                         f"{plan.installed_version or '?'} -> {plan.target_version}"),
+                edits=result.committable)
+
+        pr = open_pull_request(
+            owner=owner, repo=name, token=write_token.token,
+            head_branch=head_branch, base_branch=base_branch,
+            title=plan.title,
+            body=build_upgrade_pr_body(plan, result, plan_digest=plan_digest),
+            draft=draft, api_url=self._settings.github_api_url)
+
+        from depfix.gh import apply_pr_labels
+        labels = ["depfix:upgrade", f"depfix:confidence={result.confidence.value}"]
+        if any(n.reachable for n in plan.removals):
+            labels.append("depfix:api-removal")
+        apply_pr_labels(owner=owner, repo=name, pr_number=pr.number, labels=labels,
+                        token=write_token.token, api_url=self._settings.github_api_url)
+        return pr
+
+    def _replay_upgrade(self, checkout, scan, plan, artifact) -> UpgradeResult:
+        """Write a reviewed artifact's edits back verbatim. No model is called."""
+        from depfix.apply.models import EditOrigin
+        editor = WorkspaceEditor(checkout)
+        edits: list[FileEdit] = []
+        for planned in artifact.edits:
+            path = checkout.path / planned.relpath
+            if path.read_text(encoding="utf-8") != planned.original_content:
+                raise ValueError(
+                    f"plan artifact is stale: {planned.relpath} no longer matches its "
+                    "planned base; run `depfix plan` again")
+            edit = editor.write_fix(planned.relpath, planned.fixed_content,
+                                    confidence=planned.confidence,
+                                    usages_fixed=planned.usages_fixed)
+            edits.append(dataclasses.replace(
+                edit, verdict=EditVerdict.KEPT, diff=planned.diff,
+                origin=EditOrigin.PLAN,
+                derivation_trace=(f"Replay from reviewed upgrade artifact "
+                                  f"({artifact.digest[:19]}). No LLM call.")))
+        return UpgradeResult(
+            plan=plan, edits=edits, steps=list(artifact.steps), committable=edits,
+            confidence=ConfidenceTier(artifact.confidence),
+            confidence_reason=artifact.verified_by, notes=list(artifact.notes))
+
+    def _process_upgrade(
+        self, session: Session, *, owner, name, repo_full_name, installation_id,
+        checkout, full_scan, plan, repo_config, base_branch, current_ref_sha,
+        artifact, outcome,
+    ) -> ChangeOutcome:
+        outcome.upgrade = plan
+        outcome.member_dedupe_keys = plan.member_dedupe_keys
+        outcome.removals = plan.removals
+
+        with log_context(upgrade=f"{plan.package}@{plan.installed_version}->{plan.target_version}"):
+            logger.info("composing upgrade: %s", plan.title)
+
+            if artifact is not None and artifact.is_upgrade:
+                result = self._replay_upgrade(checkout, full_scan, plan, artifact)
+                plan_digest = artifact.digest
+            else:
+                result = run_upgrade(
+                    checkout=checkout, scan_result=full_scan, plan=plan,
+                    settings=self._settings, repo_config=repo_config,
+                    fixer_factory=self._fixer_factory, ledger=self._ledger,
+                )
+                plan_digest = ""
+            outcome.cost_usd = result.total_cost
+            outcome.severity, outcome.severity_evidence = self._upgrade_severity(plan, result)
+
+            if not result.committable:
+                detail = result.rejected_reason or "; ".join(result.notes[:3]) or (
+                    "the upgrade produced no committable edits")
+                if not self._dry_run:
+                    for key in plan.member_dedupe_keys:
+                        record_change_attempt(
+                            session, repo_id=repo_full_name, dedupe_key=key,
+                            status=AttemptStatus.NO_KEPT_EDITS, last_error=detail,
+                            ref_sha=current_ref_sha)
+                outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
+                outcome.detail = detail
+                outcome.planned = self._dry_run
+                return outcome
+
+            if self._dry_run:
+                outcome.plan_artifact = PlanArtifact.from_upgrade(
+                    repo_full_name, current_ref_sha, result)
+                outcome.attempt_status = (AttemptStatus.PR_OPENED if repo_config.open_pr
+                                          else AttemptStatus.FIXED_NO_PR)
+                outcome.detail = (
+                    f"[dry-run] {plan.title}: {len(result.committable)} file(s) across "
+                    f"{len(result.steps)} step(s)")
+                outcome.planned = True
+                return outcome
+
+            pipeline_result = self._as_pipeline_result(plan, result, full_scan)
+            effective_open_pr = repo_config.open_pr and not self._no_pr
+
+            if not effective_open_pr:
+                run_row = record_fix_run(
+                    session, repo_full_name=repo_full_name, owner=owner, name=name,
+                    result=pipeline_result, installation_id=installation_id,
+                    default_branch=base_branch, cost_ledger=self._ledger)
+                session.flush()
+                for key in plan.member_dedupe_keys:
+                    record_change_attempt(
+                        session, repo_id=repo_full_name, dedupe_key=key,
+                        status=AttemptStatus.FIXED_NO_PR, fix_run_id=run_row.id,
+                        ref_sha=current_ref_sha)
+                outcome.attempt_status = AttemptStatus.FIXED_NO_PR
+                outcome.detail = plan.title
+                return outcome
+
+            pr = self._open_upgrade_pr(
+                owner=owner, name=name, installation_id=installation_id,
+                base_branch=base_branch, plan=plan, result=result,
+                draft=(repo_config.draft_pr or plan.needs_draft
+                       or not result.confidence.at_least(
+                           ConfidenceTier(self._settings.draft_below_confidence))),
+                plan_digest=plan_digest,
+            )
+            with log_context(pr_url=pr.html_url):
+                run_row = record_fix_run(
+                    session, repo_full_name=repo_full_name, owner=owner, name=name,
+                    result=pipeline_result, installation_id=installation_id,
+                    default_branch=base_branch, cost_ledger=self._ledger)
+                record_pull_request(session, run_row, pr)
+                session.flush()
+                for key in plan.member_dedupe_keys:
+                    record_change_attempt(
+                        session, repo_id=repo_full_name, dedupe_key=key,
+                        status=AttemptStatus.PR_OPENED, fix_run_id=run_row.id,
+                        ref_sha=current_ref_sha)
+            outcome.attempt_status = AttemptStatus.PR_OPENED
+            outcome.pr_url = pr.html_url
+            outcome.detail = plan.title
+            return outcome
 
     def _apply_plan_artifact(
         self, checkout: Checkout, scan_result: RepoScanResult, change: BreakingChange, artifact: PlanArtifact

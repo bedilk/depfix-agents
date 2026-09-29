@@ -724,6 +724,16 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
             continue
         console.print(f"  {repo.repo_full_name} ({repo.open_pr_count} open depfix PR(s)):")
         for change in acted:
+            if change.upgrade is not None:
+                plan = change.upgrade
+                verb = ("would upgrade" if change.planned and change.attempt_status in {
+                    AttemptStatus.PR_OPENED, AttemptStatus.FIXED_NO_PR} else _outcome_text(change))
+                console.print(
+                    f"    {plan.package} {plan.installed_version or '?'} → {plan.target_version}: "
+                    f"{verb} [{len(plan.migrations)} migration(s), "
+                    f"{len(change.member_dedupe_keys)} change(s)]"
+                    f"{change.pr_url or (f' -- {change.detail}' if change.detail else '')}")
+                continue
             # A dry-run predicts the *actual* terminal outcome. Do not hide
             # "no kept edits" or "no call sites" behind a vague success-like
             # message merely because no state was written.
@@ -1862,7 +1872,13 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 if change.plan_artifact is None:
                     continue
                 canonical = change.plan_artifact.write_for_repo(settings.plan_dir)
-                console.print(f"[green]Plan artifact:[/green] {canonical}")
+                if change.plan_artifact.is_upgrade:
+                    console.print(f"[green]Upgrade plan:[/green] {canonical}  "
+                                  f"[dim]{change.plan_artifact.upgrade_package} "
+                                  f"{change.plan_artifact.upgrade_from or '?'} → "
+                                  f"{change.plan_artifact.upgrade_to}[/dim]")
+                else:
+                    console.print(f"[green]Plan artifact:[/green] {canonical}")
                 if args.plan_output_dir != Path(settings.plan_dir).as_posix():
                     stamped = legacy_dir / (
                         f"{outcome.run_id}-"
