@@ -42,6 +42,8 @@ class SourceKind(StrEnum):
     CHANGELOG_FILE = "changelog_file"  # Week 2
     CHANGELOG_HTML = "changelog_html"  # Week 2
     RSS = "rss"  # Week 2
+    # Synthetic parent event for a migration re-imported from the local learned file.
+    LEARNED_CATALOG = "learned_catalog"
 
 
 class Severity(StrEnum):

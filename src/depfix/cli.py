@@ -1633,6 +1633,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     fill_pipeline_context(args, load_local_defaults())
     _apply_model_overrides(args, settings)
 
+    if getattr(args, "no_upgrade_plans", False):
+        settings.upgrade_plans_enabled = False
+
     # A repository named directly on the command line is an explicit opt-in.
     # The repo-config gate remains for unattended, fleet-wide discovery.
     has_explicit_repos = bool(getattr(args, "repos", None) or getattr(args, "repo", None))
@@ -2391,6 +2394,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Proceed without the advisory lock; intended only for deliberate parallel runs.",
     )
     workflow_p.add_argument("--no-codemods", action="store_true")
+    workflow_p.add_argument(
+        "--no-upgrade-plans",
+        action="store_true",
+        help="Disable combined upgrade PRs; emit one PR per classified change "
+        "instead of bundling version bump + API migrations.",
+    )
     workflow_p.add_argument("--container-image", default=None)
     workflow_p.add_argument("--container-runtime", choices=["docker", "podman"], default=None)
     workflow_p.add_argument(

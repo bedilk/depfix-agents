@@ -60,6 +60,8 @@ class ChangeOutcome:
     deferred_edits: list = field(default_factory=list)
     fix_result: object | None = None
     removals: list = field(default_factory=list)
+    upgrade: object | None = None
+    member_dedupe_keys: tuple[str, ...] = ()
 
     @property
     def skipped(self) -> bool:

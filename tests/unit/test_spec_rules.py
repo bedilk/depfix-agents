@@ -29,7 +29,8 @@ def test_path_removed_maps_to_method_removed() -> None:
     assert bc.kind is ChangeKind.METHOD_REMOVED
     assert bc.source is ClassificationSource.SPEC_DIFF
     assert bc.confidence == 1.0
-    assert bc.old_api == "GET /v1/widgets"
+    assert bc.old_api == "widgets.list"          # dotted SDK symbol
+    assert "GET /v1/widgets" in bc.description   # HTTP subject preserved for reviewers
     assert bc.new_api == ""
 
 

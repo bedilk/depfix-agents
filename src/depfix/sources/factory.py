@@ -13,7 +13,9 @@ from depfix.registry.client import NpmRegistryClient
 from depfix.registry.pypi_client import PypiRegistryClient
 from depfix.registry.rubygems_client import RubyGemsClient
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
+from depfix.sources.changelog_file import ChangelogFileSource
 from depfix.sources.changelog_html import ChangelogHtmlSource
+from depfix.sources.rss import RssSource
 from depfix.sources.fixture_change import FixtureChangeSource
 from depfix.sources.github_release import GitHubReleaseSource
 from depfix.sources.http import build_http_client
@@ -137,6 +139,10 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
         return FixtureChangeSource(provider_id, feed.config)
     if feed.kind is SourceKind.CHANGELOG_HTML:
         return ChangelogHtmlSource(provider_id, feed.config, deps.http)
+    if feed.kind is SourceKind.CHANGELOG_FILE:
+        return ChangelogFileSource(provider_id, feed.config, deps.http)
+    if feed.kind is SourceKind.RSS:
+        return RssSource(provider_id, feed.config, deps.http)
     raise UnsupportedSourceKind(
-        f"feed kind '{feed.kind.value}' is declared but not implemented (Week 2)"
+        f"feed kind '{feed.kind.value}' is not implemented"
     )

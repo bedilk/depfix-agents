@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -87,6 +88,12 @@ _REQUIRE_DESTRUCTURE_RE = re.compile(
 # --- construction ---------------------------------------------------------
 
 _NEW_CONSTRUCT_RE = re.compile(r"""\bnew\s+(\w+)\s*\(""")
+# Matches ``const client = algoliasearch('APP', 'KEY')`` and similar factory-
+# function patterns where an SDK default/namespace import is called directly
+# (not via `new`) to produce a client instance.
+_FACTORY_CALL_RE = re.compile(
+    r"""(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?(\w+(?:\.\w+)*)\s*\("""
+)
 
 # --- re-exports (wrapper modules) ----------------------------------------
 
@@ -189,6 +196,9 @@ def mask_comments(source: str) -> str:
     return "".join(out)
 
 
+MAX_CHAIN_HOPS = 3
+
+
 @dataclass
 class _Binding:
     """What a local name in one file is believed to refer to."""
@@ -200,10 +210,11 @@ class _Binding:
     evidence: str = ""
     # True for a destructured bare function (``createModeration``), False
     # for a module/namespace/client-instance binding (``openai``/``stripe``).
-    # Without this, a bare function import and a client-instance import are
-    # indistinguishable, so member-call vs bare-call matching (and
-    # ``new X()`` construction) can't be gated correctly.
     is_bare_symbol: bool = False
+    # Accessor path already accumulated onto this binding, "" for a root
+    # client. ``const b = storage.bucket(n)`` binds ``b`` with path
+    # ``"bucket"``, so ``b.setCors()`` emits ``provider.bucket.setCors``.
+    path: str = ""
 
 
 @dataclass
@@ -391,7 +402,12 @@ class CallSiteScanner:
             )
             return
 
-        if spec not in target.sdk_packages:
+        matched_package = next(
+            (pkg for pkg in target.sdk_packages
+             if spec == pkg or spec.startswith(pkg + "/")),
+            None,
+        )
+        if matched_package is None:
             return
 
         is_bare_symbol = imported_name not in (None, "*")
@@ -438,6 +454,36 @@ class CallSiteScanner:
                     evidence=f"constructed from {base_name}",
                     is_bare_symbol=False,
                 )
+
+        for match in _FACTORY_CALL_RE.finditer(source):
+            assigned_name = match.group(1)
+            callee = match.group(2)
+            # callee may be dotted: "storage.bucket" → head "storage", accessor "bucket"
+            head, _, accessor = callee.partition(".")
+            if assigned_name == callee:
+                continue
+            base = facts.direct_bindings.get(head)
+            if base is None:
+                continue
+            if base.hops >= MAX_CHAIN_HOPS:
+                continue
+            new_path = ".".join(p for p in (base.path, accessor) if p)
+            # Allow dotted factory callees (storage.bucket) even when base
+            # isn't a bare SDK import, as long as it's a known provider binding.
+            if not accessor and not base.is_bare_symbol and base.kind is not CallSiteKind.SDK_IMPORT:
+                continue
+            facts.direct_bindings.setdefault(assigned_name, _Binding(
+                kind=CallSiteKind.CLIENT_CONSTRUCTION,
+                confidence=MatchConfidence.MEDIUM if accessor else base.confidence,
+                provider_id=base.provider_id,
+                hops=base.hops + (1 if accessor else 0),
+                evidence=(
+                    f"derived from {callee}(...)" if accessor
+                    else f"factory call on {head}"
+                ),
+                is_bare_symbol=False,
+                path=new_path,
+            ))
 
     def _collect_exports(self, facts: _FileFacts, source: str) -> None:
         for match in _EXPORT_DEFAULT_NAME_RE.finditer(source):
@@ -522,19 +568,24 @@ class CallSiteScanner:
             binding = facts.direct_bindings.get(base_name)
             if binding is None or binding.is_bare_symbol:
                 continue
-            symbol = f"{binding.provider_id}{chain}"
-            if not symbol_wanted(symbol):
-                continue
-            sites.append(
-                self._make_site(
-                    facts,
-                    match.start(),
-                    kind=CallSiteKind.METHOD_CALL,
-                    confidence=binding.confidence,
-                    symbol=symbol,
-                    provider_id=binding.provider_id,
-                    evidence=binding.evidence,
+            # Incorporate accumulated path from dotted factory bindings.
+            member = ".".join(p for p in (binding.path, chain.lstrip(".")) if p)
+            symbol = f"{binding.provider_id}.{member}"
+            if symbol_wanted(symbol):
+                sites.append(
+                    self._make_site(
+                        facts,
+                        match.start(),
+                        kind=CallSiteKind.METHOD_CALL,
+                        confidence=binding.confidence,
+                        symbol=symbol,
+                        provider_id=binding.provider_id,
+                        evidence=binding.evidence,
+                    )
                 )
+            # Walk inline chains: storage.bucket(n).setCorsConfiguration(...)
+            self._walk_inline_chain(
+                facts, source, match, binding, member, target, sites, symbol_wanted
             )
 
         for match in _BARE_CALL_RE.finditer(source):
@@ -628,6 +679,57 @@ class CallSiteScanner:
                 start = idx + len(anchor)
 
         return sites
+
+    def _walk_inline_chain(
+        self,
+        facts: "_FileFacts",
+        source: str,
+        match: "re.Match[str]",
+        binding: "_Binding",
+        accumulated_member: str,
+        target: "ScanTarget",
+        sites: "list[CallSite]",
+        symbol_wanted: "Callable[[str], bool]",
+    ) -> None:
+        """Walk ``recv.method1(...).method2(...)`` chains inline.
+
+        After matching ``recv.method1(``, follow the close-paren and look for
+        ``.method2(``, emitting an additional MEDIUM-confidence call site with
+        the accumulated member path so ``storage.bucket(n).setCorsConfiguration(...)``
+        emits ``provider.bucket.setCorsConfiguration``.
+        Capped at MAX_CHAIN_HOPS to avoid runaway on deeply nested chains.
+        """
+        from depfix.codemods.text import matching_paren
+
+        open_paren = match.end() - 1
+        accumulated = accumulated_member
+        hops = binding.hops
+        while hops < MAX_CHAIN_HOPS:
+            close = matching_paren(source, open_paren)
+            if close < 0:
+                return
+            tail = source[close + 1:]
+            follow = re.match(r"\s*\.\s*(\w+(?:\s*\.\s*\w+)*)\s*\(", tail)
+            if follow is None:
+                return
+            next_member = re.sub(r"\s+", "", follow.group(1))
+            accumulated = f"{accumulated}.{next_member}"
+            symbol = f"{binding.provider_id}.{accumulated}"
+            if symbol_wanted(symbol):
+                site_offset = close + 1 + follow.start()
+                sites.append(
+                    self._make_site(
+                        facts,
+                        site_offset,
+                        kind=CallSiteKind.METHOD_CALL,
+                        confidence=MatchConfidence.MEDIUM,
+                        symbol=symbol,
+                        provider_id=binding.provider_id,
+                        evidence=f"derived from a {binding.provider_id} return-value chain",
+                    )
+                )
+            open_paren = close + 1 + follow.end() - 1
+            hops += 1
 
     def _make_site(
         self,

@@ -87,6 +87,7 @@ class TsExportsSource(ChangeSource):
     ) -> None:
         super().__init__(provider_id, config)
         self.package: str = self._require("package")
+        self.compare_previous_major: bool = bool(config.get("compare_previous_major", True))
         self._http = http
         self._npm = npm
 
@@ -105,10 +106,20 @@ class TsExportsSource(ChangeSource):
             return FeedPoll.missing(f"{self.package} has no 'latest' dist-tag")
         if version == state.last_token:
             return FeedPoll.unchanged(token=version)
-        if state.last_token is None:
-            return FeedPoll.baseline(version)
 
-        old_names = self._exports_for(state.last_token)
+        old_token = state.last_token
+        if old_token is None:
+            # First sight: instead of a silent baseline, diff against the last
+            # release of the previous major -- where removals actually live.
+            old_token = (
+                self._previous_major_release(metadata.versions, version)
+                if self.compare_previous_major
+                else None
+            )
+            if old_token is None:
+                return FeedPoll.baseline(version)
+
+        old_names = self._exports_for(old_token)
         new_names = self._exports_for(version)
         if old_names is None or new_names is None:
             return FeedPoll.baseline(version, path=state.last_payload_path)
@@ -118,16 +129,20 @@ class TsExportsSource(ChangeSource):
             SpecChange(
                 kind=SpecChangeKind.EXPORT_REMOVED,
                 severity=Severity.BREAKING,
-                subject=name,
+                # Provider-qualified so the scanner's symbol namespace matches.
+                subject=f"{self.provider_id}.{name}",
                 pointer=f"{self.package}#{name}",
                 detail="exported symbol removed between versions",
                 before=name,
             )
             for name in removed
         ]
+        if not changes and state.last_token is None:
+            # First-sight comparison found nothing: behave like a plain baseline.
+            return FeedPoll.baseline(version)
 
         severity = Severity.BREAKING if changes else (
-            Severity.BREAKING if is_major_bump(state.last_token, version) else Severity.UNKNOWN
+            Severity.BREAKING if is_major_bump(old_token, version) else Severity.UNKNOWN
         )
         summary = (
             f"{len(removed)} exported symbol(s) removed"
@@ -139,9 +154,9 @@ class TsExportsSource(ChangeSource):
             feed_key=self.feed_key,
             source_kind=self.kind,
             source_url=f"https://www.npmjs.com/package/{self.package}/v/{version}",
-            old_token=state.last_token,
+            old_token=old_token,
             new_token=version,
-            title=f"{self.package} exports {state.last_token} → {version}",
+            title=f"{self.package} exports {old_token} → {version}",
             summary=summary,
             body="\n".join(c.one_line() for c in changes[:60]),
             severity=severity,
@@ -149,6 +164,20 @@ class TsExportsSource(ChangeSource):
             raw={"package": self.package, "removed_exports": removed},
         )
         return FeedPoll(changed=True, new_token=version, events=[event])
+
+    @staticmethod
+    def _previous_major_release(versions: list[str], latest: str) -> str | None:
+        """Highest stable release with a lower major than ``latest``."""
+        from depfix.sources.semver import parse_semver
+
+        current = parse_semver(latest)
+        if current is None:
+            return None
+        candidates = [
+            (parsed, v) for v in versions
+            if "-" not in v and (parsed := parse_semver(v)) is not None and parsed[0] < current[0]
+        ]
+        return max(candidates)[1] if candidates else None
 
     def _exports_for(self, version: str) -> set[str] | None:
         tarball_url = self._tarball_url(version)

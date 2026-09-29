@@ -285,4 +285,13 @@ def test_ts_exports_detects_a_removed_export(tmp_path: Path) -> None:
 
     assert result.changed
     changes = result.events[0].spec_changes
-    assert any(c.kind is SpecChangeKind.EXPORT_REMOVED and c.subject == "bar" for c in changes)
+    assert any(
+        c.kind is SpecChangeKind.EXPORT_REMOVED and c.subject == "vercel-ai.bar"
+        for c in changes
+    )
+
+
+def test_ts_exports_first_sight_compares_against_previous_major() -> None:
+    versions = ["1.0.0", "1.5.2", "2.0.0-beta.1", "2.0.0", "2.1.0"]
+    assert TsExportsSource._previous_major_release(versions, "2.1.0") == "1.5.2"
+    assert TsExportsSource._previous_major_release(["1.0.0", "1.2.0"], "1.2.0") is None

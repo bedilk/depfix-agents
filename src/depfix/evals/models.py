@@ -20,11 +20,24 @@ class EvalCategory(StrEnum):
 class ExpectedChange:
     """What a classification case expects to see, matched loosely (kind +
     a substring of old_api) rather than by exact equality — exact-match on
-    LLM output measures formatting luck, not correctness."""
+    LLM output measures formatting luck, not correctness.
+
+    ``also_accept`` exists for genuinely ambiguous taxonomy calls: "the
+    parameter is no longer accepted, use this other one instead" is
+    defensibly ``param_removed`` or ``param_renamed``, and failing a case
+    on that coin flip measures our labelling convention, not the
+    classifier. It deliberately does not loosen ``old_api_contains`` or
+    ``min_confidence``, so a wrong *subject* still fails.
+    """
 
     kind: str
     old_api_contains: str = ""
     min_confidence: float = 0.0
+    also_accept: tuple[str, ...] = ()
+
+    @property
+    def kinds(self) -> tuple[str, ...]:
+        return (self.kind, *self.also_accept)
 
 
 @dataclass

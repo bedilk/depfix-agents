@@ -4,6 +4,10 @@
 # this environment (no API key configured here), so a passing result has
 # never actually been observed. `requires_llm` defaults to true for this
 # category, so both are skipped under `--no-llm`.
+#
+# `also_accept` is used where two kind labels are genuinely defensible given
+# the notes text. A model that answers either is correct; only a wrong
+# *subject* still fails.
 
 - id: notes-method-renamed
   category: release_notes
@@ -24,6 +28,7 @@
       Instantiate the client directly with `new OpenAI({ apiKey })`.
   expected_changes:
     - kind: method_renamed
+      also_accept: [method_removed]  # "Removed X, use Y" reads as either
       old_api_contains: createChatCompletion
       min_confidence: 0.5
 
@@ -43,5 +48,6 @@
       for card payments. Use `payment_method` instead.
   expected_changes:
     - kind: param_removed
+      also_accept: [param_renamed]  # "no longer accepts X, use Y" reads as either
       old_api_contains: source
       min_confidence: 0.5

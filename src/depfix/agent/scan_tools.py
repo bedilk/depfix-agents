@@ -90,6 +90,7 @@ class ScanToolset:
         self._pypi = pypi
         self._github_api_url = github_api_url.rstrip("/")
         self.call_log: list[tuple[str, str]] = []
+        self.files_read: set[str] = set()
 
     # -- repo tools -----------------------------------------------------------
 
@@ -119,6 +120,7 @@ class ScanToolset:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
             return ToolResult.error(f"could not read {relpath!r}: {exc}")
+        self.files_read.add(relpath)
         return ToolResult(ok=True, content=text).truncate()
 
     def list_dir(self, relpath: str, *, depth: int = 1) -> ToolResult:

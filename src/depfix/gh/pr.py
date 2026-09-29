@@ -215,6 +215,62 @@ def _removal_lines(removals) -> list[str]:
     return lines
 
 
+def build_upgrade_pr_body(
+    artifact,
+    *,
+    escalated: bool = False,
+    plan_digest: str = "",
+) -> str:
+    """PR body for a combined upgrade: version bump + API migrations in one PR."""
+    plan_pkg = artifact.upgrade_package
+    span = f"{artifact.upgrade_from or '?'} → {artifact.upgrade_to}"
+    lines = [
+        f"## Upgrade `{plan_pkg}` {span}",
+        "",
+        f"- **Package:** {plan_pkg}",
+        f"- **From:** {artifact.upgrade_from or '?'}",
+        f"- **To:** {artifact.upgrade_to}",
+        f"- **Confidence:** `{artifact.confidence}`",
+    ]
+
+    if artifact.steps:
+        lines += ["", "### Steps", "", "| # | Kind | Summary | Files |", "| --- | --- | --- | --- |"]
+        for i, step in enumerate(artifact.steps, 1):
+            relpaths = ", ".join(f"`{r}`" for r in step.relpaths[:5])
+            if len(step.relpaths) > 5:
+                relpaths += f" (+{len(step.relpaths) - 5} more)"
+            lines.append(f"| {i} | {step.kind} | {step.summary} | {relpaths} |")
+
+    if artifact.edits:
+        lines += ["", "### Files changed", "", "| File | Confidence | Usages fixed |", "| --- | --- | --- |"]
+        for edit in artifact.edits:
+            lines.append(f"| `{edit.relpath}` | {edit.confidence:.0%} | {edit.usages_fixed} |")
+
+    if artifact.member_dedupe_keys:
+        lines += [
+            "", f"### Bundled migrations ({len(artifact.member_dedupe_keys)})", "",
+            "This PR bundles the version bump with API migrations that fall inside "
+            f"the {span} window. Each migration was verified as part of the upgrade unit.",
+        ]
+
+    removal_section = _removal_lines(list(artifact.removals))
+    if removal_section:
+        lines += removal_section
+
+    if artifact.notes:
+        lines += ["", "### Notes", ""]
+        lines.extend(f"- {n}" for n in artifact.notes)
+
+    lines.append("")
+    lines.append("_Opened automatically by [depfix](https://github.com/bedilk/dependency_check)._")
+    if escalated:
+        lines.append("_A fallback model was used after the primary produced no committable edits._")
+    if plan_digest:
+        lines.append(f"_Applied from plan artifact `{plan_digest}`._")
+    lines += ["", f"<!-- depfix:v1 upgrade={plan_pkg} from={artifact.upgrade_from or '?'} to={artifact.upgrade_to} confidence={artifact.confidence} -->"]
+    return "\n".join(lines)
+
+
 def _author_label(edit: FileEdit) -> str:
     if edit.origin is EditOrigin.CODEMOD:
         return f"codemod `{edit.codemod_id}`" if edit.codemod_id else "codemod"

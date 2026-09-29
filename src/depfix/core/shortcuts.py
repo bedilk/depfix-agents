@@ -15,15 +15,27 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from depfix.catalog import (
+    canonical_providers_file,
+    learned_migrations_file,
+    load_learned_migrations,
+    persist_learned_migrations,
+)
 from depfix.classify import Classifier, breaking_change_from_row, classify_pending
+from depfix.classify.models import ClassifyOutcome
+from depfix.classify.store import persist_classification
+from depfix.config import get_settings
 from depfix.core.models import BreakingChange
 from depfix.providers.loader import load_providers_file
 from depfix.scanners.manifest import range_allows_major
 from depfix.scanners.models import DeclaredDependency
 from depfix.sources.factory import SourceDeps
+from depfix.sources.http import build_http_client
 from depfix.sources.models import ChangeEvent, Severity, SourceKind
-from depfix.sources.semver import parse_semver
+from depfix.sources.release_notes import fetch_release_notes_for_tag
+from depfix.sources.semver import is_major_bump, parse_semver
 from depfix.storage import BreakingChangeRow, ChangeEventRow, FeedState, init_schema, session_scope
+from depfix.storage.schema import Provider
 from depfix.watcher.runner import Watcher
 
 logger = logging.getLogger(__name__)
@@ -38,15 +50,19 @@ def ensure_changes_detected(
 ) -> int:
     """Persist one provider's newly observed upstream migrations.
 
-    Repository usage is recorded separately by ``scan``. A bundled catalog
-    never injects a migration into this path: only provider feeds can make a
-    source usage actionable.
+    Also injects fixture_change feeds from the bundled canonical catalog so
+    that documented historical migrations (e.g. Algolia v4→v5, MongoDB v6→v7)
+    are always available even on a fresh ``init``.
     """
     providers = load_providers_file(providers_file)
     target = [provider for provider in providers if provider.id == provider_id]
     if not target:
         logger.warning("provider %r not found in %s", provider_id, providers_file)
         return 0
+
+    # Merge fixture_change feeds from the canonical catalog into the target
+    # provider so historical migrations are always present after init.
+    target = _merge_catalog_feeds(target, provider_id)
 
     init_schema()
     with SourceDeps.from_settings() as deps:
@@ -61,7 +77,11 @@ def ensure_changes_detected(
     with session_scope() as session:
         summary = classify_pending(
             session,
-            Classifier(completer, min_confidence=min_confidence),
+            Classifier(
+                completer,
+                min_confidence=min_confidence,
+                notes_on_registry_events=True,
+            ),
             provider_id=provider_id,
         )
     logger.info(
@@ -70,7 +90,13 @@ def ensure_changes_detected(
         summary.changes_created,
         provider_id,
     )
-    return summary.changes_created
+
+    _auto_persist_catalog(provider_id, [breaking_change_from_row(r) for r in summary.created_rows])
+    imported = _import_learned_catalog(provider_id)
+    if imported:
+        logger.info("learned catalog: re-imported %d migration(s) for %s", imported, provider_id)
+
+    return summary.changes_created + imported
 
 
 def latest_change_for_provider(provider_id: str) -> tuple[BreakingChange | None, int | None]:
@@ -106,6 +132,9 @@ def capture_repository_dependency_drift(
     repository: str,
     dependencies: list[DeclaredDependency],
     package_ecosystems: Mapping[str, str | Sequence[str]],
+    github_repos: Mapping[str, str] | None = None,
+    completer: object | None = None,
+    github_api_url: str = "https://api.github.com",
 ) -> int:
     """Persist drift observed *for this repository scan*.
 
@@ -115,16 +144,21 @@ def capture_repository_dependency_drift(
     repository's lockfile.  This function joins those two observations and
     records a normal registry ``ChangeEvent`` only when they differ.
 
-    The interface is intentionally narrow: callers supply observed
-    dependencies and the provider's package/ecosystem mapping; this module
-    hides feed-key lookup, idempotency, and deterministic classification.
-    It never invents an API migration from a version gap. The downstream
-    dependency-drift policy decides whether a detected version update can be
-    edited automatically or only proposed as a human-review draft.
+    When ``github_repos`` maps a package name to its GitHub owner/repo (e.g.
+    ``{"algoliasearch": "algolia/algoliasearch-client-javascript"}``), release
+    notes for major version boundaries are fetched and attached as the event
+    ``body``.  This enables the downstream :class:`NotesClassifier` to extract
+    real API migrations from prose instead of producing bare version-bump
+    records.
+
+    ``completer`` is forwarded to :func:`classify_pending` so that
+    body-bearing drift events run the LLM notes path.
     """
     relevant = [dependency for dependency in dependencies if dependency.package in package_ecosystems]
     if not relevant:
         return 0
+
+    github_repos = github_repos or {}
 
     init_schema()
     with session_scope() as session:
@@ -153,10 +187,14 @@ def capture_repository_dependency_drift(
             if installed == latest.last_token:
                 continue
 
-            # A scan's installed version is the old side of this event.  Keep
-            # it in the feed key so two repositories with different pinned
-            # versions cannot overwrite each other's evidence in the global
-            # event table.
+            body = ""
+            body_url: str | None = None
+            gh_repo = github_repos.get(dependency.package)
+            if gh_repo and is_major_bump(installed, latest.last_token):
+                body, body_url = _fetch_drift_release_notes(
+                    gh_repo, installed, latest.last_token, github_api_url
+                )
+
             repo_key = hashlib.sha256(repository.encode("utf-8")).hexdigest()[:12]
             event = ChangeEvent(
                 provider_id=provider_id,
@@ -170,7 +208,13 @@ def capture_repository_dependency_drift(
                     "Repository lockfile version differs from the latest provider feed "
                     "snapshot"
                 ),
-                severity=Severity.UNKNOWN,
+                body=body,
+                body_url=body_url,
+                severity=(
+                    Severity.BREAKING
+                    if is_major_bump(installed, latest.last_token)
+                    else Severity.UNKNOWN
+                ),
             )
             if session.scalar(
                 select(ChangeEventRow.id).where(ChangeEventRow.dedupe_key == event.dedupe_key)
@@ -186,6 +230,8 @@ def capture_repository_dependency_drift(
                     new_token=event.new_token,
                     title=event.title,
                     summary=event.summary,
+                    body=event.body,
+                    body_url=event.body_url,
                     severity=event.severity.value,
                     dedupe_key=event.dedupe_key,
                     detected_at=event.detected_at,
@@ -195,9 +241,184 @@ def capture_repository_dependency_drift(
 
         if not created:
             return 0
-        # Registry events classify deterministically and never invoke an LLM.
-        classify_pending(session, Classifier(), provider_id=provider_id)
+        drift_summary = classify_pending(
+            session,
+            Classifier(
+                completer,
+                notes_on_registry_events=True,
+            ),
+            provider_id=provider_id,
+        )
+        _auto_persist_catalog(
+            provider_id,
+            [breaking_change_from_row(r) for r in drift_summary.created_rows],
+        )
         return created
+
+
+def _fetch_drift_release_notes(
+    github_repo: str,
+    old_version: str,
+    new_version: str,
+    github_api_url: str,
+) -> tuple[str, str | None]:
+    """Fetch release notes for the major boundary between two versions.
+
+    Tries the new version's tag first, then each major boundary tag between
+    old and new (e.g. for 4.22.0 → 5.59.0, tries tags 5.59.0 then 5.0.0).
+    Returns ``(body, html_url)`` or ``("", None)`` on failure.
+    """
+    old_parsed = parse_semver(old_version)
+    new_parsed = parse_semver(new_version)
+    if old_parsed is None or new_parsed is None:
+        return ("", None)
+
+    tags_to_try = [new_version]
+    for major in range(new_parsed[0], old_parsed[0], -1):
+        tags_to_try.append(f"{major}.0.0")
+
+    try:
+        http = build_http_client(timeout=10.0)
+    except Exception:
+        return ("", None)
+
+    bodies: list[str] = []
+    first_url: str | None = None
+    try:
+        for tag in tags_to_try:
+            notes = fetch_release_notes_for_tag(http, github_api_url, github_repo, tag)
+            if notes is not None:
+                bodies.append(f"## {tag}\n\n{notes.body}")
+                if first_url is None:
+                    first_url = notes.html_url
+    finally:
+        http.close()
+
+    return ("\n\n---\n\n".join(bodies), first_url)
+
+
+def _auto_persist_catalog(provider_id: str, changes: list[BreakingChange]) -> None:
+    """Record newly classified migrations in the local learned store.
+
+    Never writes the packaged canonical catalog. Failures are logged, never
+    raised, so a read-only or missing directory can't block scan/plan.
+    """
+    relevant = [c for c in changes if c.provider_id == provider_id]
+    if not relevant:
+        return
+    path = learned_migrations_file()
+    try:
+        written = persist_learned_migrations(path, relevant)
+    except Exception as exc:
+        logger.warning("learned catalog write failed for %s: %s", provider_id, exc)
+        return
+    if written:
+        logger.info(
+            "learned catalog: recorded %d migration(s) for %s in %s",
+            written, provider_id, path,
+        )
+
+
+def _import_learned_catalog(provider_id: str) -> int:
+    """Seed the DB with learned migrations, keeping original source/confidence.
+
+    Each entry gets a synthetic, already-classified parent event of kind
+    ``learned_catalog``. It never passes through spec_rules, so a candidate
+    LLM guess cannot become SPEC_DIFF / confidence 1.0.
+    """
+    settings = get_settings()
+    learned = load_learned_migrations(
+        learned_migrations_file(settings),
+        provider_id=provider_id,
+        include_candidates=settings.learned_migrations_include_candidates,
+    )
+    if not learned:
+        return 0
+
+    imported = 0
+    with session_scope() as session:
+        if session.get(Provider, provider_id) is None:
+            session.add(Provider(id=provider_id, name=provider_id))
+            session.flush()
+        keys = [m.change.dedupe_key for m in learned]
+        existing = set(session.scalars(
+            select(BreakingChangeRow.dedupe_key).where(BreakingChangeRow.dedupe_key.in_(keys))
+        ))
+        for migration in learned:
+            change = migration.change
+            if change.dedupe_key in existing:
+                continue
+            event_key = hashlib.sha256(f"learned|{change.dedupe_key}".encode()).hexdigest()
+            if session.scalar(
+                select(ChangeEventRow.id).where(ChangeEventRow.dedupe_key == event_key)
+            ) is not None:
+                continue
+            event = ChangeEventRow(
+                provider_id=provider_id,
+                feed_key=f"learned:{change.dedupe_key[:16]}",
+                source_kind=SourceKind.LEARNED_CATALOG.value,
+                source_url=change.source_url,
+                old_token=change.old_version or None,
+                new_token=change.new_version or "unknown",
+                title=f"learned: {change.old_api}",
+                summary=f"{migration.status} learned migration ({change.source.value})",
+                severity=Severity.UNKNOWN.value,
+                dedupe_key=event_key,
+            )
+            session.add(event)
+            session.flush()
+            persist_classification(session, event, ClassifyOutcome(changes=[change]))
+            existing.add(change.dedupe_key)
+            imported += 1
+    return imported
+
+
+def _merge_catalog_feeds(
+    target: list,
+    provider_id: str,
+) -> list:
+    """Return ``target`` augmented with fixture_change feeds from the catalog.
+
+    The canonical_migrations.yaml lives next to this package's ``catalog/``
+    module.  When it contains a provider entry whose id matches, its feeds
+    are appended to the target provider's feed tuple so the watcher emits
+    historical migration events on a fresh install.
+
+    Feeds whose ``id`` already appears in the provider's existing feeds are
+    silently skipped (idempotent).
+    """
+    try:
+        from depfix.providers.loader import load_providers_file as _load
+        catalog_path = canonical_providers_file()
+        if catalog_path is None:
+            return target
+        catalog_providers = _load(catalog_path)
+    except Exception as exc:
+        logger.debug("could not load canonical catalog: %s", exc)
+        return target
+
+    catalog_by_id = {p.id: p for p in catalog_providers}
+    catalog_spec = catalog_by_id.get(provider_id)
+    if catalog_spec is None or not catalog_spec.feeds:
+        return target
+
+    result = []
+    for provider in target:
+        if provider.id != provider_id:
+            result.append(provider)
+            continue
+        existing_ids = {
+            f.config.get("id")
+            for f in provider.feeds
+            if f.config.get("id")
+        }
+        new_feeds = tuple(
+            f for f in catalog_spec.feeds
+            if f.config.get("id") not in existing_ids
+        )
+        from dataclasses import replace
+        result.append(replace(provider, feeds=provider.feeds + new_feeds))
+    return result
 
 
 def _ecosystem_for_dependency(

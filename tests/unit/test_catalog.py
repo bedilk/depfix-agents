@@ -70,6 +70,9 @@ def test_catalog_does_not_create_a_migration_when_upstream_has_no_event(
             )
         )
     monkeypatch.setattr(shortcuts.SourceDeps, "from_settings", lambda: _NoopDeps())
+    # Prevent the canonical catalog from injecting additional feeds that would
+    # fire new events and invalidate the "no new events" assertion.
+    monkeypatch.setattr(shortcuts, "canonical_providers_file", lambda: None)
 
     created = shortcuts.ensure_changes_detected("openai", providers_file=str(providers_file))
     change, change_id = shortcuts.latest_change_for_provider("openai")

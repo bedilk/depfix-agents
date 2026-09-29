@@ -89,3 +89,28 @@ def touch_no_call_sites(
         session, repo_id=repo_id, dedupe_key=dedupe_key,
         status=AttemptStatus.NO_CALL_SITES, ref_sha=ref_sha,
     )
+
+
+def worst_attempt_across(
+    session: Session, *, repo_id: str, dedupe_keys: tuple[str, ...]
+) -> ChangeAttemptRow | None:
+    """Collapse several members' ledger rows into the most restrictive one.
+
+    An upgrade spans N ``dedupe_key``s. If *any* member already reached a
+    terminal state, the upgrade must not be re-offered; if any member is in
+    cooldown, that member paces the whole upgrade.
+    """
+    rows = [row for row in (
+        get_change_attempt(session, repo_id=repo_id, dedupe_key=key)
+        for key in dedupe_keys) if row is not None]
+    if not rows:
+        return None
+    terminal = [r for r in rows if AttemptStatus(r.status).is_terminal]
+    worst = terminal[0] if terminal else max(rows, key=lambda r: r.attempts_used)
+    synthetic = ChangeAttemptRow(
+        repo_id=repo_id, dedupe_key=worst.dedupe_key, status=worst.status,
+        attempts_used=max(r.attempts_used for r in rows),
+        last_checked_ref_sha=worst.last_checked_ref_sha,
+    )
+    synthetic.updated_at = max(r.updated_at for r in rows)
+    return synthetic

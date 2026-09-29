@@ -13,6 +13,24 @@ from depfix.config import get_settings
 
 USER_AGENT = "depfix/0.3 (+https://github.com/bedilk/dependency_check)"
 
+#: Cap on how much of any prose feed we'll buffer. A feed URL is
+#: admin-trusted config, but that config can point at a host we don't
+#: control, and without a cap a large or slow-drip response is read to
+#: completion.
+MAX_FEED_BYTES = 2_000_000
+
+
+def read_capped(response: httpx.Response, max_bytes: int = MAX_FEED_BYTES) -> bytes:
+    """Read at most ``max_bytes`` from an open streaming response."""
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in response.iter_bytes():
+        chunks.append(chunk)
+        total += len(chunk)
+        if total >= max_bytes:
+            break
+    return b"".join(chunks)[:max_bytes]
+
 
 def build_http_client(timeout: float | None = None) -> httpx.Client:
     settings = get_settings()

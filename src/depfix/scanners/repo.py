@@ -134,26 +134,69 @@ def add_api_symbol(api: str, add: Callable[..., None]) -> None:
 _symbols_from_change = symbols_for_change
 
 
-_DOTTED_SYMBOL_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")
+_MEMBER_ID = r"[A-Za-z_]\w*"
+_MEMBER_PATH_RE = re.compile(rf"{_MEMBER_ID}(?:\.{_MEMBER_ID})+")
 _BARE_IDENTIFIER_RE = re.compile(r"[A-Za-z_]\w*")
 
 
-def _looks_like_dotted_symbol(text: str) -> bool:
-    """Does ``text`` look like a bare dotted identifier chain, e.g.
-    ``openai.moderations.create`` -- no whitespace, no stray punctuation?"""
-    return bool(_DOTTED_SYMBOL_RE.fullmatch(text))
+def _looks_like_member_path(text: str) -> bool:
+    """Does ``text`` look like a dotted chain of JS identifiers?"""
+    return bool(_MEMBER_PATH_RE.fullmatch(text))
 
 
 def _qualify_symbol(provider_id: str, raw: str, *, allow_bare_identifier: bool) -> str | None:
-    """Return a scanner-namespace symbol or reject free-form prose."""
+    """Return a scanner-namespace symbol or reject free-form prose.
+
+    Handles hyphenated provider heads: ``google-cloud.bucket.setCors`` splits
+    on the provider head, and the member path after it is held to the
+    JS-identifier rule while the head itself is trusted as a provider id.
+    """
     text = raw.strip()
     if not text:
         return None
-    if _looks_like_dotted_symbol(text):
+
+    # Already provider-qualified with a hyphenated or normal head.
+    if provider_id and text.startswith(f"{provider_id}."):
+        member = text[len(provider_id) + 1:]
+        if _looks_like_member_path(member) or _BARE_IDENTIFIER_RE.fullmatch(member):
+            return text
+        return None
+    if provider_id and text == provider_id:
+        return text
+
+    # Plain dotted symbol (no hyphenated head): qualify with provider if needed.
+    if _looks_like_member_path(text):
         head = text.split(".", 1)[0]
         return text if not provider_id or head == provider_id else f"{provider_id}.{text}"
+
     if allow_bare_identifier and provider_id and _BARE_IDENTIFIER_RE.fullmatch(text):
         return f"{provider_id}.{text}"
+
+    return None
+
+
+def self_hosted_sdk_package(root: Path, target: ScanTarget) -> str | None:
+    """If this checkout *is* one of the provider's SDK packages, return its name.
+
+    ``bedilk/nodejs-storage`` declares itself ``@google-cloud/storage``; its
+    own tests import from ``../src``, correctly out of scope for depfix (which
+    scans *consumers* of an SDK, not the SDK itself). Detecting this lets the
+    report say so instead of reporting a mysterious zero.
+    """
+    import json
+
+    pkg_json = root / "package.json"
+    if not pkg_json.is_file():
+        return None
+    try:
+        data = json.loads(pkg_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    name = data.get("name") if isinstance(data, dict) else None
+    if not name or not isinstance(name, str):
+        return None
+    if name in target.sdk_packages:
+        return name
     return None
 
 
@@ -401,6 +444,19 @@ def _scan_checkout_deterministic(
     all_call_sites: list[CallSite] = []
     total_files_scanned = 0
     errors: list[str] = []
+
+    # Detect self-hosted SDK early and surface it as an informational error
+    # rather than a mysterious zero. depfix scans consumers; the SDK's own
+    # tests import from relative paths and are correctly out of scope.
+    if target is not None:
+        self_pkg = self_hosted_sdk_package(checkout.path, target)
+        if self_pkg:
+            errors.append(
+                f"this checkout declares itself as {self_pkg!r} (one of the provider's "
+                "sdk_packages). depfix scans consumers of an SDK, not the SDK itself. "
+                "Its own tests import from relative paths and are out of scope. "
+                "Samples/ subdirectory (if present) imports the published package and will be scanned."
+            )
 
     if prepare_package_manager_runtime and (spec is None or spec.id == "javascript"):
         from depfix.verify.manager import prepare_package_manager

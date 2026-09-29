@@ -30,11 +30,16 @@ DEFAULT_GITHUB_API_URL = "https://api.github.com"
 BRANCH_PREFIX = "depfix/"
 
 
+def branch_name_for_key(key: str) -> str:
+    """Deterministic branch for any depfix work unit identified by ``key``."""
+    return f"{BRANCH_PREFIX}{key[:12]}"
+
+
 def branch_name_for(change: BreakingChange) -> str:
     """Deterministic branch name for ``change``, so repeated runs for the
     same breaking change target the same branch instead of piling up a new
     one every time."""
-    return f"{BRANCH_PREFIX}{change.dedupe_key[:12]}"
+    return branch_name_for_key(change.dedupe_key)
 
 
 class BranchWriter:

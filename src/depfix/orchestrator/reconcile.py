@@ -43,6 +43,8 @@ def reconcile_open_prs(session: Session, gh_auth: GitHubAppAuth, repo_full_names
                 row.state = "merged" if row.merged else str(state.get("state") or "closed")
                 row.merged_at = _parse_dt(state.get("merged_at"))
                 row.closed_at = _parse_dt(state.get("closed_at"))
+                if row.merged:
+                    _promote_merged(row.fix_run.dedupe_key)
                 drift += 1
         except GitHubAppError as exc:
             logger.debug("PR reconciliation skipped for %s: %s", repo_full_name, exc)
@@ -61,6 +63,16 @@ def compute_merge_rate(session: Session, repo_ids: list[str] | None = None) -> d
     total = len(rows)
     return {"merged": merged, "closed_unmerged": total - merged, "total": total,
             "rate": merged / total if total else None}
+
+
+def _promote_merged(dedupe_key: str) -> None:
+    """A merged PR is the strongest evidence a learned migration is real."""
+    from depfix.catalog import learned_migrations_file, promote_learned_migration
+
+    try:
+        promote_learned_migration(learned_migrations_file(), dedupe_key, "merged_pr")
+    except Exception:
+        logger.debug("learned-catalog promotion on merge failed", exc_info=True)
 
 
 def _parse_dt(value: str | None) -> datetime | None:

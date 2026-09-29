@@ -60,6 +60,27 @@ def _map_kind(change: SpecChange) -> ChangeKind | None:
     return _KIND_MAP.get((change.kind, change.direction)) or _KIND_MAP.get((change.kind, "n/a"))
 
 
+def sdk_symbol_for(subject: str, *, provider_id: str = "") -> str | None:
+    """The dotted SDK symbol a ``SpecChange`` subject refers to, or ``None``.
+
+    Two shapes arrive here. Fixture and synthesis feeds already carry a
+    dotted symbol (``openai.createChatCompletion``) and are returned
+    verbatim. A real OpenAPI diff carries an HTTP subject
+    (``POST /v1/charges``), which :func:`sdk_path_hints` turns into
+    ``charges.create``.
+
+    ``provider_id`` lets a hyphenated head (``google-cloud``, ``vercel-ai``)
+    survive normalization; without it those subjects normalize to ``None``
+    and silently lose every hyphenated provider's symbols.
+    """
+    from depfix.codemods.symbols import normalize_api
+
+    normalized = normalize_api(subject, provider_id=provider_id)
+    if normalized is not None:
+        return normalized
+    return sdk_path_hints(subject)
+
+
 def sdk_path_hints(subject: str) -> str | None:
     """Best-effort ``METHOD /path`` -> ``resource.verb`` SDK-method guess.
 
@@ -101,10 +122,17 @@ class _Bucket:
     direction: str
 
 
-def _new_api_for(bucket: _Bucket, members: list[SpecChange]) -> str:
+def _new_api_for(bucket: _Bucket, members: list[SpecChange], *, provider_id: str = "") -> str:
     if bucket.kind is ChangeKind.METHOD_RENAMED:
         after = next((m.after for m in members if m.after), None)
-        return after or bucket.subject
+        if after:
+            from depfix.codemods.symbols import normalize_api
+
+            normalized = normalize_api(after, provider_id=provider_id)
+            if normalized is not None:
+                return normalized
+            return after
+        return sdk_symbol_for(bucket.subject, provider_id=provider_id) or bucket.subject
     if bucket.kind in REMOVAL_KINDS:
         return ""
     if bucket.kind is ChangeKind.PARAM_NOW_REQUIRED:
@@ -118,9 +146,10 @@ def _new_api_for(bucket: _Bucket, members: list[SpecChange]) -> str:
     return bucket.subject
 
 
-def _old_api_for(bucket: _Bucket, members: list[SpecChange]) -> str:
+def _old_api_for(bucket: _Bucket, members: list[SpecChange], *, provider_id: str = "") -> str:
+    """The thing that changed, as a call symbol where one is derivable."""
     if bucket.kind in (ChangeKind.METHOD_REMOVED, ChangeKind.METHOD_RENAMED):
-        return bucket.subject
+        return sdk_symbol_for(bucket.subject, provider_id=provider_id) or bucket.subject
     removed_names = [m.before for m in members if m.before]
     if removed_names:
         return f"{bucket.subject} ({', '.join(dict.fromkeys(removed_names))})"
@@ -153,15 +182,21 @@ def classify_spec_changes(
     for bucket, members in buckets.items():
         details = [m.detail for m in members if m.detail]
         hint = sdk_path_hints(bucket.subject)
+        description = "; ".join(dict.fromkeys(details)) or bucket.subject
+        if bucket.kind in (ChangeKind.METHOD_REMOVED, ChangeKind.METHOD_RENAMED):
+            # old_api is now a dotted symbol, so the HTTP endpoint it came from
+            # must survive somewhere a reviewer will read it.
+            if " " in bucket.subject:
+                description = f"{description} ({bucket.subject})"
 
         out.append(
             BreakingChange(
                 package=package,
                 old_version=old_version,
                 new_version=new_version,
-                old_api=_old_api_for(bucket, members),
-                new_api=_new_api_for(bucket, members),
-                description="; ".join(dict.fromkeys(details)) or bucket.subject,
+                old_api=_old_api_for(bucket, members, provider_id=provider_id),
+                new_api=_new_api_for(bucket, members, provider_id=provider_id),
+                description=description,
                 migration_guide="",
                 kind=bucket.kind,
                 source=ClassificationSource.SPEC_DIFF,

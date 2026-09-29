@@ -400,7 +400,7 @@
       old_api_contains: idempotency_key
       min_confidence: 1.0
 
-- id: spec-response-field-type-changed
+- id: spec-response-shape-changed-via-field-type
   category: spec_diff
   verified: true
   description: >

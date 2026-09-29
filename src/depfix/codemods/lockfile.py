@@ -412,6 +412,67 @@ def build_manifest_bumps(root: Path, change: BreakingChange) -> list[ManifestBum
     return bumps
 
 
+def build_upgrade_manifest_bumps(
+    root: Path, package: str, target_version: str
+) -> "DriftPlan":
+    """Rewrite every declaration of ``package`` to exactly ``target_version``.
+
+    Unlike ``build_manifest_bumps`` (which floors to ``^{major}.0.0``), this
+    targets the version the feed actually observed, so the manifest, the
+    lockfile and the PR title all name the same release.
+    """
+    from depfix.sources.semver import parse_semver as _semver
+    from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
+
+    if _semver(target_version) is None:
+        return DriftPlan([], [f"{target_version!r} is not plain semver"])
+
+    # Re-use the existing drift path with a synthetic change pointing at the target
+    synthetic = BreakingChange(
+        package=package, old_version="0.0.0", new_version=target_version,
+        old_api=f"{package}@0.0.0", new_api=f"{package}@{target_version}",
+        description="upgrade", migration_guide="",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
+        source=ClassificationSource.REGISTRY,
+    )
+    # Try pnpm catalog first
+    catalog = _build_pnpm_catalog_plan(root, synthetic, target_version=target_version)
+    if catalog.bumps or catalog.declines:
+        return catalog
+
+    bumps, declines = [], []
+    for path in root.rglob("package.json"):
+        if any(part in _SKIP for part in path.relative_to(root).parts[:-1]):
+            continue
+        try:
+            original = path.read_text(encoding="utf-8")
+            document = json.loads(original)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(document, dict):
+            continue
+        relpath = path.relative_to(root).as_posix()
+        for section in _SECTIONS:
+            deps = document.get(section)
+            current = deps.get(package) if isinstance(deps, dict) else None
+            if not isinstance(current, str):
+                continue
+            if current.startswith("catalog:"):
+                declines.append(f"{relpath}: {package} is '{current}'; edit the catalog")
+                break
+            new_range = _replace_range_version(current, target_version)
+            if new_range is None:
+                declines.append(f"{relpath}: cannot rewrite the range {current!r}")
+                break
+            deps[package] = new_range
+            indent = 4 if '\n    "' in original else 2
+            fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
+            bumps.append(ManifestBump(relpath, original, fixed, package, section,
+                                      current, new_range))
+            break
+    return DriftPlan(bumps, declines)
+
+
 def try_refresh_javascript_lockfile(
     root: Path, *, timeout: float = 120.0, max_output_bytes: int = 2_000_000,
 ) -> tuple[bool, str]:

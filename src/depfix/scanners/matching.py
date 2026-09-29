@@ -67,17 +67,26 @@ def assess_scan_change(
         )
 
     symbols = symbols_for_change(provider_id or change.provider_id, change)
-    matched = tuple(site for site in result.actionable_sites if _site_matches(site, symbols))
-    if matched:
+    exact = tuple(s for s in result.actionable_sites if _site_matches_exact(s, symbols))
+    if exact:
         return ScanChangeAssessment(
             change,
             ScanMatchStatus.ACTIONABLE,
-            f"{len(matched)} actionable call site(s) match the old API",
-            matched,
+            f"{len(exact)} actionable call site(s) match the old API (exact/prefix)",
+            exact,
+        )
+    suffix = tuple(s for s in result.actionable_sites if _site_matches_suffix(s, symbols))
+    if suffix:
+        return ScanChangeAssessment(
+            change,
+            ScanMatchStatus.ACTIONABLE,
+            f"{len(suffix)} call site(s) match the old API by member-path suffix "
+            "(an elided accessor; review carefully)",
+            suffix,
         )
     replacement_symbols = symbols_for_api(provider_id or change.provider_id, change.new_api)
     if replacement_symbols and any(
-        _site_matches(site, replacement_symbols) for site in result.actionable_sites
+        _site_matches_exact(site, replacement_symbols) for site in result.actionable_sites
     ):
         return ScanChangeAssessment(
             change,
@@ -103,8 +112,40 @@ def assess_scan_changes(
     ]
 
 
-def _site_matches(site: CallSite, wanted_symbols: tuple[str, ...]) -> bool:
+def _site_matches_exact(site: CallSite, wanted_symbols: tuple[str, ...]) -> bool:
+    """Exact or prefix match: wanted is a prefix of observed."""
     return any(
         site.symbol == wanted or site.symbol.startswith(f"{wanted}.")
         for wanted in wanted_symbols
     )
+
+
+def _member_suffix_matches(observed: str, wanted: str) -> bool:
+    """True if wanted's member path is a contiguous suffix of observed's,
+    with the same provider head and identical leaf.
+
+    catalog  ``mongodb.collection.count``  (member: collection.count)
+    observed ``mongodb.db.collection.count`` (member: db.collection.count)
+    → suffix match, because collection.count is a suffix of db.collection.count
+    """
+    observed_parts = observed.split(".")
+    wanted_parts = wanted.split(".")
+    if len(wanted_parts) < 2 or len(observed_parts) <= len(wanted_parts):
+        return False
+    if observed_parts[0] != wanted_parts[0]:
+        return False
+    if observed_parts[-1] != wanted_parts[-1]:
+        return False
+    wanted_member = wanted_parts[1:]
+    observed_member = observed_parts[1:]
+    return observed_member[-len(wanted_member):] == wanted_member
+
+
+def _site_matches_suffix(site: CallSite, wanted_symbols: tuple[str, ...]) -> bool:
+    """Suffix match for elided accessor paths (e.g. catalog omits .db)."""
+    return any(_member_suffix_matches(site.symbol, wanted) for wanted in wanted_symbols)
+
+
+# Keep the old name as an alias so existing callers still work.
+def _site_matches(site: CallSite, wanted_symbols: tuple[str, ...]) -> bool:
+    return _site_matches_exact(site, wanted_symbols) or _site_matches_suffix(site, wanted_symbols)

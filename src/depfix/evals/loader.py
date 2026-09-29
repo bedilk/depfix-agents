@@ -38,11 +38,15 @@ def _parse_expected_changes(data: dict[str, Any], case_id: str) -> list[Expected
     for item in data.get("expected_changes", []):
         if "kind" not in item:
             raise CorpusError(f"case '{case_id}': expected_changes entry missing 'kind'")
+        raw_also = item.get("also_accept", [])
+        if not isinstance(raw_also, list) or not all(isinstance(k, str) for k in raw_also):
+            raise CorpusError(f"case '{case_id}': 'also_accept' must be a list of strings")
         out.append(
             ExpectedChange(
                 kind=item["kind"],
                 old_api_contains=item.get("old_api_contains", ""),
                 min_confidence=float(item.get("min_confidence", 0.0)),
+                also_accept=tuple(raw_also),
             )
         )
     return out

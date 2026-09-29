@@ -103,12 +103,22 @@ def persist_classification(
     classify`` on an already-classified event (e.g. after a prompt tweak)
     skips changes it already has a row for instead of duplicating them.
     """
+    # Per-event check for true idempotency on re-runs of the same event.
     existing = {
         bc.dedupe_key
         for bc in session.scalars(
             select(BreakingChangeRow).where(BreakingChangeRow.change_event_id == row.id)
         )
     }
+    # Global check: two different events can produce the same dedupe_key (e.g.
+    # multiple fixture_change feeds covering overlapping version ranges).
+    candidate_keys = [c.dedupe_key for c in outcome.changes if c.dedupe_key not in existing]
+    if candidate_keys:
+        existing |= set(session.scalars(
+            select(BreakingChangeRow.dedupe_key).where(
+                BreakingChangeRow.dedupe_key.in_(candidate_keys)
+            )
+        ))
     created: list[BreakingChangeRow] = []
     for change in outcome.changes:
         if change.dedupe_key in existing:

@@ -39,6 +39,8 @@ providers:
     gem: ruby-openai
   - kind: changelog_html
     url: https://platform.openai.com/docs/changelog
+  - kind: ts_exports_diff
+    package: openai
 - id: stripe
   name: Stripe
   api_version_scheme: dated
@@ -86,6 +88,8 @@ providers:
   - kind: security_advisory
     package: stripe
     ecosystem: rubygems
+  - kind: ts_exports_diff
+    package: stripe
 - id: anthropic
   name: Anthropic
   api_version_scheme: semver
@@ -124,6 +128,8 @@ providers:
     url: https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/api.json
   - kind: changelog_html
     url: https://docs.anthropic.com/en/release-notes/api
+  - kind: ts_exports_diff
+    package: '@anthropic-ai/sdk'
 - id: supabase
   name: Supabase
   api_version_scheme: semver
@@ -158,6 +164,8 @@ providers:
     url: https://api.supabase.com/api/v1-json
   - kind: changelog_html
     url: https://supabase.com/changelog
+  - kind: ts_exports_diff
+    package: '@supabase/supabase-js'
 - id: vercel-ai
   name: Vercel AI SDK
   api_version_scheme: semver
@@ -226,6 +234,8 @@ providers:
     url: https://raw.githubusercontent.com/getsentry/sentry-api-schema/main/openapi-deref.json
   - kind: changelog_html
     url: https://docs.sentry.io/product/changelog/
+  - kind: ts_exports_diff
+    package: '@sentry/node'
 - id: prisma
   name: Prisma
   api_version_scheme: semver
@@ -280,6 +290,8 @@ providers:
     url: https://raw.githubusercontent.com/clerkinc/openapi/main/openapi.json
   - kind: changelog_html
     url: https://clerk.com/changelog
+  - kind: ts_exports_diff
+    package: '@clerk/nextjs'
 - id: langchain
   name: LangChain
   api_version_scheme: semver
@@ -369,6 +381,8 @@ providers:
     ecosystem: npm
   - kind: changelog_html
     url: https://raw.githubusercontent.com/aws/aws-sdk-js-v3/main/CHANGELOG.md
+  - kind: ts_exports_diff
+    package: '@aws-sdk/client-s3'
   - kind: smithy_spec
     url: https://raw.githubusercontent.com/aws/aws-sdk-js-v3/main/codegen/sdk-codegen/aws-models/s3.json
 - id: firebase
@@ -404,6 +418,8 @@ providers:
     url: https://raw.githubusercontent.com/firebase/firebase-admin-node/master/etc/firebase-admin.api.json
   - kind: changelog_html
     url: https://firebase.google.com/support/release-notes/admin/node
+  - kind: ts_exports_diff
+    package: firebase
 - id: twilio
   name: Twilio SDK
   api_version_scheme: semver
@@ -438,6 +454,8 @@ providers:
     url: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/yaml/twilio_api_v2010.yaml
   - kind: changelog_html
     url: https://www.twilio.com/docs/release-notes/node-helper-library
+  - kind: ts_exports_diff
+    package: twilio
 - id: sendgrid
   name: Twilio SendGrid SDK
   api_version_scheme: semver
@@ -474,6 +492,8 @@ providers:
     url: https://raw.githubusercontent.com/sendgrid/sendgrid-oai/main/oai.yaml
   - kind: changelog_html
     url: https://docs.sendgrid.com/release-notes
+  - kind: ts_exports_diff
+    package: '@sendgrid/mail'
 - id: octokit
   name: Octokit REST SDK
   api_version_scheme: semver
@@ -508,6 +528,8 @@ providers:
     ecosystem: npm
   - kind: changelog_html
     url: https://github.com/octokit/rest.js/blob/main/CHANGELOG.md
+  - kind: ts_exports_diff
+    package: '@octokit/rest'
 - id: slack
   name: Slack Web API SDK
   api_version_scheme: semver
@@ -542,6 +564,8 @@ providers:
     url: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
   - kind: changelog_html
     url: https://api.slack.com/changelog
+  - kind: ts_exports_diff
+    package: '@slack/web-api'
 - id: discord
   name: discord.js
   api_version_scheme: semver
@@ -572,6 +596,8 @@ providers:
     ecosystem: npm
   - kind: changelog_html
     url: https://discord.com/developers/docs/change-log
+  - kind: ts_exports_diff
+    package: discord.js
 - id: mongodb
   name: MongoDB Driver
   api_version_scheme: semver
@@ -606,6 +632,8 @@ providers:
     url: https://raw.githubusercontent.com/mongodb/atlas-sdk-go/main/openapi/atlas-api.yaml
   - kind: changelog_html
     url: https://www.mongodb.com/docs/drivers/node/current/release-notes/
+  - kind: ts_exports_diff
+    package: mongodb
 - id: redis
   name: node-redis
   api_version_scheme: semver
@@ -665,6 +693,8 @@ providers:
     ecosystem: npm
   - kind: changelog_html
     url: https://posthog.com/changelog
+  - kind: ts_exports_diff
+    package: posthog-node
 - id: algolia
   name: Algolia JavaScript Client
   api_version_scheme: semver
@@ -693,6 +723,8 @@ providers:
     ecosystem: npm
   - kind: changelog_html
     url: https://www.algolia.com/doc/changelog/
+  - kind: ts_exports_diff
+    package: algoliasearch
 - id: google-cloud
   name: Google Cloud Client Libraries
   api_version_scheme: semver
@@ -729,6 +761,8 @@ providers:
     ecosystem: pypi
   - kind: changelog_html
     url: https://cloud.google.com/storage/docs/release-notes
+  - kind: ts_exports_diff
+    package: '@google-cloud/storage'
 - id: elasticsearch
   name: Elasticsearch Clients
   api_version_scheme: semver
@@ -769,6 +803,8 @@ providers:
     ecosystem: pypi
   - kind: changelog_html
     url: https://www.elastic.co/guide/en/elasticsearch/client/javascript-api/current/changelog.html
+  - kind: ts_exports_diff
+    package: '@elastic/elasticsearch'
 - id: postgresql
   name: PostgreSQL Client Libraries
   api_version_scheme: semver
@@ -807,6 +843,8 @@ providers:
     ecosystem: pypi
   - kind: changelog_html
     url: https://node-postgres.com/announcements
+  - kind: ts_exports_diff
+    package: pg
 - id: kafka
   name: Apache Kafka Clients
   api_version_scheme: semver
@@ -845,6 +883,8 @@ providers:
     url: https://github.com/tulios/kafkajs/blob/master/CHANGELOG.md
   - kind: asyncapi_spec
     url: https://raw.githubusercontent.com/confluentinc/schema-registry/master/api/schema-registry-api-spec.yaml
+  - kind: ts_exports_diff
+    package: kafkajs
 - id: rabbitmq
   name: RabbitMQ Clients
   api_version_scheme: semver
@@ -883,3 +923,5 @@ providers:
     url: https://github.com/amqp-node/amqplib/blob/main/CHANGELOG.md
   - kind: asyncapi_spec
     url: https://raw.githubusercontent.com/rabbitmq/rabbitmq-website/main/asyncapi/rabbitmq.yaml
+  - kind: ts_exports_diff
+    package: amqplib

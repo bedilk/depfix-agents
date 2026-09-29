@@ -438,13 +438,12 @@ class Settings(BaseSettings):
         "that repo's own .depfix.yml max_changes_per_run.",
     )
     pipeline_max_cost_usd_per_run: float | None = Field(
-        default=2.0,
+        default=None,
         ge=0.0,
         description="Wall-clock budget's cost-ceiling counterpart: once this run's "
         "cumulative FixPipelineResult.total_cost crosses this, the orchestrator stops "
         "before the next repo/change the same way an expired --max-duration does. "
-        "Defaults to $2.00 per run as a safe guard against runaway spend. "
-        "Set to None to disable the cost cap (only --max-duration wall clock applies).",
+        "None (default) means uncapped -- only the --max-duration wall clock applies.",
     )
     pipeline_default_change_limit: int = Field(
         default=50,
@@ -464,6 +463,14 @@ class Settings(BaseSettings):
         default=True,
         description="Require the Postgres advisory lock for live fleet runs.",
     )
+    upgrade_plans_enabled: bool = Field(
+        default=True,
+        description="Compose a registry drift and the API migrations inside its version "
+        "window into one verified PR. False restores one PR per classified change.")
+    upgrade_max_migrations: int = Field(
+        default=8, ge=1,
+        description="Refuse an upgrade whose window contains more applicable migrations "
+        "than this; a very wide window is a review job, not an automated PR.")
 
     # --- Observability --------------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

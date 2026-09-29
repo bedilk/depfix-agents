@@ -31,14 +31,14 @@ def score_classification(
             (
                 a
                 for a in remaining
-                if a.kind.value == exp.kind
+                if a.kind.value in exp.kinds
                 and exp.old_api_contains.lower() in a.old_api.lower()
                 and a.confidence >= exp.min_confidence
             ),
             None,
         )
         if match is None:
-            misses.append(f"kind={exp.kind!r} old_api~={exp.old_api_contains!r}")
+            misses.append(f"kind in {list(exp.kinds)} old_api~={exp.old_api_contains!r}")
         else:
             remaining.remove(match)
 
