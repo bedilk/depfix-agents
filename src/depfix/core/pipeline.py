@@ -287,7 +287,9 @@ class FixPipeline:
         try:
             kwargs = {"toolset": self._toolset} if isinstance(self._fixer, FixAgent) else {}
             fixed_code, confidence, _llm_call = self._fixer.generate_fix(
-                file_usage, breaking_change, **kwargs  # type: ignore[arg-type]
+                file_usage,
+                breaking_change,
+                **kwargs,  # type: ignore[arg-type]
             )
         except RedactionError as exc:
             # The model dropped or invented a secret placeholder. Writing this
