@@ -1,9 +1,4 @@
-"""Provider definitions — the unit of subscription.
-
-``call_site_anchors`` is unused in Week 1. It is declared now because Week 3's
-scanner needs it and putting it in the config format today costs nothing,
-whereas changing the format later costs every provider entry.
-"""
+"""Provider definitions — the unit of subscription."""
 
 from __future__ import annotations
 
@@ -34,6 +29,5 @@ class ProviderSpec:
     feeds: tuple[FeedSpec, ...] = ()
     sdk_packages: tuple[SdkPackage, ...] = ()
     api_version_scheme: str | None = None  # "dated" | "semver" | None
-    api_base_urls: tuple[str, ...] = ()  # raw-fetch detection, Week 3
-    call_site_anchors: tuple[str, ...] = ()  # Week 3
+    api_base_urls: tuple[str, ...] = ()
     enabled: bool = True

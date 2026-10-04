@@ -163,7 +163,9 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def learned_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "learned.yaml"
-    monkeypatch.setattr(get_settings(), "learned_migrations_file", str(path))
+    settings = get_settings()
+    monkeypatch.setattr(settings, "learned_migrations_file", str(path))
+    monkeypatch.setattr(settings, "learned_migrations_include_candidates", True)
     return path
 
 
@@ -183,15 +185,10 @@ def test_reimported_candidate_keeps_its_original_source_and_confidence(
         assert session.scalars(select(SpecChangeRow)).all() == []  # never a spec diff
 
 
-def test_auto_persist_writes_the_learned_file_not_the_packaged_catalog(
+def test_auto_persist_writes_the_learned_file(
     tmp_path: Path, learned_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    canonical = tmp_path / "canonical.yaml"
-    canonical.write_text("providers: []\n", encoding="utf-8")
-    monkeypatch.setattr(shortcuts, "canonical_providers_file", lambda: str(canonical))
-
     shortcuts._auto_persist_catalog("openai", [_change()])
 
-    assert canonical.read_text(encoding="utf-8") == "providers: []\n"
     stored = yaml.safe_load(learned_path.read_text(encoding="utf-8"))
     assert len(stored["migrations"]) == 1

@@ -441,7 +441,9 @@ def test_full_run_opens_pr_and_persists_ledger(respx_mock: respx.Router, in_memo
     (change_outcome,) = repo.changes
     assert change_outcome.attempt_status == AttemptStatus.PR_OPENED
     assert change_outcome.pr_url == "https://github.example/acme/widgets/pull/7"
-    assert clone_service.clone_calls == [("acme", "widgets")]
+    # Two clones: one pre-scan fallback (no stored depfix scan in test DB),
+    # one for the fix. In production, a prior `depfix scan` avoids the extra.
+    assert clone_service.clone_calls == [("acme", "widgets"), ("acme", "widgets")]
 
     with db_module.session_scope() as session:
         row = session.scalar(
@@ -462,14 +464,15 @@ def test_second_run_does_not_reopen_a_pr(respx_mock: respx.Router, in_memory_db:
     orchestrator = _orchestrator(gh_auth, clone_service)
     first = orchestrator.run(["acme/widgets"], [change])
     assert first.repos[0].changes[0].attempt_status == AttemptStatus.PR_OPENED
-    assert clone_service.clone_calls == [("acme", "widgets")]
+    # Two clones on first run: pre-scan fallback + fix clone.
+    assert clone_service.clone_calls == [("acme", "widgets"), ("acme", "widgets")]
 
     second = orchestrator.run(["acme/widgets"], [change])
 
     (change_outcome,) = second.repos[0].changes
     assert change_outcome.skip_reason == SkipReason.ALREADY_TERMINAL
-    # No second clone -- the ledger stopped this before any scan/fix work.
-    assert clone_service.clone_calls == [("acme", "widgets")]
+    # No additional clone on second run -- policy gate fires before pre-scan.
+    assert clone_service.clone_calls == [("acme", "widgets"), ("acme", "widgets")]
 
 
 def test_branch_name_for_is_used_as_pr_head(in_memory_db: Any) -> None:
@@ -525,7 +528,10 @@ def test_paths_filter_excludes_before_the_fix_pipeline_runs(in_memory_db: Any) -
     (repo,) = outcome.repos
     (change_outcome,) = repo.changes
     assert change_outcome.attempt_status == AttemptStatus.NO_CALL_SITES
-    assert change_outcome.suppressed_call_sites == 1
+    # Broad feed-driven scan finds all actionable sites in the excluded file,
+    # not just the one being planned for. Both createModeration and
+    # createChatCompletion are in src/chat.js.
+    assert change_outcome.suppressed_call_sites >= 1
     assert "suppressed" in change_outcome.detail
 
 
@@ -622,7 +628,9 @@ def test_cost_ceiling_stops_the_run_early(respx_mock: respx.Router, in_memory_db
     assert "acme/widgets" in by_name
     assert "acme/other" not in by_name
     assert outcome.stopped_early is True
-    assert clone_service.clone_calls == [("acme", "widgets")]
+    # Two clones for acme/widgets: pre-scan fallback + fix clone.
+    # acme/other is never reached (budget exhausted after widgets).
+    assert clone_service.clone_calls == [("acme", "widgets"), ("acme", "widgets")]
 
 
 @respx.mock(base_url=BASE)

@@ -54,7 +54,7 @@ from depfix.apply.workspace import WorkspaceEditor
 from depfix.clone import Checkout, CloneService
 from depfix.config import Settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
-from depfix.core.models import BreakingChange, ChangeKind
+from depfix.core.models import BreakingChange, ChangeKind, is_method_removal
 from depfix.core.pipeline import FixPipelineResult
 from depfix.fixers.bedrock import BedrockFixGenerator
 from depfix.fixers.gemini import FixGenerator
@@ -80,8 +80,10 @@ from depfix.orchestrator.policy import SkipReason, decide_with_detail
 from depfix.providers.models import ProviderSpec
 from depfix.repoconfig.loader import RepoConfigError, parse_repo_config
 from depfix.repoconfig.models import SUPPORTED_VERSION, RepoConfig
-from depfix.scanners import CallSiteScanner, build_scan_target, scan_checkout, upsert_repo
-from depfix.scanners.models import RepoScanResult
+from depfix.scanners import CallSiteScanner, build_scan_target, reusable_scan_for_provider, scan_checkout, upsert_repo
+from depfix.scanners.models import RepoScanResult, ScanTarget
+from depfix.scanners.store import load_scan_result
+from depfix.scanners.strategy import resolve_scan_strategy
 from depfix.classify.llm import LLMCompleter
 from depfix.storage import (
     AttemptStatus,
@@ -101,15 +103,23 @@ from depfix.verify.confidence import ConfidenceTier
 from depfix.core.upgrade import UpgradePlan, build_upgrade_plan
 from depfix.core.upgrade_service import UpgradeResult, run_upgrade
 from depfix.gh.branch import branch_name_for_key
-from depfix.scanners.removals import narrow_to_symbols
+from depfix.gh.pr import build_upgrade_pr_body
+from depfix.scanners.removals import collect_removal_notices, narrow_to_symbols
 from depfix.scanners.repo import symbols_for_change
+from depfix.sources.semver import drift_risk
 from depfix.storage.attempt_store import record_change_attempt
 
 logger = logging.getLogger(__name__)
 
 _NO_WORK_STATUSES = frozenset(
-    {AttemptStatus.NO_CALL_SITES, AttemptStatus.VERSION_NOT_AFFECTED}
+    {AttemptStatus.NO_CALL_SITES, AttemptStatus.VERSION_NOT_AFFECTED, AttemptStatus.REPORT_ONLY}
 )
+
+
+def _major_gap(change: BreakingChange) -> int:
+    from depfix.sources.semver import parse_semver
+    old, new = parse_semver(change.old_version), parse_semver(change.new_version)
+    return (new[0] - old[0]) if old and new else 0
 
 
 def _is_major_dependency_review(change: BreakingChange, settings: Settings | None = None) -> bool:
@@ -182,6 +192,14 @@ class Orchestrator:
         self._provider_change_cache: dict[str, list[BreakingChange]] = {}
         self._run_changes: list[BreakingChange] = []
         self._covered_this_run: set[tuple[str, str]] = set()
+        self._reuse_scan = settings.plan_reuse_scan
+        self._scan_cache: dict[tuple[str, str, str], RepoScanResult] = {}
+        # One discover_usage_candidates call per (provider, commit, observed-set).
+        # Keyed by (provider_id, commit_sha, sorted-observed-symbols) so a
+        # narrowed re-scan of the same commit with different --old-api symbols
+        # still gets its own call, while the common case (N changes, same repo)
+        # costs exactly one LLM call instead of N.
+        self._mapper_cache: dict[tuple[str, str, str], list[BreakingChange]] = {}
 
     def run(
         self, repo_full_names: list[str], changes: list[BreakingChange]
@@ -198,6 +216,8 @@ class Orchestrator:
         self._run_changes = changes
         self._provider_change_cache.clear()
         self._covered_this_run.clear()
+        self._mapper_cache.clear()
+        self._scan_cache.clear()
         # Use the shared ledger from the CLI when provided, so agent-scan
         # spend and fix-generation spend all appear in the same summary.
         self._ledger = self._shared_ledger if self._shared_ledger is not None else CostLedger()
@@ -326,6 +346,51 @@ class Orchestrator:
             changes,
             key=lambda c: (0 if c.kind is ChangeKind.DEPENDENCY_VERSION_BUMP else 1,))
 
+        # Pre-scan: populate _scan_cache for every provider before filtering.
+        # Only scan providers that have at least one change that isn't already
+        # trivially skippable by the policy gate (ignored, already terminal,
+        # etc.) — this avoids a clone when all changes would be skipped anyway.
+        needs_scan_providers = {
+            c.provider_id for c in ordered
+            if decide_with_detail(
+                repo_config=repo_config,
+                change=c,
+                known_provider_ids=self._known_provider_ids,
+                attempt=attempts.get(c.dedupe_key),
+                current_ref_sha=current_ref_sha,
+                open_pr_count=open_pr_count,
+                changes_processed_this_run=changes_processed,
+                settings=self._settings,
+                force=self._force,
+                target_version_age_hours=self._target_version_age_hours(c),
+            ) is None
+        }
+        if needs_scan_providers:
+            with session_scope() as session:
+                self._prescan_providers(
+                    session, owner=owner, name=name,
+                    repo_full_name=repo_full_name,
+                    installation_id=installation.id,
+                    base_branch=base_branch, current_ref_sha=current_ref_sha,
+                    provider_ids=list(needs_scan_providers),
+                )
+
+        # Relevance filter: keep only changes whose old_api matches a call
+        # site, then cap to the pipeline limit so the budget still applies.
+        # A provider with 477 classified changes can no longer drown the 5
+        # that actually apply to this repo.
+        ordered, no_call_site_changes = self._match_filter_and_cap(
+            ordered,
+            repo_full_name=repo_full_name, commit_sha=current_ref_sha,
+            cap=self._settings.pipeline_default_change_limit,
+        )
+        if no_call_site_changes:
+            logger.info(
+                "%s: relevance-filtered %d classified change(s) with no "
+                "matching call site (cap now applies to the %d-match set)",
+                repo_full_name, len(no_call_site_changes), len(ordered),
+            )
+
         for change in ordered:
             if self._budget.expired:
                 stopped_early = True
@@ -403,8 +468,30 @@ class Orchestrator:
                 "max-duration budget exhausted mid-repo for %s; %d/%d changes considered",
                 repo_full_name,
                 changes_processed,
-                len(changes),
+                len(ordered),
             )
+
+        # Record pre-filtered NO_CALL_SITES changes cheaply: no clone, no LLM.
+        # This keeps the idempotency ledger current so subsequent runs skip them.
+        for dropped in no_call_site_changes:
+            change_outcomes.append(ChangeOutcome(
+                dedupe_key=dropped.dedupe_key,
+                package=dropped.package,
+                old_api=dropped.old_api,
+                kind=dropped.kind.value,
+                attempt_status=AttemptStatus.NO_CALL_SITES,
+                detail=f"no call sites match {dropped.old_api!r} (pre-filtered by scan)",
+                planned=self._dry_run,
+            ))
+            if not self._dry_run:
+                with session_scope() as session:
+                    touch_recheck_on_change(
+                        session,
+                        repo_id=repo_full_name,
+                        dedupe_key=dropped.dedupe_key,
+                        status=AttemptStatus.NO_CALL_SITES,
+                        ref_sha=current_ref_sha,
+                    )
 
         return RepoOutcome(
             repo_full_name=repo_full_name, changes=change_outcomes, open_pr_count=open_pr_count
@@ -451,6 +538,237 @@ class Orchestrator:
                 current_ref_sha=current_ref_sha,
             )
 
+    def _resolve_scan(
+        self,
+        session: Session,
+        *,
+        checkout: "Checkout",
+        target: ScanTarget,
+        repo_full_name: str,
+        provider_id: str,
+        commit_sha: str,
+    ) -> tuple[RepoScanResult | None, str]:
+        """Prefer the output of ``depfix scan``; rescan only if policy allows.
+
+        ``depfix scan`` is the authoritative discovery pass: it is broad (every
+        provider symbol, so a superset of any narrowed target), it is the pass
+        whose findings were listed in ``learned_migrations.yaml``, and it is the
+        one the operator actually read. Re-deriving call sites here means the
+        artifact can disagree with the report that justified it.
+        """
+        cache_key = (repo_full_name, provider_id, commit_sha)
+        if cache_key in self._scan_cache:
+            return self._scan_cache[cache_key], "reused (this run)"
+
+        if self._reuse_scan != "never":
+            row = reusable_scan_for_provider(
+                session, repo_full_name, provider_id, commit_sha=commit_sha
+            )
+            if row is not None:
+                result = load_scan_result(row)
+                logger.info(
+                    "reusing scan %s@%s: %d call site(s), %d dependency declaration(s)",
+                    row.repo_id, row.commit_sha[:12],
+                    len(result.call_sites), len(result.dependencies),
+                )
+                self._scan_cache[cache_key] = result
+                return result, "reused (depfix scan)"
+
+        if self._reuse_scan == "require":
+            return None, "missing"
+
+        logger.info("no reusable scan for %s/%s@%s; scanning now",
+                    repo_full_name, provider_id, commit_sha[:12])
+        result = scan_checkout(
+            checkout, target, repo_full_name=repo_full_name,
+            scanner=CallSiteScanner(
+                max_file_bytes=self._settings.scan_max_file_bytes,
+                max_files=self._settings.scan_max_files,
+            ),
+            strategy=resolve_scan_strategy(
+                self._settings.scan_strategy,
+                has_llm=self._agent_coordinator is not None,
+            ),
+            provider=self._providers.get(provider_id),
+            agent_completer=self._agent_coordinator,
+            ledger=self._ledger,
+            max_data_bytes=int(self._settings.scan_max_data_mb * 1024 * 1024),
+        )
+        self._scan_cache[cache_key] = result
+        return result, "rescanned"
+
+    def _mapping_candidates_for(
+        self,
+        session: "Session",
+        *,
+        provider_id: str,
+        commit_sha: str,
+        package: str,
+        observed_symbols: list[str],
+    ) -> "list[BreakingChange]":
+        """Discover feed-proven candidates for this (provider, commit) once.
+
+        A single plan/apply run processes many classified changes against the
+        same checkout; each would otherwise re-enter discover_usage_candidates
+        and re-ask the LLM about the same observed-symbols set. One call per
+        (provider, commit, observed-set) matches how _scan_cache already amortises
+        the scan itself.
+
+        Cache lifetime is per Orchestrator.run() call — cleared at the top of
+        every run() with the other caches.
+        """
+        from depfix.classify.usage_candidates import discover_usage_candidates
+
+        key = (provider_id, commit_sha, ",".join(sorted(observed_symbols)))
+        cached = self._mapper_cache.get(key)
+        if cached is not None:
+            return cached
+        if self._completer is None:
+            self._mapper_cache[key] = []
+            return []
+        discovered = discover_usage_candidates(
+            session,
+            provider_id=provider_id,
+            package=package,
+            observed_symbols=observed_symbols,
+            completer=self._completer,
+        )
+        self._mapper_cache[key] = discovered
+        return discovered
+
+    def _prescan_providers(
+        self,
+        session: Session,
+        *,
+        owner: str,
+        name: str,
+        repo_full_name: str,
+        installation_id: int,
+        base_branch: str,
+        current_ref_sha: str,
+        provider_ids: list[str],
+    ) -> None:
+        """Populate _scan_cache for every provider before the change loop.
+
+        Loading from the DB (a prior ``depfix scan`` row) is free. When no
+        stored scan exists the fallback clones once and scans — one extra
+        git-clone but ensures _match_filter_and_cap always has data.
+        """
+        for provider_id in provider_ids:
+            cache_key = (repo_full_name, provider_id, current_ref_sha)
+            if cache_key in self._scan_cache:
+                continue
+
+            provider = self._providers.get(provider_id)
+            if provider is None:
+                continue
+
+            # Try the DB-stored scan first (free; requires prior depfix scan).
+            if self._reuse_scan != "never":
+                row = reusable_scan_for_provider(
+                    session, repo_full_name, provider_id, commit_sha=current_ref_sha
+                )
+                if row is not None:
+                    result = load_scan_result(row)
+                    logger.info(
+                        "pre-scan: loaded stored scan for %s/%s (%d call site(s))",
+                        repo_full_name, provider_id, len(result.call_sites),
+                    )
+                    self._scan_cache[cache_key] = result
+                    continue
+
+            if self._reuse_scan == "require":
+                continue
+
+            # Fallback: clone and scan now.
+            try:
+                token = self._gh_auth.installation_token(
+                    installation_id, repositories=(name,)
+                )
+                checkout = self._clone_service.clone(
+                    owner, name, ref=base_branch, token=token.token,
+                    max_repo_mb=repo_config.max_repo_mb,
+                )
+            except Exception:
+                logger.debug(
+                    "pre-scan clone failed for %s/%s; match-filter will "
+                    "pass these changes through unfiltered",
+                    repo_full_name, provider_id,
+                )
+                continue
+
+            all_changes = self._provider_changes(provider_id)
+            target = build_scan_target(provider, feed_changes=all_changes)
+            try:
+                result = scan_checkout(
+                    checkout, target, repo_full_name=repo_full_name,
+                    scanner=CallSiteScanner(
+                        max_file_bytes=self._settings.scan_max_file_bytes,
+                        max_files=self._settings.scan_max_files,
+                    ),
+                    strategy=resolve_scan_strategy(
+                        self._settings.scan_strategy,
+                        has_llm=self._agent_coordinator is not None,
+                    ),
+                    provider=provider,
+                    agent_completer=self._agent_coordinator,
+                    ledger=self._ledger,
+                    max_data_bytes=int(self._settings.scan_max_data_mb * 1024 * 1024),
+                )
+                self._scan_cache[cache_key] = result
+                logger.info(
+                    "pre-scan: scanned %s/%s — %d actionable call site(s)",
+                    repo_full_name, provider_id, len(result.actionable_sites),
+                )
+            except Exception:
+                logger.exception("pre-scan failed for %s/%s", repo_full_name, provider_id)
+
+    def _match_filter_and_cap(
+        self,
+        changes: list[BreakingChange],
+        *,
+        repo_full_name: str,
+        commit_sha: str,
+        cap: int,
+    ) -> tuple[list[BreakingChange], list[BreakingChange]]:
+        """Keep only changes whose old_api matches an observed call site. Cap
+        ACTIONABLE survivors at ``cap``. Returns ``(to_process, no_call_sites)``.
+
+        Pure Python — no LLM. Replaces the time-based cap with a relevance-
+        based one so a provider with 477 classified changes doesn't drown the
+        5 that actually apply to this repo.
+
+        ``no_call_sites`` are changes the scan confirmed have no matching call
+        site; the caller records them cheaply (no clone, no LLM) so the
+        idempotency ledger knows not to retry them next run.
+
+        Changes whose provider has no cached scan pass through unfiltered —
+        the per-change assess_scan_change in _process_change_body handles them.
+        """
+        from depfix.scanners.matching import ScanMatchStatus, assess_scan_change
+
+        actionable: list[BreakingChange] = []
+        no_call_sites: list[BreakingChange] = []
+        for change in changes:
+            cache_key = (repo_full_name, change.provider_id, commit_sha)
+            scan_result = self._scan_cache.get(cache_key)
+            if scan_result is None:
+                # No pre-scan for this provider — pass through unfiltered.
+                actionable.append(change)
+                continue
+            verdict = assess_scan_change(scan_result, change, provider_id=change.provider_id)
+            if verdict.status is ScanMatchStatus.ACTIONABLE:
+                actionable.append(change)
+            elif verdict.status is ScanMatchStatus.CURRENT:
+                # Repo already uses the replacement — not an error, skip silently.
+                continue
+            elif verdict.status is ScanMatchStatus.VERSION_NOT_AFFECTED:
+                # Change doesn't apply to this repo's version — skip silently.
+                continue
+            else:
+                no_call_sites.append(change)
+        return actionable[:cap], no_call_sites
+
     def _process_change_body(
         self,
         session: Session,
@@ -471,20 +789,34 @@ class Orchestrator:
         checkout: Checkout | None = None
         try:
             provider = self._providers[change.provider_id]
-            target = build_scan_target(provider, change)
+            # Broad, feed-driven target. Never narrow a rescan to one change:
+            # _scan_cache is keyed by (repo, provider, sha), so a narrowed
+            # result served every *other* change for the same provider with
+            # false no_call_sites, and narrowing dropped replacement-API sites
+            # so CURRENT ("already migrated") was undetectable.
+            target = build_scan_target(
+                provider, feed_changes=[change, *self._provider_changes(change.provider_id)]
+            )
             token = self._gh_auth.installation_token(installation_id, repositories=(name,))
-            checkout = self._clone_service.clone(owner, name, ref=base_branch, token=token.token)
+            checkout = self._clone_service.clone(
+                owner, name, ref=base_branch, token=token.token,
+                max_repo_mb=repo_config.max_repo_mb,
+            )
 
-            scanner = CallSiteScanner(
-                max_file_bytes=self._settings.scan_max_file_bytes,
-                max_files=self._settings.scan_max_files,
+            scan_result, scan_source = self._resolve_scan(
+                session, checkout=checkout, target=target,
+                repo_full_name=repo_full_name, provider_id=change.provider_id,
+                commit_sha=current_ref_sha,
             )
-            scan_result = scan_checkout(
-                checkout, target, repo_full_name=repo_full_name, scanner=scanner,
-                strategy=("agent" if self._agent_coordinator is not None else "deterministic"),
-                provider=self._providers.get(change.provider_id),
-                agent_completer=self._agent_coordinator,
-            )
+            outcome.scan_source = scan_source
+            if scan_result is None:
+                outcome.skip_reason = SkipReason.NO_REUSABLE_SCAN
+                outcome.skip_detail_text = (
+                    f"no broad `depfix scan` for {change.provider_id} at "
+                    f"{current_ref_sha[:12]} (PLAN_REUSE_SCAN=require). Run: "
+                    f"depfix scan --repo {repo_full_name} --provider {change.provider_id}"
+                )
+                return outcome
 
             # Repo-scoped path filter applies *before* any fix is
             # generated -- an out-of-scope file shouldn't cost an LLM call
@@ -504,13 +836,22 @@ class Orchestrator:
                 f", {suppressed_call_sites} path-suppressed" if suppressed_call_sites else "",
             )
 
+            if is_method_removal(change):
+                return self._report_removal(
+                    session, outcome, change, scan_result,
+                    repo_full_name=repo_full_name,
+                    current_ref_sha=current_ref_sha,
+                    suppressed_call_sites=suppressed_call_sites,
+                )
+
             ecosystem = self._ecosystem_for_package(change)
-            provider_changes = self._provider_changes(change.provider_id)
+            single_artifact = self._plan_artifacts.get((repo_full_name, change.dedupe_key))
+            replaying_single = single_artifact is not None and not single_artifact.is_upgrade
             upgrade: UpgradePlan | None = None
-            if self._settings.upgrade_plans_enabled:
+            if self._settings.upgrade_plans_enabled and not replaying_single:
                 try:
                     upgrade = build_upgrade_plan(
-                        scan_result, provider_changes,
+                        scan_result, self._provider_changes(change.provider_id),
                         provider_id=change.provider_id, package=change.package,
                         ecosystem=ecosystem,
                         target_version=(change.new_version
@@ -521,25 +862,30 @@ class Orchestrator:
                     logger.exception("upgrade plan assembly failed for %s", repo_full_name)
                     upgrade = None
 
-            if upgrade is not None:
+            if upgrade is not None and upgrade.has_source_work:
+                # Version bump + API migrations inside its window: one combined PR.
                 gate = self._gate_upgrade(session, upgrade, repo_full_name, current_ref_sha)
                 if gate is not None:
                     outcome.skip_reason, outcome.skip_detail_text = gate
                     outcome.upgrade, outcome.member_dedupe_keys = upgrade, upgrade.member_dedupe_keys
                     return outcome
-                if upgrade.has_source_work or change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP:
-                    artifact = None
-                    try:
-                        if (repo_full_name, upgrade.dedupe_key) in self._plan_artifacts:
-                            artifact = self._plan_artifacts[(repo_full_name, upgrade.dedupe_key)]
-                    except (TypeError, KeyError):
-                        pass
-                    return self._process_upgrade(
-                        session, owner=owner, name=name, repo_full_name=repo_full_name,
-                        installation_id=installation_id, checkout=checkout, full_scan=scan_result,
-                        plan=upgrade, repo_config=repo_config, base_branch=base_branch,
-                        current_ref_sha=current_ref_sha, artifact=artifact, outcome=outcome,
-                    )
+                carrier = upgrade.drift_change or (
+                    upgrade.migrations[0] if upgrade.migrations else change)
+                upgrade_artifact = (
+                    self._plan_artifacts.get((repo_full_name, upgrade.dedupe_key))
+                    or self._plan_artifacts.get((repo_full_name, carrier.dedupe_key))
+                )
+                if upgrade_artifact is not None and not upgrade_artifact.is_upgrade:
+                    upgrade_artifact = None
+                return self._process_upgrade(
+                    session, owner=owner, name=name, repo_full_name=repo_full_name,
+                    installation_id=installation_id, checkout=checkout, full_scan=scan_result,
+                    plan=upgrade, repo_config=repo_config, base_branch=base_branch,
+                    current_ref_sha=current_ref_sha, artifact=upgrade_artifact, outcome=outcome,
+                )
+            if upgrade is not None:
+                # Drift with no API migrations in its window falls through to the
+                # deterministic manifest-bump path below.
                 outcome.removals = upgrade.removals
 
             from depfix.scanners.matching import ScanMatchStatus, assess_scan_change
@@ -594,8 +940,6 @@ class Orchestrator:
                 and scan_result.actionable_sites
                 and self._completer is not None
             ):
-                from depfix.classify.usage_candidates import discover_usage_candidates
-
                 provider = self._providers.get(change.provider_id)
                 package = (
                     provider.sdk_packages[0].name
@@ -603,12 +947,12 @@ class Orchestrator:
                     else change.package
                 )
                 observed = [site.symbol for site in scan_result.actionable_sites]
-                discovered = discover_usage_candidates(
+                discovered = self._mapping_candidates_for(
                     session,
                     provider_id=change.provider_id,
+                    commit_sha=scan_result.commit_sha,
                     package=package,
                     observed_symbols=observed,
-                    completer=self._completer,
                 )
                 if discovered:
                     logger.info(
@@ -716,6 +1060,11 @@ class Orchestrator:
 
             committable = fix_service_result.committable
             if self._dry_run:
+                if change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP:
+                    return self._plan_drift(
+                        outcome, repo_full_name, current_ref_sha, fix_result,
+                        committable, repo_config,
+                    )
                 if not committable:
                     from depfix.core.explain import format_rejections
 
@@ -727,7 +1076,9 @@ class Orchestrator:
                     AttemptStatus.PR_OPENED if repo_config.open_pr else AttemptStatus.FIXED_NO_PR
                 )
                 outcome.plan_artifact = PlanArtifact.from_result(
-                    repo_full_name, current_ref_sha, fix_result
+                    repo_full_name, current_ref_sha, fix_result,
+                    edits=committable, impact_summary=outcome.impact_summary,
+                    scan_source=outcome.scan_source,
                 )
                 paths = ", ".join(edit.relpath for edit in committable)
                 outcome.detail = f"[dry-run] verified {len(committable)} file(s): {paths}"
@@ -879,6 +1230,46 @@ class Orchestrator:
         self._version_age_cache[key] = age
         return age
 
+    def _report_removal(
+        self,
+        session: Session,
+        outcome: ChangeOutcome,
+        change: BreakingChange,
+        scan_result: RepoScanResult,
+        *,
+        repo_full_name: str,
+        current_ref_sha: str,
+        suppressed_call_sites: int,
+    ) -> ChangeOutcome:
+        """An upstream method removal with no replacement: information only.
+
+        No fix is generated and no branch or PR is created. The reachable call
+        sites are reported, and the ledger is rechecked only when HEAD moves.
+        """
+        notices = collect_removal_notices(
+            scan_result, [change], provider_id=change.provider_id,
+            package=change.package or None, include_unreachable=True,
+        )
+        sites = [site for notice in notices for site in notice.sites]
+        if not self._dry_run:
+            touch_recheck_on_change(
+                session, repo_id=repo_full_name, dedupe_key=change.dedupe_key,
+                status=AttemptStatus.REPORT_ONLY, ref_sha=current_ref_sha,
+            )
+        shown = ", ".join(sites[:5]) + (f" (+{len(sites) - 5} more)" if len(sites) > 5 else "")
+        outcome.removals = notices
+        outcome.suppressed_call_sites = suppressed_call_sites
+        outcome.attempt_status = AttemptStatus.REPORT_ONLY
+        outcome.planned = self._dry_run
+        outcome.detail = (
+            f"{change.old_api} was removed in {change.package} {change.new_version or '?'} "
+            f"with no replacement; "
+            + (f"{len(sites)} call site(s) still use it: {shown}" if sites
+               else "no reachable call site")
+            + " -- information only, no PR"
+        )
+        return outcome
+
     def _ecosystem_for_package(self, change: BreakingChange) -> str | None:
         """Which registry this change's package lives in, per providers.yaml."""
         provider = self._providers.get(change.provider_id)
@@ -904,24 +1295,30 @@ class Orchestrator:
         return self._provider_change_cache[provider_id]
 
     def _version_age_hours_for(self, package: str, version: str) -> float | None:
-        """Age of a package version in hours (cached)."""
+        if self._settings.version_cooldown_hours <= 0 or not version:
+            return None
         key = (package, version)
-        if key not in self._version_age_cache:
-            from depfix.sources import sources_for_package
-            from datetime import UTC, datetime
+        if key in self._version_age_cache:
+            return self._version_age_cache[key]
+        ecosystem = next(
+            (sdk.ecosystem for p in self._providers.values()
+             for sdk in p.sdk_packages if sdk.name == package), None)
+        age: float | None = None
+        if ecosystem is not None:
+            import httpx
+
+            from depfix.sources.release_age import version_age_hours, version_published_at
             try:
-                sources = sources_for_package(package)
-                now = datetime.now(tz=UTC)
-                for source in sources:
-                    release = source.release_for_version(version)
-                    if release is not None:
-                        age = (now - release.published_at).total_seconds() / 3600
-                        self._version_age_cache[key] = age
-                        return age
+                with httpx.Client(timeout=self._settings.http_timeout) as http:
+                    age = version_age_hours(version_published_at(
+                        http, ecosystem=ecosystem, package=package, version=version,
+                        npm_registry_url=self._settings.npm_registry_url,
+                        pypi_registry_url=self._settings.pypi_registry_url,
+                    ))
             except Exception:
-                logger.debug("could not fetch version age for %s@%s", package, version, exc_info=True)
-            self._version_age_cache[key] = None
-        return self._version_age_cache[key]
+                logger.debug("release-age lookup failed for %s", key, exc_info=True)
+        self._version_age_cache[key] = age
+        return age
 
     def _gate_upgrade(
         self, session: Session, plan: UpgradePlan, repo_full_name: str, ref_sha: str
@@ -992,7 +1389,10 @@ class Orchestrator:
             owner=owner, repo=name, token=write_token.token,
             head_branch=head_branch, base_branch=base_branch,
             title=plan.title,
-            body=build_upgrade_pr_body(plan, result, plan_digest=plan_digest),
+            body=build_upgrade_pr_body(
+                PlanArtifact.from_upgrade(f"{owner}/{name}", "", result),
+                plan_digest=plan_digest,
+            ),
             draft=draft, api_url=self._settings.github_api_url)
 
         from depfix.gh import apply_pr_labels
@@ -1068,7 +1468,8 @@ class Orchestrator:
 
             if self._dry_run:
                 outcome.plan_artifact = PlanArtifact.from_upgrade(
-                    repo_full_name, current_ref_sha, result)
+                    repo_full_name, current_ref_sha, result,
+                    scan_source=outcome.scan_source)
                 outcome.attempt_status = (AttemptStatus.PR_OPENED if repo_config.open_pr
                                           else AttemptStatus.FIXED_NO_PR)
                 outcome.detail = (
@@ -1120,6 +1521,63 @@ class Orchestrator:
             outcome.detail = plan.title
             return outcome
 
+    def _plan_drift(
+        self, outcome: ChangeOutcome, repo_full_name: str, ref_sha: str,
+        fix_result: FixPipelineResult, committable: list[FileEdit], repo_config: RepoConfig,
+    ) -> ChangeOutcome:
+        """Every detected version drift gets an artifact, with or without call sites.
+
+        With a rewritable manifest, the artifact carries the manifest/lockfile
+        edits and ``apply`` opens a version-bump PR (old -> new). Without one
+        (transitive dependency, unsupported manifest, bump reverted by the
+        repo's own tests), the artifact is report-only: it is still written and
+        listed, and ``apply`` explains why no PR can be opened.
+        """
+        change = fix_result.breaking_change
+        risk = drift_risk(change.old_version, change.new_version) or "unknown"
+        span = f"{change.package} {change.old_version} → {change.new_version}"
+        from depfix.codemods.lockfile import dependency_drift_policy
+
+        policy = dependency_drift_policy(
+            change,
+            max_major_gap=self._settings.drift_max_major_gap,
+            max_minor_gap=self._settings.drift_max_minor_gap,
+            scope=self._settings.drift_scope,
+        )
+        if policy == "declined":
+            # The scope excludes this drift distance -> no PR artifact.
+            outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
+            outcome.detail = (
+                f"[dry-run] [drift:{risk}] {span}: excluded by "
+                f"drift_scope={self._settings.drift_scope}; no PR artifact"
+            )
+            return outcome
+
+        outcome.plan_artifact = PlanArtifact.from_result(
+            repo_full_name, ref_sha, fix_result, edits=committable,
+            drift_risk=risk, impact_summary=outcome.impact_summary,
+            scan_source=outcome.scan_source,
+        )
+        outcome.planned = True
+
+        if committable:
+            outcome.attempt_status = (
+                AttemptStatus.PR_OPENED if repo_config.open_pr else AttemptStatus.FIXED_NO_PR
+            )
+            paths = ", ".join(e.relpath for e in committable)
+            outcome.detail = f"[dry-run] [drift:{risk}] {span}: {paths}"
+        else:
+            from depfix.core.explain import format_rejections
+
+            outcome.attempt_status = AttemptStatus.NO_KEPT_EDITS
+            outcome.detail = (
+                f"[dry-run] [drift:{risk}] {span}: report-only -- "
+                f"{format_rejections(fix_result)}"
+            )
+        if outcome.impact_summary:
+            outcome.detail = f"{outcome.detail}\n{outcome.impact_summary}"
+        return outcome
+
     def _apply_plan_artifact(
         self, checkout: Checkout, scan_result: RepoScanResult, change: BreakingChange, artifact: PlanArtifact
     ) -> FixServiceResult:
@@ -1143,7 +1601,7 @@ class Orchestrator:
             repo_full_name=scan_result.repo_full_name, breaking_change=change,
             files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),
             total_usages_fixed=sum(e.usages_fixed for e in edits), total_cost=0.0, total_tokens=0,
-            duration_ms=0, verification=None,
+            duration_ms=0, verification=None, codemod_notes=tuple(artifact.notes),
         )
         return FixServiceResult(pipeline_result=result, committable=edits, verify_required=True)
 

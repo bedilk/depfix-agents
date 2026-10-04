@@ -160,3 +160,20 @@ def test_repo_shipped_providers_file_is_valid() -> None:
             "rabbitmq",
         } <= ids
     assert len([provider for provider in providers if provider.enabled]) == 25
+
+
+def test_call_site_anchors_are_rejected(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """
+        providers:
+          - id: acme
+            call_site_anchors: ["acme.client.create("]
+            feeds:
+              - kind: npm_dist_tag
+                package: acme
+        """,
+    )
+    with pytest.raises(ProviderConfigError, match="call_site_anchors"):
+        load_providers_file(path)
+

@@ -21,15 +21,16 @@ than whatever a given file happens to call the variable.
    :class:`_Binding`, plus a list of unresolved relative imports.
 2. **Propagate** -- repeatedly resolve relative imports against already-known
    bindings in the target file, until nothing new resolves or
-   ``MAX_PROPAGATION_HOPS`` is hit. Confidence degrades with distance from
-   the direct SDK import: hop 1 (a wrapper module importing the SDK
-   directly) is MEDIUM, hop 2+ is LOW -- each additional layer of
-   indirection is one more place the binding could have been reassigned to
-   something unrelated before reaching the call site.
+   ``MAX_PROPAGATION_HOPS`` is hit. A propagated binding inherits the
+   confidence of the SDK binding it traces back to: distance from the SDK
+   import does not matter. A call site is either traced to the SDK (found,
+   actionable) or not reported at all. The hop count is kept only in
+   ``evidence`` for transparency.
 3. **Match** -- walk each file's comment-masked source for member calls,
    bare calls (only against bindings known to be a destructured bare
    function), raw HTTP calls against known ``api_base_urls``, API-version
-   literals, and a plain anchor grep as a catch-all floor.
+   literals. ``feed_symbols`` (old APIs + replacements) are also matched
+   so a narrowed scan can still detect "already migrated" (CURRENT) sites.
 
 Regex, not an AST. Week 3's own risk note (see ``docs/plan.md``): if
 measured recall against the eval corpus falls below ~85%, that's the
@@ -45,6 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from depfix.scanners.base import CodebaseScanner
+from depfix.scanners.limits import MAX_SCANNABLE_FILES, clamp_max_files
 from depfix.scanners.models import (
     CallSite,
     CallSiteKind,
@@ -58,6 +60,7 @@ logger = logging.getLogger(__name__)
 MAX_PROPAGATION_HOPS = 4
 CONTEXT_LINES = 3
 _MAX_FILE_BYTES = 2_000_000  # skip pathologically large bundled/generated files
+_DEFAULT_MAX_FILES = MAX_SCANNABLE_FILES
 
 _SKIP_DIRS = CodebaseScanner.SKIP_DIRS
 _SUPPORTED_EXTENSIONS = CodebaseScanner.SUPPORTED_EXTENSIONS
@@ -215,6 +218,10 @@ class _Binding:
     # client. ``const b = storage.bucket(n)`` binds ``b`` with path
     # ``"bucket"``, so ``b.setCors()`` emits ``provider.bucket.setCors``.
     path: str = ""
+    # Number of accessor/factory steps folded into ``path``. Deliberately
+    # separate from ``hops`` (file boundaries crossed): a client re-exported
+    # through several wrapper files must still be able to follow a chain.
+    chain_depth: int = 0
 
 
 @dataclass
@@ -291,7 +298,9 @@ class CallSiteScanner:
     ) -> None:
         self.context_lines = context_lines
         self.max_file_bytes = max_file_bytes
-        self.max_files = max_files
+        # Always an int after clamping -- `None` resolves to the hard ceiling,
+        # never to "unlimited".
+        self.max_files = clamp_max_files(max_files)
 
     def scan(self, root: Path, target: ScanTarget) -> RepoScanResult:
         # `resolve_relative_import` resolves relative-import targets with
@@ -351,7 +360,7 @@ class CallSiteScanner:
                 continue
             found.append(path)
         found.sort()
-        if self.max_files is not None and len(found) > self.max_files:
+        if len(found) > self.max_files:
             logger.warning(
                 "repo has %d scannable files, capping at max_files=%d", len(found), self.max_files
             )
@@ -465,7 +474,7 @@ class CallSiteScanner:
             base = facts.direct_bindings.get(head)
             if base is None:
                 continue
-            if base.hops >= MAX_CHAIN_HOPS:
+            if base.chain_depth >= MAX_CHAIN_HOPS:
                 continue
             new_path = ".".join(p for p in (base.path, accessor) if p)
             # Allow dotted factory callees (storage.bucket) even when base
@@ -474,15 +483,16 @@ class CallSiteScanner:
                 continue
             facts.direct_bindings.setdefault(assigned_name, _Binding(
                 kind=CallSiteKind.CLIENT_CONSTRUCTION,
-                confidence=MatchConfidence.MEDIUM if accessor else base.confidence,
+                confidence=base.confidence,
                 provider_id=base.provider_id,
-                hops=base.hops + (1 if accessor else 0),
+                hops=base.hops,
                 evidence=(
                     f"derived from {callee}(...)" if accessor
                     else f"factory call on {head}"
                 ),
                 is_bare_symbol=False,
                 path=new_path,
+                chain_depth=base.chain_depth + (1 if accessor else 0),
             ))
 
     def _collect_exports(self, facts: _FileFacts, source: str) -> None:
@@ -523,14 +533,17 @@ class CallSiteScanner:
                     if source_binding is None:
                         continue
                     new_hops = source_binding.hops + 1
-                    confidence = MatchConfidence.MEDIUM if new_hops == 1 else MatchConfidence.LOW
                     facts.direct_bindings[ref.local_name] = _Binding(
                         kind=CallSiteKind.WRAPPER_IMPORT,
-                        confidence=confidence,
+                        # Found is found: a binding traced through N wrapper
+                        # files is the same SDK binding as a direct import.
+                        confidence=source_binding.confidence,
                         provider_id=source_binding.provider_id,
                         hops=new_hops,
                         evidence=f"re-exported via {target_facts.rel_path} ({new_hops} hop(s))",
                         is_bare_symbol=source_binding.is_bare_symbol,
+                        path=source_binding.path,
+                        chain_depth=source_binding.chain_depth,
                     )
                     changed = True
             if not changed:
@@ -558,9 +571,13 @@ class CallSiteScanner:
         sites: list[CallSite] = []
         source = "\n".join(facts.masked_lines)
 
+        # Narrowing (explicit selection) still admits the change's replacement
+        # symbols, so a narrowed scan can tell "migrated" from "absent".
+        wanted_symbols = (*target.symbols, *target.feed_symbols) if target.symbols else ()
+
         def symbol_wanted(symbol: str) -> bool:
-            return not target.symbols or any(
-                symbol == wanted or symbol.startswith(f"{wanted}.") for wanted in target.symbols
+            return not wanted_symbols or any(
+                symbol == wanted or symbol.startswith(f"{wanted}.") for wanted in wanted_symbols
             )
 
         for match in _MEMBER_CALL_RE.finditer(source):
@@ -659,25 +676,6 @@ class CallSiteScanner:
                 )
             )
 
-        for anchor in target.call_site_anchors:
-            start = 0
-            while True:
-                idx = source.find(anchor, start)
-                if idx == -1:
-                    break
-                sites.append(
-                    self._make_site(
-                        facts,
-                        idx,
-                        kind=CallSiteKind.ANCHOR,
-                        confidence=MatchConfidence.LOW,
-                        symbol=f"{target.provider_id}.<anchor>",
-                        provider_id=target.provider_id,
-                        evidence=f"matched anchor {anchor!r}",
-                    )
-                )
-                start = idx + len(anchor)
-
         return sites
 
     def _walk_inline_chain(
@@ -703,8 +701,8 @@ class CallSiteScanner:
 
         open_paren = match.end() - 1
         accumulated = accumulated_member
-        hops = binding.hops
-        while hops < MAX_CHAIN_HOPS:
+        depth = binding.chain_depth  # chain steps only, never file hops
+        while depth < MAX_CHAIN_HOPS:
             close = matching_paren(source, open_paren)
             if close < 0:
                 return
@@ -729,7 +727,7 @@ class CallSiteScanner:
                     )
                 )
             open_paren = close + 1 + follow.end() - 1
-            hops += 1
+            depth += 1
 
     def _make_site(
         self,

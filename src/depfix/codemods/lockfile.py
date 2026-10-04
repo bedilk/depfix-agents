@@ -117,17 +117,43 @@ def _declaration_upgradable(current_text: str, change: BreakingChange) -> _Upgra
 
 
 def dependency_drift_policy(
-    change: BreakingChange, *, max_major_gap: int = 0, max_minor_gap: int | None = None
+    change: BreakingChange,
+    *,
+    max_major_gap: int = 0,
+    max_minor_gap: int | None = None,
+    scope: str = "one-major",
 ) -> str:
     """Return the review policy for a registry version movement.
 
-    ``max_major_gap`` controls how many major steps are still automatic.
-    0 (default) means any major change is ``review_pr``.
+    ``scope`` controls which drift distances produce a PR artifact at all:
+
+    * ``one-major`` (default): a same-major drift, or a single-major step
+      (N -> N+1), is actionable; a gap of 2+ majors is ``declined``
+      (no PR artifact). ``3.0.0 -> 4.0.0`` qualifies; ``3.1.2 -> 5.6.4`` does not.
+    * ``any-minor``: only a same-major drift (any minor/patch distance) is
+      actionable; ANY major step is ``declined``. ``3.4.2 -> 3.6.1``
+      qualifies; ``2.1.2 -> 4.6.4`` does not.
+    * ``any``: every forward move is actionable regardless of distance
+      (``depfix scan --anyversion``).
+
+    Within an actionable scope, ``max_major_gap`` / ``max_minor_gap`` decide
+    ``automatic`` vs ``review_pr``.
     """
     old, new = _semver(change.old_version), _semver(change.new_version)
     if old is None or new is None or new <= old:
         return "declined"
     major_gap = new[0] - old[0]
+
+    # --- scope gate: is this drift distance eligible for a PR at all? --------
+    if scope == "any-minor":
+        if major_gap != 0:
+            return "declined"
+    elif scope == "one-major":
+        if major_gap > 1:
+            return "declined"
+    # scope == "any": every forward move is eligible; fall through.
+
+    # --- actionable vs review within the eligible band -----------------------
     if major_gap > max_major_gap:
         return "review_pr"
     if major_gap == 0 and max_minor_gap is not None and (new[1] - old[1]) > max_minor_gap:
@@ -158,14 +184,14 @@ def _replace_range_version(value: str, new_version: str) -> str | None:
     return f"{match.group(1)}{new_version}"
 
 
-def build_dependency_drift_plan(root: Path, change: BreakingChange) -> DriftPlan:
+def build_dependency_drift_plan(root: Path, change: BreakingChange, *, scope: str = "one-major") -> DriftPlan:
     """Build npm edits for a verified drift or draft review PR.
 
     This is deliberately separate from ``build_manifest_bumps``: API
     migrations always move to a new major, whereas a registry drift preserves
     the declared range operator and targets only the observed old version.
     """
-    policy = dependency_drift_policy(change)
+    policy = dependency_drift_policy(change, scope=scope)
     if policy == "declined":
         return DriftPlan([], [])
     new_version = _semver(change.new_version)

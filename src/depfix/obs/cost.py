@@ -31,6 +31,7 @@ class CostStage(StrEnum):
     CHARACTERIZATION = "characterization"
     CALL_SITE_JUDGE = "call_site_judge"
     SCAN_AGENT = "scan_agent"
+    SYMBOL_ALIGNMENT = "symbol_alignment"
 
 
 @dataclass

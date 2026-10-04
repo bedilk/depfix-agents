@@ -15,7 +15,7 @@ from pathlib import Path
 from depfix.core.models import FileUsage, Usage
 from depfix.severity import EvidenceKind, Severity
 
-SCANNER_VERSION = "4.0"
+SCANNER_VERSION = "4.1"
 
 
 class CallSiteKind(StrEnum):
@@ -27,7 +27,7 @@ class CallSiteKind(StrEnum):
     WRAPPER_IMPORT = "wrapper_import"  # local module re-exporting an SDK client/binding
     RAW_HTTP = "raw_http"  # fetch()/axios/etc against a known api_base_url
     API_VERSION_PIN = "api_version_pin"  # apiVersion: "..." / Stripe-Version literal
-    ANCHOR = "anchor"  # matched a provider's call_site_anchors grep string
+    ANCHOR = "anchor"  # legacy: no longer produced (call_site_anchors removed); kept for stored rows
     BARE_SYMBOL = "bare_symbol"  # destructured import used bare, e.g. createModeration(...)
 
 
@@ -96,14 +96,20 @@ def dedupe_call_sites(sites: list[CallSite]) -> list[CallSite]:
 
 @dataclass(frozen=True)
 class ScanTarget:
-    """What a scan is looking for -- built from a provider, optionally
-    narrowed to one breaking change's symbols."""
+    """What a scan is looking for.
+
+    ``symbols`` is a *narrowing filter* (empty = report every SDK call).
+    ``feed_symbols`` is never a filter: it is the set of old APIs *and* their
+    replacements named by classified feed changes, which every scanner must
+    actively look for -- the old ones are what plan rewrites, the replacement
+    ones are the evidence that a repo is already migrated (CURRENT).
+    """
 
     provider_id: str
     sdk_packages: tuple[str, ...] = ()
     api_base_urls: tuple[str, ...] = ()
-    call_site_anchors: tuple[str, ...] = ()
     symbols: tuple[str, ...] = ()  # narrows matching to these dotted symbols, if non-empty
+    feed_symbols: tuple[str, ...] = ()
     #: (package name, registry name) pairs -- preserves each SDK package's
     #: ``ecosystem:`` tag from providers.yaml, which the bare ``sdk_packages``
     #: tuple historically dropped. Empty for legacy callers; scanners then
@@ -134,6 +140,13 @@ class RepoScanResult:
     dependencies: list[DeclaredDependency] = field(default_factory=list)
     files_scanned: int = 0
     errors: list[str] = field(default_factory=list)
+    # Agent-verified old-API call sites (each: symbol, filepath, line_number,
+    # line_content). Only populated by the agent scanner path; always empty
+    # from the deterministic path. Persisted to learned_migrations.yaml
+    # detections so the fix pipeline can generate targeted code changes.
+    discovered_anchors: list[dict] = field(default_factory=list)
+    # Agent-derived old→new API mappings (each: old_symbol, new_symbol, notes).
+    api_mapping: list[dict] = field(default_factory=list)
     #: Repository-specific package-manager preparation performed by the scan.
     #: Kept as ``object`` to avoid coupling the scanner value model to the
     #: verification implementation; the concrete value is a

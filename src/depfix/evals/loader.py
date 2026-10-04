@@ -123,7 +123,6 @@ def _parse_case(data: dict[str, Any]) -> EvalCase:
         provider_id=str(data.get("provider_id", "")),
         sdk_packages=list(data.get("sdk_packages", [])),
         api_base_urls=list(data.get("api_base_urls", [])),
-        call_site_anchors=list(data.get("call_site_anchors", [])),
         symbols=list(data.get("symbols", [])),
         expected_call_sites=_parse_expected_call_sites(data, case_id),
         forbidden_files=list(data.get("forbidden_files", [])),

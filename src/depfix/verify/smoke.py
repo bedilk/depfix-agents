@@ -47,8 +47,10 @@ def run_smoke_check(root: Path, relpath: str, *, timeout: float = 30, max_output
         return _run_ruby_smoke(root, relpath, timeout=timeout, max_output_bytes=max_output_bytes)
     if suffix == ".py":
         return _run_python_smoke(root, relpath, timeout=timeout, max_output_bytes=max_output_bytes)
+    if suffix == ".go":
+        return _run_go_smoke(root, relpath, timeout=timeout, max_output_bytes=max_output_bytes)
     if suffix not in {".js", ".cjs", ".mjs"}:
-        return SmokeResult(False, False, skipped_reason="smoke check supports .js/.cjs/.mjs/.py/.rb only")
+        return SmokeResult(False, False, skipped_reason="smoke check supports .js/.cjs/.mjs/.py/.rb/.go only")
     if shutil.which("node") is None:
         return SmokeResult(False, False, skipped_reason="node not on PATH")
     subject = (root / relpath).resolve()
@@ -105,6 +107,34 @@ def _run_ruby_smoke(root: Path, relpath: str, *, timeout: float, max_output_byte
     result = run_sandboxed(
         argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
         extra_allowlist=RUBY.env_allowlist_extra,
+    )
+    if result.timed_out:
+        return SmokeResult(True, False, error="smoke check timed out")
+    return SmokeResult(True, result.exit_code == 0, error=(result.stderr or result.stdout).strip()[:500])
+
+
+def _run_go_smoke(root: Path, relpath: str, *, timeout: float, max_output_bytes: int) -> SmokeResult:
+    """``gofmt -e -l`` -- parse only, deliberately.
+
+    The JS smoke check loads the module; compiling a Go package would pull in
+    the whole module graph and turn a last-resort oracle into the most
+    expensive one. This catches the "the model produced code that does not
+    parse" class of failure.
+    """
+    from depfix.ecosystems.go_runtime import smoke_argv
+    from depfix.ecosystems.specs import GO
+
+    argv = smoke_argv(root, relpath)
+    if argv is None:
+        return SmokeResult(False, False, skipped_reason="gofmt not on PATH")
+    if not (root / relpath).is_file():
+        return SmokeResult(False, False, skipped_reason=f"{relpath} not found")
+    result = run_sandboxed(
+        argv,
+        cwd=root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
+        extra_allowlist=GO.env_allowlist_extra,
     )
     if result.timed_out:
         return SmokeResult(True, False, error="smoke check timed out")

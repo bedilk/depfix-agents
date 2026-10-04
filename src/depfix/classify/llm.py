@@ -103,6 +103,7 @@ class BedrockCompleter:
         "us.anthropic.claude-opus-4-6-v1": {"input": 15.0, "output": 75.0},
         "us.anthropic.claude-sonnet-4-5-20250929-v1:0": {"input": 3.0, "output": 15.0},
         "us.anthropic.claude-sonnet-4-5-20250514": {"input": 3.0, "output": 15.0},
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0": {"input": 1.0, "output": 5.0},
         "us.anthropic.claude-haiku-3-5-20241022": {"input": 0.80, "output": 4.0},
         "anthropic.claude-3-5-sonnet-20241022-v2:0": {"input": 3.0, "output": 15.0},
     }

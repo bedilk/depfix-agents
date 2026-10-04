@@ -71,7 +71,9 @@ def _decide_one(dep: DeclaredDependency, change: BreakingChange) -> Applicabilit
                 f"major drift to {change.new_version} requires human review",
             )
         target_major = new[0] if is_drift else (old[0] if old is not None else new[0])
-        if range_allows_major(dep.declared_range, target_major) is False:
+        if not is_drift and range_allows_major(dep.declared_range, target_major) is False:
+            # For an API migration (not a drift), a range that can't reach the
+            # affected major genuinely means the call sites don't apply.
             if current_major is not None and current_major != target_major:
                 reason = (
                     f"{dep.manifest_path} pins {dep.package} to {dep.declared_range!r} (major {current_major}), "

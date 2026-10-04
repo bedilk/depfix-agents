@@ -28,6 +28,7 @@ _KNOWN_FIELDS = {
     "open_pr",
     "draft_pr",
     "max_changes_per_run",
+    "max_repo_mb",
     "providers",
     "paths",
     "ignore",
@@ -87,6 +88,7 @@ def parse_repo_config(text: str, *, where: str = "<string>") -> RepoConfig:
         ),
         paths=_parse_filter(data.get("paths"), f"{where}.paths", cls=PathFilter),
         ignore=_str_tuple(data.get("ignore"), f"{where}.ignore"),
+        max_repo_mb=_optional_positive_int(data.get("max_repo_mb"), f"{where}.max_repo_mb"),
     )
 
 

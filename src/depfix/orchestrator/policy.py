@@ -47,6 +47,9 @@ class SkipReason(enum.StrEnum):
     # -- supply-chain safety -----------------------------------------------
     VERSION_TOO_NEW = "version_too_new"
 
+    # -- scan reuse policy: plan/apply require a prior depfix scan ---------
+    NO_REUSABLE_SCAN = "no_reusable_scan"
+
     # -- bookkeeping: --force exists specifically to override these --------
     ALREADY_TERMINAL = "already_terminal"
     MAX_ATTEMPTS_REACHED = "max_attempts_reached"
@@ -75,6 +78,7 @@ class SkipDetail:
 _REF_GATED: dict[str, SkipReason] = {
     AttemptStatus.NO_CALL_SITES.value: SkipReason.NO_CALL_SITES_UNCHANGED,
     AttemptStatus.VERSION_NOT_AFFECTED.value: SkipReason.VERSION_UNCHANGED,
+    AttemptStatus.REPORT_ONLY.value: SkipReason.REMOVAL_ALREADY_REPORTED,
 }
 
 
@@ -135,11 +139,11 @@ def decide(
     # design. It is still the most important thing an operator can hear, so
     # it proceeds to a report-only outcome rather than being filtered out
     # here as "nothing to migrate to".
-    # METHOD_REMOVED changes are also exempt: they pass through to the
-    # orchestrator for reporting in the PR artifact even when there is no
-    # replacement API to migrate to.
+    # METHOD_REMOVED changes are also exempt: they continue so the orchestrator
+    # can REPORT the still-reachable call sites. They are never fixed and never
+    # produce a PR (see Orchestrator._report_removal / run_fix_for_change).
     if (
-        change.kind is not ChangeKind.SECURITY_ADVISORY
+        change.kind not in (ChangeKind.SECURITY_ADVISORY, ChangeKind.METHOD_DEPRECATED)
         and not is_method_removal(change)
         and not (change.new_api or "").strip()
     ):
@@ -221,6 +225,8 @@ def decide_with_detail(**kwargs: object) -> SkipDetail | None:
         message = "provider is not configured"
     elif reason is SkipReason.NO_REPLACEMENT_API:
         message = "the API was removed with no replacement; needs a manual migration"
+    elif reason is SkipReason.REMOVAL_ALREADY_REPORTED:
+        message = "removed API already reported for this commit; will recheck when HEAD changes"
     elif reason is SkipReason.VERSION_UNCHANGED:
         message = "this repo is not on the affected version; will recheck when HEAD changes"
     return SkipDetail(reason, message, resumes_at)

@@ -289,6 +289,10 @@ def install_dependencies(
     model and its own note on why pip has no ``--ignore-scripts`` analogue).
     """
     root = Path(root)
+    if ecosystem == "go":
+        return _install_go_dependencies(
+            root, timeout=timeout, max_output_bytes=max_output_bytes
+        )
     if ecosystem == "python":
         return _install_python_dependencies(
             root, timeout=timeout, max_output_bytes=max_output_bytes
@@ -325,6 +329,33 @@ def install_dependencies(
     logger.info("installing dependencies: %s (cwd=%s)", " ".join(argv), install_root)
     result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)
     return InstallResult(package_manager=manager, sandbox=result)
+
+
+def _install_go_dependencies(
+    root: Path, *, timeout: float, max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES
+) -> InstallResult:
+    """Populate the module cache for this checkout.
+
+    ``go mod download`` fetches and hashes modules without executing any
+    package code, which makes it the least dangerous install step of the four
+    fix-supported ecosystems.
+    """
+    from depfix.ecosystems.go_runtime import go, install_argv
+    from depfix.ecosystems.specs import GO
+
+    if go() is None:
+        return InstallResult(package_manager="go", skipped_reason="go not on PATH")
+    argv = install_argv(root)
+    if argv is None:
+        return InstallResult(package_manager="go", skipped_reason="no go.mod found")
+    result = run_sandboxed(
+        argv,
+        cwd=root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
+        extra_allowlist=GO.env_allowlist_extra,
+    )
+    return InstallResult(package_manager="go", sandbox=result)
 
 
 def _install_python_dependencies(

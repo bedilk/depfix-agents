@@ -397,7 +397,7 @@ All configuration is read from environment variables (or a local `.env` file). S
 | `GITHUB_APP_PRIVATE_KEY` / `GITHUB_APP_PRIVATE_KEY_PATH` | unset | GitHub App private key, inline or by path |
 | `CLONE_DIR`       | system temp dir      | Base directory for shallow clones        |
 | `CLONE_MAX_REPO_MB` | `500`               | Reject a clone once its working tree exceeds this size |
-| `SCAN_MAX_FILES`  | `20000`              | Hard cap on files scanned per repo       |
+| `SCAN_MAX_FILES`  | `15000`              | Files scanned per repo (hard ceiling: 15000) |
 | `SCAN_PREPARE_PACKAGE_MANAGER` | `true` | Prepare repository-pinned Yarn/pnpm during scan in the isolated Depfix cache |
 | `PACKAGE_MANAGER_INSTALL_TIMEOUT` | `90` | Seconds allowed to provision a package-manager runtime |
 | `FIX_VALIDATE_SYNTAX` | `true`           | Run syntax/sanity checks before writing an edit to disk |

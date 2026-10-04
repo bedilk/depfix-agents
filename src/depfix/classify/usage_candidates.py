@@ -9,6 +9,7 @@ catalog.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 
@@ -23,6 +24,77 @@ from depfix.codemods.symbols import normalize_api
 from depfix.core.models import REMOVAL_KINDS, BreakingChange, ChangeKind, ClassificationSource
 from depfix.sources.models import ChangeEvent
 from depfix.storage.schema import BreakingChangeRow, ChangeEventRow
+
+logger = logging.getLogger(__name__)
+
+
+def _leaf(symbol: str) -> str:
+    """Last dotted segment: ``openai.chat.completions.create`` → ``create``."""
+    return symbol.rsplit(".", 1)[-1] if "." in symbol else symbol
+
+
+def _resource(symbol: str) -> str:
+    """Second-to-last segment: ``openai.chat.completions.create`` → ``completions``.
+
+    Requires at least 3 parts to be useful. A 2-part symbol like
+    ``sentry.withScope`` has the provider name as its only second segment
+    (``sentry``), which is shared by every symbol in that provider's namespace
+    and would cause false-positive matches. Only 3+ part dotted paths carry a
+    meaningful resource namespace.
+    """
+    parts = symbol.split(".")
+    return parts[-2] if len(parts) >= 3 else ""
+
+
+def _plausibly_related(observed: str, candidate: str) -> bool:
+    """Shared leaf OR shared resource prefix.
+
+    Single-character or short segments (``get``, ``set``, ``on``) are
+    false-positive magnets, so require length >= 4 on the shared segment —
+    same bar ``_qualify_symbol`` already uses.
+    """
+    o_leaf, c_leaf = _leaf(observed).lower(), _leaf(candidate).lower()
+    if o_leaf == c_leaf and len(o_leaf) >= 4:
+        return True
+    o_res, c_res = _resource(observed).lower(), _resource(candidate).lower()
+    return bool(o_res) and o_res == c_res and len(o_res) >= 4
+
+
+def _event_touches_observed(event: ChangeEvent, observed: list[str]) -> bool:
+    """Does any symbol named in this event plausibly relate to any observed
+    old symbol? A negative is cheap; a positive earns the full LLM prompt.
+
+    Checks both structural spec_changes (strong signal) and prose body (leaf
+    substring search). The prose search is a pre-filter only — it can false-
+    positive, but the LLM prompt's _candidate_from_item evidence guard catches
+    those. What we're preventing is the sentry-style complete miss: 477 v11
+    events × 6 v6 symbols that share nothing.
+    """
+    corpus_symbols: set[str] = set()
+    for change in event.spec_changes:
+        if change.subject:
+            corpus_symbols.add(change.subject)
+        if change.before:
+            corpus_symbols.add(change.before)
+        if change.after:
+            corpus_symbols.add(change.after)
+
+    # Structural match: any observed symbol plausibly related to any spec symbol.
+    if corpus_symbols and any(
+        _plausibly_related(obs, cand)
+        for obs in observed
+        for cand in corpus_symbols
+    ):
+        return True
+
+    # Prose match: leaf of any observed symbol appears in the event body.
+    body = event.body or ""
+    for obs in observed:
+        leaf = _leaf(obs)
+        if len(leaf) >= 4 and leaf in body:
+            return True
+
+    return False
 
 
 @dataclass(frozen=True)
@@ -113,10 +185,17 @@ def discover_usage_candidates(
     ).all()
     resolver = UsageCandidateResolver(completer)
     discovered: list[BreakingChange] = []
+    skipped = 0
     for row in events:
-        result = resolver.resolve(
-            event_from_row(row), package=package, observed_symbols=observed
-        )
+        event = event_from_row(row)
+        if not _event_touches_observed(event, observed):
+            logger.debug(
+                "skipping event %s for %s: no shared leaf/resource with observed symbols",
+                row.id, provider_id,
+            )
+            skipped += 1
+            continue
+        result = resolver.resolve(event, package=package, observed_symbols=observed)
         changes = [change for change in result.changes if change.old_api not in existing]
         if not changes:
             continue
@@ -127,6 +206,11 @@ def discover_usage_candidates(
         )
         existing.update(change.old_api for change in changes)
         discovered.extend(changes)
+    if skipped:
+        logger.debug(
+            "pre-filter skipped %d/%d event(s) for %s (no leaf/resource overlap)",
+            skipped, skipped + len(discovered), provider_id,
+        )
     return discovered
 
 

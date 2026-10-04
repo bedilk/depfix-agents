@@ -223,7 +223,6 @@ class EvalRunner:
             provider_id=case.provider_id,
             sdk_packages=tuple(case.sdk_packages),
             api_base_urls=tuple(case.api_base_urls),
-            call_site_anchors=tuple(case.call_site_anchors),
             symbols=tuple(case.symbols),
         )
         result = self._call_site_scanner.scan(fixture_dir, target)

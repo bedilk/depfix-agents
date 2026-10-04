@@ -216,7 +216,10 @@ def _legacy_schema_revision(engine: Engine) -> str | None:
     if "repo_scan_change" not in tables:
         return "0007"
     fix_run_columns = {column["name"] for column in inspector.get_columns("fix_run")}
-    return "0009" if "cost_classify" in fix_run_columns else "0008"
+    if "cost_classify" not in fix_run_columns:
+        return "0008"
+    repo_scan_columns = {column["name"] for column in inspector.get_columns("repo_scan")}
+    return "0010" if "dependencies" in repo_scan_columns else "0009"
 
 
 def _ensure_classified_at_column(engine: Engine) -> None:
@@ -265,6 +268,12 @@ def _ensure_sqlite_columns(engine: Engine) -> None:
         "call_site": {
             "severity": "VARCHAR(16)",
             "severity_evidence": "VARCHAR(32)",
+            "context_before": "TEXT NOT NULL DEFAULT '[]'",
+            "context_after": "TEXT NOT NULL DEFAULT '[]'",
+        },
+        "repo_scan": {
+            "dependencies": "TEXT NOT NULL DEFAULT '[]'",
+            "narrowed_symbols": "TEXT NOT NULL DEFAULT '[]'",
         },
     }
 

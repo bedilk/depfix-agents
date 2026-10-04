@@ -84,7 +84,12 @@ def assess_scan_change(
             "(an elided accessor; review carefully)",
             suffix,
         )
-    replacement_symbols = symbols_for_api(provider_id or change.provider_id, change.new_api)
+    # Only symbols that differ from the old API can prove a migration happened;
+    # for a same-method param/field change they prove nothing.
+    replacement_symbols = tuple(
+        s for s in symbols_for_api(provider_id or change.provider_id, change.new_api)
+        if s not in symbols
+    )
     if replacement_symbols and any(
         _site_matches_exact(site, replacement_symbols) for site in result.actionable_sites
     ):

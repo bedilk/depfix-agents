@@ -44,21 +44,24 @@ def detect_repo_ecosystem(root: Path) -> str:
     return ecosystems_registry.detect(root)
 
 
-def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = None) -> ScanTarget:
-    """Build a :class:`ScanTarget` from a provider, optionally narrowed to
-    the symbols implicated by one ``change``.
-
-    Narrowing to a specific change is how "does this repo still call the
-    removed v3 moderations endpoint" avoids flooding the report with every
-    other unrelated call the repo makes against the same provider.
-    """
+def build_scan_target(
+    provider: ProviderSpec,
+    change: BreakingChange | None = None,
+    *,
+    feed_changes: Iterable[BreakingChange] = (),
+) -> ScanTarget:
+    """``change`` narrows reporting (explicit selection only); ``feed_changes``
+    never narrows -- it supplies the old/replacement symbols to look for."""
     symbols = symbols_for_change(provider.id, change) if change is not None else ()
+    feed = feed_symbols_for_changes(
+        provider.id, [c for c in (change, *feed_changes) if c is not None]
+    )
     return ScanTarget(
         provider_id=provider.id,
         sdk_packages=tuple(pkg.name for pkg in provider.sdk_packages),
         api_base_urls=provider.api_base_urls,
-        call_site_anchors=provider.call_site_anchors,
         symbols=symbols,
+        feed_symbols=feed,
         sdk_package_refs=tuple((pkg.name, pkg.ecosystem) for pkg in provider.sdk_packages),
     )
 
@@ -66,31 +69,39 @@ def build_scan_target(provider: ProviderSpec, change: BreakingChange | None = No
 def build_scan_target_for_changes(
     provider: ProviderSpec, changes: Iterable[BreakingChange]
 ) -> ScanTarget:
-    """Build one discovery target for every classified change of a provider.
-
-    ``scan`` is the seam where upstream changes and repository usage meet. A
-    normal provider scan must therefore look for the old symbols of *all*
-    currently classified migrations, not only broad provider anchors. The
-    returned target remains a single scanner interface; callers do not need
-    to loop or know how migration symbols are normalized.
-    """
+    changes = list(changes)
     symbols: list[str] = []
     for change in changes:
         for symbol in symbols_for_change(provider.id, change):
             if symbol not in symbols:
                 symbols.append(symbol)
-    return replace(build_scan_target(provider), symbols=tuple(symbols))
+    return replace(build_scan_target(provider, feed_changes=changes), symbols=tuple(symbols))
+
+
+def feed_symbols_for_changes(
+    provider_id: str, changes: Iterable[BreakingChange]
+) -> tuple[str, ...]:
+    """Old symbols to migrate plus replacement symbols that prove a migration
+    already happened, for every classified change of this provider."""
+    out: list[str] = []
+    for change in changes:
+        if change.provider_id and change.provider_id != provider_id:
+            continue
+        for symbol in (*symbols_for_change(provider_id, change),
+                       *symbols_for_api(provider_id, change.new_api)):
+            if symbol not in out:
+                out.append(symbol)
+    return tuple(out)
 
 
 def symbols_for_change(provider_id: str, change: BreakingChange) -> tuple[str, ...]:
-    """Mine the dotted symbols a change is actually about.
+    """The *old* dotted symbols a change is about.
 
-    ``call_site_hints`` is trusted as-is -- it exists specifically for this.
-    ``old_api`` is used more cautiously: it's free text meant for humans
-    (``"openai.createModeration()"``, or occasionally prose), so it's only
-    taken when it looks like a bare dotted symbol once a trailing call
-    ``(...)`` is stripped -- anything with whitespace or other punctuation
-    left over is prose, not a symbol, and is dropped rather than guessed at.
+    Hints from release-notes classifiers have historically included the
+    replacement symbol alongside the old one. When old_api names a *different*
+    symbol than the replacement, a replacement-shaped hint is pollution: keeping
+    it makes already-migrated code look actionable. When old == new (a param or
+    field change on the same method), nothing is dropped.
     """
     symbols: list[str] = []
 
@@ -103,6 +114,12 @@ def symbols_for_change(provider_id: str, change: BreakingChange) -> tuple[str, .
         add(hint, allow_bare=True)
 
     add_api_symbol(change.old_api, add)
+
+    # Drop replacement-shaped hints unless old == new (param/field change).
+    old_named = set(symbols_for_api(provider_id, change.old_api))
+    if old_named and change.new_api:
+        stale = set(symbols_for_api(provider_id, change.new_api)) - old_named
+        symbols = [s for s in symbols if s not in stale]
 
     return tuple(symbols)
 
@@ -277,6 +294,7 @@ def scan_checkout(
     agent_completer: object | None = None,
     provider: ProviderSpec | None = None,
     ledger: object | None = None,
+    max_data_bytes: int = 0,
 ) -> RepoScanResult:
     """Scan an already-acquired checkout for manifests + call sites.
 
@@ -323,6 +341,7 @@ def scan_checkout(
                     change=change, judge=None,  # judge is now the agent's job
                     prepare_package_manager_runtime=prepare_package_manager_runtime,
                     package_manager_timeout=package_manager_timeout,
+                    max_data_bytes=max_data_bytes,
                 )
                 return _scan_checkout_agent_augment(
                     baseline, provider, agent_completer,
@@ -341,6 +360,7 @@ def scan_checkout(
         change=change, judge=judge,
         prepare_package_manager_runtime=prepare_package_manager_runtime,
         package_manager_timeout=package_manager_timeout,
+        max_data_bytes=max_data_bytes,
     )
 
 
@@ -358,6 +378,7 @@ def scan_path(
     agent_completer: object | None = None,
     provider: ProviderSpec | None = None,
     ledger: object | None = None,
+    max_data_bytes: int = 0,
 ) -> RepoScanResult:
     """Scan a local directory directly, with no clone/GitHub App involved."""
     checkout = CloneService().local(path)
@@ -369,6 +390,7 @@ def scan_path(
         agent_completer=agent_completer,
         provider=provider,
         ledger=ledger,
+        max_data_bytes=max_data_bytes,
     )
 
 
@@ -389,6 +411,8 @@ def scan_repo(
     agent_completer: object | None = None,
     provider: ProviderSpec | None = None,
     ledger: object | None = None,
+    max_data_bytes: int = 0,
+    max_repo_mb: int | None = None,
 ) -> RepoScanResult:
     """Resolve the App installation for ``owner/repo``, mint a
     least-privilege token, shallow-clone, scan, and clean up -- always,
@@ -398,7 +422,8 @@ def scan_repo(
     token = gh_auth.installation_token(installation.id, repositories=(repo,))
     resolved_ref = ref or gh_auth.default_ref(owner, repo)
 
-    checkout = clone_service.clone(owner, repo, ref=resolved_ref, token=token.token)
+    checkout = clone_service.clone(owner, repo, ref=resolved_ref, token=token.token,
+                                   max_repo_mb=max_repo_mb)
     try:
         return scan_checkout(
             checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner, change=change, judge=judge,
@@ -408,6 +433,7 @@ def scan_repo(
             agent_completer=agent_completer,
             provider=provider,
             ledger=ledger,
+            max_data_bytes=max_data_bytes,
         )
     finally:
         clone_service.cleanup(checkout)
@@ -423,6 +449,7 @@ def _scan_checkout_deterministic(
     judge: object | None = None,
     prepare_package_manager_runtime: bool = False,
     package_manager_timeout: float = 90.0,
+    max_data_bytes: int = 0,
 ) -> RepoScanResult:
     """Pure deterministic scan — O(n) regex/AST path across all languages.
 
@@ -483,7 +510,7 @@ def _scan_checkout_deterministic(
     # --- Non-JS ecosystem path (existing generic scanner) ---------------------
     elif spec is not None:
         from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
-        call_site_result = GenericImportScanner(spec).scan(checkout.path, target)
+        call_site_result = GenericImportScanner(spec, max_data_bytes=max_data_bytes).scan(checkout.path, target)
         all_call_sites.extend(call_site_result.call_sites)
         total_files_scanned += call_site_result.files_scanned
         errors.extend(call_site_result.errors)
@@ -505,6 +532,23 @@ def _scan_checkout_deterministic(
     all_call_sites.extend(lang_sites)
     total_files_scanned += lang_files
     errors.extend(lang_errors)
+
+    # --- Type-resolved call sites (TS/Python, deterministic, HIGH confidence) ---
+    from depfix.config import get_settings as _get_settings
+    _scan_settings = _get_settings()
+    if _scan_settings.scan_type_resolve:
+        from depfix.scanners.typeresolve import resolve_ts_call_sites
+        npm_pkgs = _npm_package_names(target)
+        if npm_pkgs and (spec is None or spec.id == "javascript"):
+            type_sites = resolve_ts_call_sites(
+                checkout.path, npm_pkgs, provider_id=target.provider_id,
+            )
+            if type_sites:
+                logger.info(
+                    "typeresolve: %d type-resolved call site(s) for %s",
+                    len(type_sites), repo_full_name or "local",
+                )
+                all_call_sites.extend(type_sites)
 
     if judge is not None and change is not None and all_call_sites:
         all_call_sites = judge.judge(change, all_call_sites, checkout.path)
@@ -631,8 +675,9 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
             )
             package = binding.package
         elif use.local_name in all_local_names:
-            # Binding exists in a different file (re-export / one hop)
-            confidence = MatchConfidence.MEDIUM
+            # Binding exists in a different file (re-export). Distance does
+            # not matter: it traces to the SDK, so it is found.
+            confidence = MatchConfidence.HIGH
             evidence = "binding found via cross-file re-export"
             # Find the package from any binding with this name
             pkg_b = next(
@@ -741,8 +786,15 @@ def _scan_checkout_agent(
             provider, target, toolset, repo_full_name=repo_full_name
         )
         logger.info(
-            "agent scan %s: %d step(s), %d tool call(s), stopped=%s",
+            "agent scan %s: %d step(s), %d tool call(s), stopped=%s, anchors=%d",
             provider.id, transcript.steps_used, len(transcript.tool_calls),
-            transcript.stopped_reason or "final",
+            transcript.stopped_reason or "final", len(transcript.discovered_anchors),
         )
+        if transcript.discovered_anchors or transcript.api_mapping:
+            from dataclasses import replace as _replace
+            result = _replace(
+                result,
+                discovered_anchors=transcript.discovered_anchors,
+                api_mapping=transcript.api_mapping,
+            )
         return result

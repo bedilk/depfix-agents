@@ -43,6 +43,7 @@ _KIND_MAP: dict[tuple[SpecChangeKind, str], ChangeKind] = {
     (SpecChangeKind.COMMAND_REMOVED, "n/a"): ChangeKind.METHOD_REMOVED,
     (SpecChangeKind.COMMAND_ARITY_CHANGED, "n/a"): ChangeKind.PARAM_TYPE_CHANGED,
     (SpecChangeKind.EXPORT_REMOVED, "n/a"): ChangeKind.METHOD_REMOVED,
+    (SpecChangeKind.OPERATION_DEPRECATED, "n/a"): ChangeKind.METHOD_DEPRECATED,
 }
 
 # Additive by construction — never worth surfacing as a breaking change
@@ -50,7 +51,6 @@ _KIND_MAP: dict[tuple[SpecChangeKind, str], ChangeKind] = {
 _IGNORED = {
     SpecChangeKind.OPERATION_ADDED,
     SpecChangeKind.PROPERTY_ADDED,
-    SpecChangeKind.OPERATION_DEPRECATED,
 }
 
 
@@ -133,6 +133,16 @@ def _new_api_for(bucket: _Bucket, members: list[SpecChange], *, provider_id: str
                 return normalized
             return after
         return sdk_symbol_for(bucket.subject, provider_id=provider_id) or bucket.subject
+    if bucket.kind is ChangeKind.METHOD_DEPRECATED:
+        after = next((m.after for m in members if m.after), None)
+        if after:
+            from depfix.codemods.symbols import normalize_api
+
+            normalized = normalize_api(after, provider_id=provider_id)
+            if normalized is not None:
+                return normalized
+            return after
+        return ""
     if bucket.kind in REMOVAL_KINDS:
         return ""
     if bucket.kind is ChangeKind.PARAM_NOW_REQUIRED:

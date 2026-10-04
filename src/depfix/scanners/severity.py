@@ -17,6 +17,8 @@ def severity_from_scan(change: BreakingChange, call_sites: list[CallSite]) -> tu
         return Severity.NONE, EvidenceKind.NONE
     structural = change.source in {ClassificationSource.SPEC_DIFF, ClassificationSource.REGISTRY}
     high = any(site.confidence is MatchConfidence.HIGH for site in actionable)
+    if change.kind is ChangeKind.METHOD_DEPRECATED:
+        return (Severity.MEDIUM if high else Severity.LOW), EvidenceKind.STRUCTURAL
     if structural and change.kind in _REMOVAL_KINDS and high:
         return Severity.CRITICAL, EvidenceKind.STRUCTURAL
     if structural and high:

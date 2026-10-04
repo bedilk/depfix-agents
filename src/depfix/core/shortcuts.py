@@ -16,7 +16,6 @@ from pathlib import Path
 from sqlalchemy import select
 
 from depfix.catalog import (
-    canonical_providers_file,
     learned_migrations_file,
     load_learned_migrations,
     persist_learned_migrations,
@@ -48,21 +47,12 @@ def ensure_changes_detected(
     completer: object | None = None,
     min_confidence: float = 0.5,
 ) -> int:
-    """Persist one provider's newly observed upstream migrations.
-
-    Also injects fixture_change feeds from the bundled canonical catalog so
-    that documented historical migrations (e.g. Algolia v4→v5, MongoDB v6→v7)
-    are always available even on a fresh ``init``.
-    """
+    """Persist one provider's newly observed upstream migrations."""
     providers = load_providers_file(providers_file)
     target = [provider for provider in providers if provider.id == provider_id]
     if not target:
         logger.warning("provider %r not found in %s", provider_id, providers_file)
         return 0
-
-    # Merge fixture_change feeds from the canonical catalog into the target
-    # provider so historical migrations are always present after init.
-    target = _merge_catalog_feeds(target, provider_id)
 
     init_schema()
     with SourceDeps.from_settings() as deps:
@@ -80,7 +70,6 @@ def ensure_changes_detected(
             Classifier(
                 completer,
                 min_confidence=min_confidence,
-                notes_on_registry_events=True,
             ),
             provider_id=provider_id,
         )
@@ -245,7 +234,6 @@ def capture_repository_dependency_drift(
             session,
             Classifier(
                 completer,
-                notes_on_registry_events=True,
             ),
             provider_id=provider_id,
         )
@@ -371,54 +359,6 @@ def _import_learned_catalog(provider_id: str) -> int:
             existing.add(change.dedupe_key)
             imported += 1
     return imported
-
-
-def _merge_catalog_feeds(
-    target: list,
-    provider_id: str,
-) -> list:
-    """Return ``target`` augmented with fixture_change feeds from the catalog.
-
-    The canonical_migrations.yaml lives next to this package's ``catalog/``
-    module.  When it contains a provider entry whose id matches, its feeds
-    are appended to the target provider's feed tuple so the watcher emits
-    historical migration events on a fresh install.
-
-    Feeds whose ``id`` already appears in the provider's existing feeds are
-    silently skipped (idempotent).
-    """
-    try:
-        from depfix.providers.loader import load_providers_file as _load
-        catalog_path = canonical_providers_file()
-        if catalog_path is None:
-            return target
-        catalog_providers = _load(catalog_path)
-    except Exception as exc:
-        logger.debug("could not load canonical catalog: %s", exc)
-        return target
-
-    catalog_by_id = {p.id: p for p in catalog_providers}
-    catalog_spec = catalog_by_id.get(provider_id)
-    if catalog_spec is None or not catalog_spec.feeds:
-        return target
-
-    result = []
-    for provider in target:
-        if provider.id != provider_id:
-            result.append(provider)
-            continue
-        existing_ids = {
-            f.config.get("id")
-            for f in provider.feeds
-            if f.config.get("id")
-        }
-        new_feeds = tuple(
-            f for f in catalog_spec.feeds
-            if f.config.get("id") not in existing_ids
-        )
-        from dataclasses import replace
-        result.append(replace(provider, feeds=provider.feeds + new_feeds))
-    return result
 
 
 def _ecosystem_for_dependency(

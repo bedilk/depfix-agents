@@ -100,7 +100,7 @@ def test_symbol_prefix_narrows_to_methods_below_an_old_api_namespace(tmp_path: P
 # -- wrapper propagation across hops -------------------------------------------
 
 
-def test_one_hop_wrapper_reexport_is_medium_confidence(tmp_path: Path) -> None:
+def test_one_hop_wrapper_reexport_is_found_at_full_confidence(tmp_path: Path) -> None:
     (tmp_path / "lib.js").write_text(
         'const OpenAI = require("openai");\n'
         "const client = new OpenAI();\n"
@@ -116,10 +116,12 @@ def test_one_hop_wrapper_reexport_is_medium_confidence(tmp_path: Path) -> None:
 
     method_sites = [s for s in result.call_sites if s.kind == CallSiteKind.METHOD_CALL]
     assert len(method_sites) == 1
-    assert method_sites[0].confidence == MatchConfidence.MEDIUM
+    assert method_sites[0].confidence == MatchConfidence.HIGH
+    assert method_sites[0].is_actionable
+    assert "1 hop(s)" in method_sites[0].evidence
 
 
-def test_two_hop_wrapper_reexport_degrades_to_low_confidence(tmp_path: Path) -> None:
+def test_two_hop_wrapper_reexport_is_still_found_and_actionable(tmp_path: Path) -> None:
     (tmp_path / "raw.js").write_text(
         'const OpenAI = require("openai");\n'
         "const client = new OpenAI();\n"
@@ -137,7 +139,8 @@ def test_two_hop_wrapper_reexport_degrades_to_low_confidence(tmp_path: Path) -> 
 
     method_sites = [s for s in result.call_sites if s.kind == CallSiteKind.METHOD_CALL]
     assert len(method_sites) == 1
-    assert method_sites[0].confidence == MatchConfidence.LOW
+    assert method_sites[0].confidence == MatchConfidence.HIGH
+    assert method_sites[0].is_actionable
 
 
 def test_module_exports_object_literal_shorthand_propagates(tmp_path: Path) -> None:

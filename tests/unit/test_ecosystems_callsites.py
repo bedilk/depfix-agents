@@ -1,11 +1,10 @@
 """Unit tests for the generic (non-JS) import-level call-site scanner.
 
 ``GenericImportScanner`` is the one-notch-simpler sibling of the
-binding-aware JS scanner in ``scanners/callsites.py``: import regexes,
-change symbols and provider anchors matched per line after comment
-masking. These tests pin the confidence ladder (import/symbol/anchor),
-comment masking per ecosystem, and the skip-dir and package-selection
-plumbing.
+binding-aware JS scanner in ``scanners/callsites.py``: import regexes and
+feed-derived symbols matched per line after comment masking. These tests
+pin the confidence ladder (import/symbol), comment masking per ecosystem,
+and the skip-dir and package-selection plumbing.
 """
 
 from __future__ import annotations
@@ -153,28 +152,14 @@ def test_symbol_match_is_a_medium_confidence_method_call(tmp_path: Path) -> None
     assert methods[0].symbol == "openai.ChatCompletion.create"
 
 
-def test_anchor_match_is_a_low_confidence_anchor_site(tmp_path: Path) -> None:
-    (tmp_path / "app.py").write_text('BASE = "https://api.openai.com/v1"\n', encoding="utf-8")
-
-    result = GenericImportScanner(PYTHON).scan(
-        tmp_path, _target(call_site_anchors=("https://api.openai.com",))
-    )
-
-    anchors = _kinds(result, CallSiteKind.ANCHOR)
-    assert len(anchors) == 1
-    assert anchors[0].confidence == MatchConfidence.LOW
-    assert anchors[0].symbol == "https://api.openai.com"
-    assert "provider anchor" in anchors[0].evidence
-
-
-def test_commented_symbol_and_anchor_are_masked_out(tmp_path: Path) -> None:
+def test_commented_symbol_is_masked_out(tmp_path: Path) -> None:
     (tmp_path / "app.py").write_text(
-        "# openai.ChatCompletion.create() and api.openai.com\n", encoding="utf-8"
+        "# openai.ChatCompletion.create()\n", encoding="utf-8"
     )
 
     result = GenericImportScanner(PYTHON).scan(
         tmp_path,
-        _target(symbols=("openai.ChatCompletion.create",), call_site_anchors=("api.openai.com",)),
+        _target(symbols=("openai.ChatCompletion.create",)),
     )
 
     assert result.call_sites == []

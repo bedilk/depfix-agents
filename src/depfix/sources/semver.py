@@ -49,3 +49,19 @@ def in_upgrade_window(
     if current is not None and migration <= current:
         return False                                   # already adopted
     return True
+
+
+def drift_risk(old: str | None, new: str | None) -> str:
+    """Classify a forward version move for reporting and PR policy.
+
+    ``""`` means not a forward semver move (unparseable, equal, or downgrade).
+    """
+    o, n = parse_semver(old), parse_semver(new)
+    if o is None or n is None or n <= o:
+        return ""
+    gap = n[0] - o[0]
+    if gap == 0:
+        return "patch-minor"
+    if gap == 1:
+        return "major"
+    return "multi-major"

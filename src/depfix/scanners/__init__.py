@@ -36,11 +36,20 @@ from depfix.scanners.models import (
 from depfix.scanners.repo import (
     build_scan_target,
     build_scan_target_for_changes,
+    feed_symbols_for_changes,
     scan_checkout,
     scan_path,
     scan_repo,
 )
-from depfix.scanners.store import latest_scan, record_scan, record_scan_assessments, upsert_repo
+from depfix.scanners.store import (
+    latest_scan,
+    load_scan_result,
+    record_scan,
+    record_scan_assessments,
+    reusable_scan_for_provider,
+    upsert_repo,
+)
+from depfix.scanners.typeresolve import resolve_ts_call_sites
 
 __all__ = [
     "SCANNER_VERSION",
@@ -62,16 +71,20 @@ __all__ = [
     "build_pattern_for_api",
     "build_scan_target",
     "build_scan_target_for_changes",
+    "feed_symbols_for_changes",
     "dedupe_call_sites",
     "find_manifests",
     "latest_scan",
+    "load_scan_result",
     "mask_comments",
     "range_allows_major",
     "record_scan",
     "record_scan_assessments",
+    "reusable_scan_for_provider",
     "scan_checkout",
     "scan_manifests",
     "scan_path",
     "scan_repo",
+    "resolve_ts_call_sites",
     "upsert_repo",
 ]

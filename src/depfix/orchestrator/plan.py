@@ -60,6 +60,20 @@ def plan_path_for(
     return Path(directory) / f"{plan_slug(repo_full_name)}__{change_dedupe_key[:12]}.json"
 
 
+def plan_archive_path_for(
+    change: "BreakingChange", created_at_iso: str = "", directory: str | Path = DEFAULT_PLAN_DIR
+) -> Path:
+    """Provider/date archive path, kept alongside the canonical per-repo file.
+
+    ``.depfix/plans/archive/<provider>/<YYYY-MM-DD>/<slug>__<change>.json`` --
+    a durable, human-browsable record, distinct from the canonical
+    per-(repo, change) file that ``apply`` reads.
+    """
+    date = (created_at_iso[:10] if created_at_iso else datetime.now(tz=UTC).date().isoformat())
+    provider = change.provider_id or "unknown"
+    return Path(directory) / "archive" / provider / date
+
+
 @dataclass(frozen=True)
 class PlannedEdit:
     relpath: str
@@ -90,10 +104,17 @@ class PlanArtifact:
     steps: tuple = ()          # tuple[UpgradeStep, ...]
     member_dedupe_keys: tuple = ()
     notes: tuple = ()
+    # "patch-minor", "major", "multi-major", or "" (not a drift artifact)
+    drift_risk: str = ""
+    scan_source: str = ""
 
     @property
     def is_upgrade(self) -> bool:
         return bool(self.upgrade_to)
+
+    @property
+    def is_drift(self) -> bool:
+        return bool(self.drift_risk)
 
     @property
     def change_dedupe_key(self) -> str:
@@ -119,6 +140,8 @@ class PlanArtifact:
             "steps": [s.to_dict() for s in self.steps],
             "member_dedupe_keys": list(self.member_dedupe_keys),
             "notes": list(self.notes),
+            "drift_risk": self.drift_risk,
+            "scan_source": self.scan_source,
         }
 
     @property
@@ -140,7 +163,17 @@ class PlanArtifact:
         result: FixPipelineResult,
         *,
         impact_summary: str = "",
+        edits: list | None = None,
+        drift_risk: str = "",
+        scan_source: str = "",
     ) -> PlanArtifact:
+        """``edits`` should be the fix service's committable set. The legacy
+        default (KEPT only) silently dropped SUSPECT/APPLIED drift edits,
+        producing an artifact ``apply`` could replay into nothing."""
+        source = (
+            edits if edits is not None
+            else [e for e in result.edits if e.verdict.value == "kept"]
+        )
         return cls(
             repo_full_name=repo,
             base_sha=base_sha,
@@ -149,17 +182,39 @@ class PlanArtifact:
                 PlannedEdit(
                     e.relpath, e.original_content, e.fixed_content, e.diff, e.confidence, e.usages_fixed
                 )
-                for e in result.edits
-                if e.verdict.value == "kept"
+                for e in source
             ),
             confidence=result.confidence.value,
             verified_by=result.confidence_reason,
             impact_summary=impact_summary,
             removals=(),
+            notes=tuple(result.codemod_notes),
+            drift_risk=drift_risk,
+            scan_source=scan_source,
         )
 
     @classmethod
-    def from_upgrade(cls, repo: str, base_sha: str, result) -> "PlanArtifact":
+    def from_drift(
+        cls,
+        repo: str,
+        base_sha: str,
+        change: "BreakingChange",
+        *,
+        drift_risk: str,
+    ) -> "PlanArtifact":
+        """Artifact for a version-drift-only change: no code edits, just a record
+        that the installed version is behind and how risky that gap is."""
+        return cls(
+            repo_full_name=repo,
+            base_sha=base_sha,
+            change=change,
+            edits=(),
+            confidence="none",
+            drift_risk=drift_risk,
+        )
+
+    @classmethod
+    def from_upgrade(cls, repo: str, base_sha: str, result, *, scan_source: str = "") -> "PlanArtifact":
         from depfix.core.upgrade import UpgradeStep
         plan = result.plan
         carrier = plan.drift_change or plan.migrations[0]
@@ -179,6 +234,7 @@ class PlanArtifact:
             steps=tuple(result.steps),
             member_dedupe_keys=plan.member_dedupe_keys,
             notes=tuple(result.notes),
+            scan_source=scan_source,
         )
 
     def write(self, path: str | Path) -> Path:
@@ -189,6 +245,12 @@ class PlanArtifact:
 
     def write_for_repo(self, directory: str | Path = DEFAULT_PLAN_DIR) -> Path:
         return self.write(plan_path_for(self.repo_full_name, self.change_dedupe_key, directory))
+
+    def write_to_archive(self, directory: str | Path = DEFAULT_PLAN_DIR) -> Path:
+        """Write an immutable dated, provider-scoped copy for the record."""
+        archive_dir = plan_archive_path_for(self.change, self.created_at, directory)
+        path = archive_dir / f"{plan_slug(self.repo_full_name)}__{self.change_dedupe_key[:12]}.json"
+        return self.write(path)
 
     @classmethod
     def plans_for_repo(
@@ -233,6 +295,8 @@ class PlanArtifact:
             upgrade_package=raw.get("upgrade_package", ""),
             upgrade_from=raw.get("upgrade_from", ""),
             upgrade_to=raw.get("upgrade_to", ""),
+            drift_risk=raw.get("drift_risk", ""),
+            scan_source=raw.get("scan_source", ""),
         )
 
     @classmethod

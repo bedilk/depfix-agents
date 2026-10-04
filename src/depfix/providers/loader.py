@@ -59,6 +59,12 @@ def _parse_provider(entry: Any, where: str) -> ProviderSpec:
         _parse_feed(raw_feed, f"{where}.feeds[{i}]") for i, raw_feed in enumerate(raw_feeds)
     )
 
+    if "call_site_anchors" in entry:
+        raise ProviderConfigError(
+            f"{where}: 'call_site_anchors' is no longer supported. Call sites are "
+            "derived from each provider's feeds (the old and replacement APIs of "
+            "classified changes). Delete the key."
+        )
     return ProviderSpec(
         id=provider_id.strip(),
         name=str(entry.get("name") or provider_id).strip(),
@@ -66,7 +72,6 @@ def _parse_provider(entry: Any, where: str) -> ProviderSpec:
         sdk_packages=_parse_sdk_packages(entry.get("sdk_packages"), where),
         api_version_scheme=_optional_str(entry.get("api_version_scheme")),
         api_base_urls=_str_tuple(entry.get("api_base_urls"), f"{where}.api_base_urls"),
-        call_site_anchors=_str_tuple(entry.get("call_site_anchors"), f"{where}.call_site_anchors"),
         enabled=bool(entry.get("enabled", True)),
     )
 

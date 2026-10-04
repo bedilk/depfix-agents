@@ -86,7 +86,7 @@ class Classifier:
                     package = event.feed_key.removeprefix("pypi:").split(":repo:", 1)[0]
                 elif event.feed_key.startswith("rubygems:"):
                     package = event.feed_key.removeprefix("rubygems:").split(":repo:", 1)[0]
-            return ClassifyOutcome(changes=[BreakingChange(
+            drift = BreakingChange(
                 package=package,
                 old_version=event.old_token,
                 new_version=event.new_token,
@@ -101,7 +101,21 @@ class Classifier:
                 source_url=event.source_url,
                 evidence=(f"{event.source_kind.value} moved from {event.old_token} "
                           f"to {event.new_token}"),
-            )])
+            )
+            changes, cost = [drift], 0.0
+            # The registry feed may have attached GitHub release notes. Extract
+            # the old -> new API pairs from them so the scanner knows what to
+            # look for. The NotesClassifier verbatim-evidence gate still applies.
+            from depfix.classify.notes import _BREAKING_MARKERS_RE
+            if (self._notes is not None and event.body.strip()
+                    and _BREAKING_MARKERS_RE.search(event.body)):
+                changes += self._notes.classify(
+                    event.body, package=package, old_version=event.old_token,
+                    new_version=event.new_token, provider_id=event.provider_id,
+                    source_url=event.body_url or event.source_url,
+                )
+                cost = self._notes.last_cost
+            return ClassifyOutcome(changes=changes, cost=cost)
 
         if event.spec_changes:
             # Run the deterministic classifier first.  If it already produced

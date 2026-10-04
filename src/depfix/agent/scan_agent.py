@@ -65,6 +65,12 @@ class ScanAgentTranscript:
     steps_used: int = 0
     stopped_reason: str = ""
     llm_calls: list[LLMCall] = field(default_factory=list)
+    # Verified old-API call sites the agent staged via record_call_site_anchor.
+    # Copied from the toolset after the run; the orchestrator persists them.
+    discovered_anchors: list[dict] = field(default_factory=list)
+    # Agent-derived old→new API mappings; each entry is
+    # {"old_symbol": str, "new_symbol": str, "notes": str}.
+    api_mapping: list[dict] = field(default_factory=list)
 
 
 class ScanAgent:
@@ -204,13 +210,29 @@ class ScanAgent:
         *,
         repo_full_name: str = "",
     ) -> tuple[RepoScanResult, ScanAgentTranscript]:
-        """Agent scans one checkout for one provider's call sites."""
+        """Agent scans one checkout for one provider's call sites.
+
+        Also discovers old-API call sites and maps them to their new
+        equivalents. Verified old sites are staged in ``toolset.discovered_anchors``
+        and copied into the transcript so the orchestrator can persist them.
+        """
         skills = self._load_skills(provider.id, toolset.checkout_root)
         prompt = _repo_scan_prompt(provider, target, skills, toolset)
         transcript = ScanAgentTranscript()
 
         parsed = self._run_agent_loop(prompt, toolset, transcript, mode="repo")
         result = self._parse_repo_result(parsed, target, toolset, repo_full_name)
+
+        # Copy agent-staged anchors and api_mapping into the transcript so
+        # callers don't need a reference to the toolset.
+        transcript.discovered_anchors = list(toolset.discovered_anchors)
+        raw_mapping = parsed.get("api_mapping")
+        if isinstance(raw_mapping, list):
+            transcript.api_mapping = [
+                m for m in raw_mapping
+                if isinstance(m, dict) and m.get("old_symbol") and m.get("new_symbol")
+            ]
+
         return result, transcript
 
     def poll_feed(
@@ -309,6 +331,13 @@ class ScanAgent:
             return toolset.fetch_url(
                 url=str(args.get("url", "")),
                 max_bytes=int(args.get("max_bytes", 200_000)),
+            )
+        if name == "record_call_site_anchor":
+            return toolset.record_call_site_anchor(
+                symbol=str(args.get("symbol", "")),
+                filepath=str(args.get("filepath", "")),
+                line_number=int(args.get("line_number", 0)),
+                line_content=str(args.get("line_content", "")),
             )
         return ToolResult.error(f"unknown tool: {name}")
 
@@ -487,19 +516,28 @@ def _repo_scan_prompt(
     skills: dict[str, str],
     toolset: ScanToolset,
 ) -> str:
-    return f"""You are the depfix scan agent. Your job: find every call site of the
-{provider.name} SDK in this repository, and record which versions of the
-SDK the repository declares.
+    sdk_packages = [pkg.name for pkg in provider.sdk_packages]
+    npm_packages = [pkg.name for pkg in provider.sdk_packages if pkg.ecosystem == "npm"]
+    github_repos = list({
+        f.config["github_repo"]
+        for f in provider.feeds
+        if f.config.get("github_repo")
+    })
+    return f"""You are the depfix scan agent. Your job has TWO parts:
 
-You have read-only access to the repository through a small set of tools.
-You never write files, never run shell commands, never fetch anything
-outside the registered tools.
+PART 1 — Discover the CURRENT (new) API surface from the provider's feeds.
+PART 2 — Find OLD-API call sites in this repository, map them to the new API,
+          and stage each verified old call site with record_call_site_anchor.
+
+You have read-only access to the repository AND to a set of feed-polling tools.
+You never make arbitrary network calls; only the registered tools are allowed.
 
 ## Provider info
 - id: {provider.id}
-- SDK packages: {[pkg.name for pkg in provider.sdk_packages]}
-- Anchors: {list(provider.call_site_anchors)}
-- Narrowing symbols (if any): {list(target.symbols)}
+- SDK packages: {sdk_packages}
+- npm packages (for poll_npm): {npm_packages}
+- GitHub repos (for poll_github_releases): {github_repos}
+- Pre-classified feed symbols (may be empty on a fresh DB): {list(target.feed_symbols)}
 
 ## Shared instructions (AGENT.md)
 {skills['shared']}
@@ -513,26 +551,60 @@ outside the registered tools.
 ## Available tools
 {_tool_manifest(mode='repo')}
 
+## Workflow
+
+### Step 1 — Fetch current API surface (new side)
+Use poll_npm / poll_github_releases / fetch_url to read the provider's latest
+release notes and migration guides. Identify what the NEW canonical API methods
+look like (e.g. for OpenAI v4+: client.chat.completions.create, client.embeddings.create).
+Focus on methods that changed across major versions.
+
+### Step 2 — Find old-API call sites in the repo (old side)
+Read the manifest to confirm the SDK is present and check its declared version.
+Use grep to find import patterns and follow bindings to locate actual method calls.
+For each old-API call you find (e.g. openai.createChatCompletion), read the file
+to confirm the line and call record_call_site_anchor with the exact content.
+
+### Step 3 — Map old → new
+For every old symbol you anchored, state its new equivalent in api_mapping.
+If a symbol has no new equivalent (removed with no replacement), set new_symbol to "".
+
+### Rules
+- record_call_site_anchor only for OLD-API calls that need migrating.
+  Do NOT anchor already-migrated modern calls.
+- verify_line is called inside record_call_site_anchor — if a line doesn't
+  exist the anchor will be rejected. Only call it when you've seen the line.
+- Do not invent API facts. Quote from the release notes or changelog.
+- One hop of re-export is fine (downgrade confidence to "medium").
+
 ## How to respond
 Each turn, return exactly ONE JSON object:
 
-- To call a tool: {{"tool": "<name>", "arguments": {{...}}}}
-- To finish: {{"tool": null, "result": {{
+- To call a tool:
+  {{"tool": "<name>", "arguments": {{...}}}}
+
+- To finish:
+  {{"tool": null, "result": {{
     "commit_sha": "...",
     "files_scanned": <int>,
     "call_sites": [{{
         "filepath": "src/x.js", "line_number": 12, "column": 4,
-        "line_content": "openai.chat.completions.create(...)",
+        "line_content": "openai.createChatCompletion({{...}})",
         "kind": "method_call",
         "confidence": "high",
-        "symbol": "openai.chat.completions.create",
+        "symbol": "openai.createChatCompletion",
         "evidence": "why you're sure"
+    }}, ...],
+    "api_mapping": [{{
+        "old_symbol": "openai.createChatCompletion",
+        "new_symbol": "openai.chat.completions.create",
+        "notes": "v3 → v4 rename; response shape also changed (no .data wrapper)"
     }}, ...],
     "dependencies": [{{
         "package": "openai",
         "manifest_path": "package.json",
-        "declared_range": "^4.0.0",
-        "resolved_version": "4.12.0",
+        "declared_range": "3.3.0",
+        "resolved_version": "3.3.0",
         "source": "lockfile"
     }}, ...],
     "errors": []
@@ -540,14 +612,13 @@ Each turn, return exactly ONE JSON object:
 
 Confidence tiers:
 - "high": direct SDK import + method call, unambiguous.
-- "medium": one hop of indirection (wrapper module, re-export) or matched
-  on a provider anchor with clear context.
+- "medium": one hop of indirection (wrapper module, re-export).
 - "low": weak signal (raw HTTP URL, string match). Report but do not
   claim high confidence.
 
-Do not invent call sites. If you cannot verify a line exists, do not
-report it. When in doubt, drop it — the deterministic scanner is
-forgiving of false negatives, unforgiving of false positives.
+Include ALL old-API call sites in both call_sites (for the scan result) AND
+stage them with record_call_site_anchor (for persistence). api_mapping is the
+old→new reference that the fix pipeline will use to rewrite the code.
 """
 
 
@@ -629,6 +700,15 @@ def _tool_manifest(*, mode: str) -> str:
     repo_only = [
         '- read_manifest(relpath): parse a package.json/pyproject.toml/etc.',
         '- resolve_installed_version(package): read the lockfile-resolved version.',
+        # Feed tools are also available in repo mode so the agent can fetch the
+        # current API surface and derive old→new mappings in one pass.
+        '- poll_npm(package, dist_tag="latest"): fetch npm registry metadata and recent versions.',
+        '- poll_pypi(package): fetch PyPI metadata.',
+        '- poll_github_releases(repo): fetch newest GitHub release notes (migration guides live here).',
+        '- fetch_url(url, max_bytes=200000): fetch a bounded URL (changelog, docs page).',
+        '- record_call_site_anchor(symbol, filepath, line_number, line_content): '
+        'verify the line exists, then stage it as a discovered old-API call site. '
+        'Call this for EVERY confirmed old-API usage found in the repo.',
     ]
     feed_only = [
         '- poll_npm(package, dist_tag="latest"): fetch npm registry info.',

@@ -178,6 +178,91 @@ _RSPEC_STATUS_MAP = {
 }
 
 
+_GO_ACTION_STATUS = {
+    "pass": TestStatus.PASSED,
+    "fail": TestStatus.FAILED,
+    "skip": TestStatus.SKIPPED,
+}
+
+_GO_FRAMING_PREFIXES = ("=== RUN", "=== PAUSE", "=== CONT", "=== NAME", "--- PASS", "--- SKIP")
+
+
+def parse_go_test_json(raw: str) -> list[TestCase]:
+    """Parse ``go test -json`` output.
+
+    The format is newline-delimited events, not a document: one object per
+    action, with the terminal ``pass``/``fail``/``skip`` arriving after any
+    number of ``output`` events. Package-level events (no ``Test`` field) are
+    dropped -- a package that fails to build has no per-test identity to diff.
+    """
+    statuses: dict[tuple[str, str], TestStatus] = {}
+    messages: dict[tuple[str, str], list[str]] = {}
+
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        test = event.get("Test")
+        if not test:
+            continue
+        key = (str(event.get("Package") or ""), str(test))
+        action = event.get("Action")
+        if action == "output":
+            text = str(event.get("Output") or "").strip()
+            if text and not text.startswith(_GO_FRAMING_PREFIXES):
+                messages.setdefault(key, []).append(text)
+        elif action in _GO_ACTION_STATUS:
+            statuses[key] = _GO_ACTION_STATUS[action]
+
+    return [
+        TestCase(
+            name=name,
+            file=package,
+            status=status,
+            message=(
+                "\n".join(messages.get((package, name), []))[:2000]
+                if status is TestStatus.FAILED
+                else ""
+            ),
+        )
+        for (package, name), status in statuses.items()
+    ]
+
+
+_GO_VERBOSE_RE = re.compile(r"^\s*---\s+(?P<status>PASS|FAIL|SKIP):\s+(?P<name>\S+)")
+
+_GO_VERBOSE_STATUS = {
+    "PASS": TestStatus.PASSED,
+    "FAIL": TestStatus.FAILED,
+    "SKIP": TestStatus.SKIPPED,
+}
+
+
+def parse_go_test_verbose(raw: str) -> list[TestCase]:
+    """Best-effort parser for plain ``go test -v`` output.
+
+    Used only when ``-json`` produced nothing usable. Carries no package, so
+    identities are bare test names -- weaker than the JSON path.
+    """
+    cases: list[TestCase] = []
+    for line in raw.splitlines():
+        match = _GO_VERBOSE_RE.match(line)
+        if match:
+            cases.append(
+                TestCase(
+                    name=match.group("name"),
+                    status=_GO_VERBOSE_STATUS[match.group("status")],
+                )
+            )
+    return cases
+
+
 #: Best-effort aggregate counters for the human-readable default reporters
 #: of Jest/Vitest/Mocha/pytest/RSpec, e.g. "Tests: 2 failed, 8 passed, 10 total"
 #: (Jest), "10 passing (1s)" / "2 failing" (Mocha), pytest's
@@ -248,6 +333,10 @@ def parse_output(
         vitest_cases = parse_vitest_verbose(combined)
         if vitest_cases:
             return vitest_cases, "", True
+    if framework is TestFramework.GO_TEST:
+        go_cases = parse_go_test_verbose(combined)
+        if go_cases:
+            return go_cases, "", True
     fallback_cases = parse_fallback(combined)
     error = "" if fallback_cases else "no recognizable test output"
     return fallback_cases, error, True
@@ -261,4 +350,5 @@ _STRUCTURED_PARSERS = {
     TestFramework.PYTEST: parse_junit_xml,
     TestFramework.RSPEC: parse_rspec_json,
     TestFramework.MINITEST: parse_junit_xml,  # via minitest-reporters
+    TestFramework.GO_TEST: parse_go_test_json,
 }

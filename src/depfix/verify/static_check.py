@@ -20,11 +20,47 @@ outright without wasting time on tests.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, SandboxResult, run_sandboxed
+
+#: ``path:line: error: message`` (mypy/pyright), ``path:line:col: message`` (go vet)
+_MYPY_RE = re.compile(
+    r"^(?P<file>[^:\n]+):(?P<line>\d+)(?::\d+)?:\s*error:\s*(?P<message>.+)$", re.MULTILINE
+)
+_PYRIGHT_RE = re.compile(
+    r"^\s*(?P<file>[^:\n]+):(?P<line>\d+):\d+\s*-\s*error:\s*(?P<message>.+)$", re.MULTILINE
+)
+_GO_VET_RE = re.compile(
+    r"^(?P<file>[^:#\n]+\.go):(?P<line>\d+):(?:\d+:)?\s*(?P<message>.+)$", re.MULTILINE
+)
+
+
+def _relative(root: Path, raw: str) -> str:
+    candidate = raw.strip().removeprefix("./")
+    path = Path(candidate)
+    if path.is_absolute():
+        try:
+            return path.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            return path.as_posix()
+    return path.as_posix()
+
+
+def _parse_diagnostics(
+    root: Path, output: str, pattern: re.Pattern[str]
+) -> tuple[StaticDiagnostic, ...]:
+    return tuple(
+        StaticDiagnostic(
+            relpath=_relative(root, match.group("file")),
+            line=int(match.group("line")),
+            message=match.group("message").strip(),
+        )
+        for match in pattern.finditer(output)
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -89,32 +125,28 @@ def detect_ecosystem(root: Path, changed_files: list[Path]) -> str | None:
 
 def run_static_check(
     root: Path,
-    changed_files: list[Path],
+    changed_files: list[Path] | None = None,
     *,
+    ecosystem: str | None = None,
     timeout: float = 300.0,
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
 ) -> StaticCheckResult:
-    """Run the appropriate static checker for the repo's ecosystem.
+    """Run the appropriate static checker for this repository.
 
-    Args:
-        root: Repository root.
-        changed_files: Files modified by the fix (used for ecosystem detection).
-        timeout: Wall-clock cap.
-        max_output_bytes: Output truncation limit.
-
-    Returns:
-        StaticCheckResult indicating whether the check passed.
+    ``ecosystem`` is authoritative when the caller already knows it (the
+    verifier does); ``changed_files`` is the fallback sniff for callers that
+    only have a diff. Diagnostics are parsed, not just counted, because the
+    verifier diffs them by identity.
     """
-    ecosystem = detect_ecosystem(root, changed_files)
+    resolved = ecosystem or detect_ecosystem(root, changed_files or [])
 
-    if ecosystem == "python":
+    if resolved == "python":
         return _check_python(root, timeout, max_output_bytes)
-    elif ecosystem == "go":
+    if resolved == "go":
         return _check_go(root, timeout, max_output_bytes)
-    else:
-        return StaticCheckResult(
-            skipped_reason=f"no static checker configured for this ecosystem"
-        )
+    return StaticCheckResult(
+        skipped_reason=f"no static checker configured for {resolved or 'this ecosystem'}"
+    )
 
 
 def _check_python(root: Path, timeout: float, max_output_bytes: int) -> StaticCheckResult:
@@ -132,46 +164,53 @@ def _check_python(root: Path, timeout: float, max_output_bytes: int) -> StaticCh
 
 
 def _run_mypy(root: Path, timeout: float, max_output_bytes: int) -> StaticCheckResult:
-    """Run mypy on the entire repo (fast enough for real-time use)."""
     argv = ["mypy", ".", "--no-error-summary", "--show-column-numbers"]
     result = run_sandboxed(argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes)
-
+    output = result.stdout + "\n" + result.stderr
     return StaticCheckResult(
         ran=True,
         passed=result.ok,
         checker="mypy",
-        output=result.stderr or result.stdout,
+        output=output,
+        diagnostics=_parse_diagnostics(root, output, _MYPY_RE),
         sandbox=result,
     )
 
 
 def _run_pyright(root: Path, timeout: float, max_output_bytes: int) -> StaticCheckResult:
-    """Run pyright on the entire repo."""
     argv = ["pyright", "."]
     result = run_sandboxed(argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes)
-
+    output = result.stdout + "\n" + result.stderr
     return StaticCheckResult(
         ran=True,
         passed=result.ok,
         checker="pyright",
-        output=result.stderr or result.stdout,
+        output=output,
+        diagnostics=_parse_diagnostics(root, output, _PYRIGHT_RE),
         sandbox=result,
     )
 
 
 def _check_go(root: Path, timeout: float, max_output_bytes: int) -> StaticCheckResult:
-    """Run go vet on the repo."""
+    """``go vet ./...`` -- bundled with the toolchain, so always available
+    wherever a Go fix could be generated at all."""
+    from depfix.ecosystems.specs import GO
+
     if shutil.which("go") is None:
         return StaticCheckResult(skipped_reason="go not found on PATH")
 
     argv = ["go", "vet", "./..."]
-    result = run_sandboxed(argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes)
-
+    result = run_sandboxed(
+        argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+        extra_allowlist=GO.env_allowlist_extra,
+    )
+    output = result.stdout + "\n" + result.stderr
     return StaticCheckResult(
         ran=True,
         passed=result.ok,
         checker="go vet",
-        output=result.stderr or result.stdout,
+        output=output,
+        diagnostics=_parse_diagnostics(root, output, _GO_VET_RE),
         sandbox=result,
     )
 

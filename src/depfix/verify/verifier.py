@@ -516,10 +516,10 @@ class Verifier:
         return ConfidenceTier.HIGH, "; ".join(strengths)
 
     def _test_cwd(self, first_relpath: str):
-        """The directory tests run from. npm monorepos resolve the touched
-        file's owning workspace package; python runs from the checkout root
-        (pytest's rootdir discovery handles src-layouts on its own)."""
-        if self._ecosystem == "python":
+        """The directory tests run from. Only npm has per-package test
+        scripts; Go runs from the module root, pytest discovers its own
+        rootdir, and Bundler reads the Gemfile at the top."""
+        if self._ecosystem != "javascript":
             return self._editor.checkout.path
         from depfix.scanners.workspace import owning_package_dir
         return owning_package_dir(self._editor.checkout.path, first_relpath)

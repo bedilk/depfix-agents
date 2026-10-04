@@ -47,7 +47,6 @@ def _provider(**overrides: object) -> ProviderSpec:
         "name": "OpenAI",
         "sdk_packages": (SdkPackage(name="openai"),),
         "api_base_urls": ("https://api.openai.com",),
-        "call_site_anchors": ("openai.",),
     }
     defaults.update(overrides)
     return ProviderSpec(**defaults)

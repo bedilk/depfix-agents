@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from depfix.validators.go import GoFixValidator
 from depfix.validators.javascript import FixValidator, create_unified_diff
 from depfix.validators.python import PythonFixValidator
 from depfix.validators.ruby import RubyFixValidator
@@ -29,6 +30,8 @@ def validator_for_ecosystem(
         return PythonFixValidator(use_ast_validation=use_ast_validation)
     if ecosystem_id == "ruby":
         return RubyFixValidator(use_ast_validation=use_ast_validation)
+    if ecosystem_id == "go":
+        return GoFixValidator(use_ast_validation=use_ast_validation)
     return FixValidator(
         use_ast_validation=use_ast_validation,
         checkout_root=checkout_root,
@@ -37,6 +40,7 @@ def validator_for_ecosystem(
 
 __all__ = [
     "FixValidator",
+    "GoFixValidator",
     "PythonFixValidator",
     "RubyFixValidator",
     "TypeScriptSyntaxValidator",

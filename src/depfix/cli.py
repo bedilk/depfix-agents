@@ -59,7 +59,7 @@ from depfix.classify import (
     discover_usage_candidates,
 )
 from depfix.classify.llm import BedrockCompleter, CostTrackingCompleter
-from depfix.clone import CloneError, CloneService
+from depfix.clone import CloneError, CloneService, RepoTooLargeError
 from depfix.config import Settings, get_settings
 from depfix.core.fix_service import FixServiceResult, run_fix_for_change
 from depfix.core.models import AgentResult, BreakingChange, ChangeKind, ClassificationSource
@@ -80,6 +80,7 @@ from depfix.evals import (
     load_report,
     save_report,
 )
+from depfix.fixers.bedrock import BedrockFixGenerator
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh import (
@@ -257,7 +258,13 @@ def _load_pipeline_changes(
                 BreakingChangeRow.kind != ChangeKind.DEPENDENCY_VERSION_BUMP.value,
                 repo_drift,
             ))
-        stmt = stmt.order_by(order).limit(limit)
+        stmt = stmt.order_by(order)
+        # Pre-cap only when no specific repos are named. When repos are named
+        # the orchestrator filters by scan-match relevance before capping, so
+        # a provider with 477 classified changes doesn't drown the 5 that
+        # actually apply to this repo.
+        if not repo_full_names:
+            stmt = stmt.limit(limit)
         return [breaking_change_from_row(row) for row in session.scalars(stmt)]
 
 
@@ -293,21 +300,45 @@ def _build_gh_auth(settings) -> GitHubAppAuth | None:
     )
 
 
-def _build_completer(settings) -> LLMCompleter | None:
+def _resolve_light_model(settings: Settings) -> tuple[str, str]:
+    """Return ``(light_model_id, heavy_model_id)`` for the active provider."""
+    if settings.llm_provider == "bedrock":
+        heavy = settings.bedrock_model
+        light = settings.bedrock_light_model or heavy
+        return light, heavy
+    if settings.llm_provider == "gemini":
+        heavy = settings.gemini_model
+        light = settings.gemini_light_model or heavy
+        return light, heavy
+    heavy = settings.ollama_model
+    light = settings.ollama_light_model or heavy
+    return light, heavy
+
+
+def _build_completer(settings, *, heavy: bool = False) -> LLMCompleter | None:
+    """Build an LLMCompleter.
+
+    By default returns the **light** model (Haiku-class) for cheap tasks
+    like classification, scanning, and judging.  Pass ``heavy=True`` to
+    get the main model (Sonnet-class) for code-generation-adjacent work
+    like characterization.
+    """
+    light_id, heavy_id = _resolve_light_model(settings)
+    model_id = heavy_id if heavy else light_id
     if settings.llm_provider == "bedrock":
         return BedrockCompleter(
             aws_access_key=settings.bedrock_access_key,
             aws_secret_key=settings.bedrock_secret_key,
             aws_region=settings.bedrock_region,
             aws_profile=settings.bedrock_profile,
-            model=settings.bedrock_model,
+            model=model_id,
         )
     if settings.llm_provider == "gemini":
         if not settings.google_api_key:
             return None
-        return GeminiCompleter(api_key=settings.google_api_key, model=settings.gemini_model)
+        return GeminiCompleter(api_key=settings.google_api_key, model=model_id)
     return OllamaCompleter(
-        model=settings.ollama_model,
+        model=model_id,
         base_url=settings.ollama_base_url,
         timeout=settings.ollama_timeout,
     )
@@ -456,6 +487,7 @@ _STATUS_STYLE = {
     "changed": "[green]changed[/green]",
     "baseline": "[blue]baseline[/blue]",
     "unchanged": "[dim]unchanged[/dim]",
+    "cached": "[cyan]cached[/cyan]",
     "not_found": "[yellow]not found[/yellow]",
     "unsupported": "[yellow]unsupported[/yellow]",
     "failed": "[red]failed[/red]",
@@ -486,8 +518,8 @@ def _print_watch_outcome(outcome: WatchOutcome, show_changes: bool) -> None:
         )
     console.print(table)
     console.print(
-        f"[dim]feeds={outcome.feeds_polled}  events={len(outcome.events)}  "
-        f"breaking={len(outcome.breaking_events)}  "
+        f"[dim]feeds={outcome.feeds_polled}  cached={outcome.feeds_cached}  "
+        f"events={len(outcome.events)}  breaking={len(outcome.breaking_events)}  "
         f"duplicates={outcome.duplicates}  failed={len(outcome.failures)}[/dim]\n"
     )
 
@@ -688,6 +720,86 @@ def _write_scan_report(
     )
 
 
+def _record_scan_detections(
+    settings: Settings, *, repo_full_name: str, provider_id: str,
+    result: RepoScanResult, assessments: list[ScanChangeAssessment],
+) -> None:
+    from depfix.catalog import learned_migrations_file
+    from depfix.catalog.detections import (
+        build_detections, build_anchor_detection, record_repository_detections,
+    )
+
+    path = learned_migrations_file(settings)
+    detections = build_detections(result, assessments, provider_id=provider_id)
+
+    # When the agent discovered old-API anchors but no feed-classified breaking
+    # change matched (e.g. feeds only carry recent version bumps), persist a
+    # synthetic anchor detection so the fix pipeline can still act on them.
+    anchors = getattr(result, "discovered_anchors", []) or []
+    if anchors and not detections:
+        anchor_det = build_anchor_detection(result, provider_id=provider_id)
+        if anchor_det:
+            detections = [anchor_det]
+
+    try:
+        count = record_repository_detections(
+            path, repo_full_name=repo_full_name, provider_id=provider_id,
+            detections=detections,
+        )
+    except (OSError, yaml.YAMLError) as exc:
+        console.print(f"[yellow]Could not list detections in {path}: {exc}[/yellow]")
+        return
+    if count:
+        console.print(f"[green]{count} drift detection(s) listed in {path}[/green]")
+    anchors_found = len(anchors)
+    api_mapping = getattr(result, "api_mapping", []) or []
+    if anchors_found:
+        console.print(
+            f"[green]{anchors_found} old-API anchor(s) discovered by agent "
+            f"({len(api_mapping)} old→new mapping(s)); "
+            f"listed in {path}[/green]"
+        )
+
+
+def _record_planned_detection(settings: Settings, artifact: PlanArtifact, artifact_path: Path) -> None:
+    from depfix.catalog import learned_migrations_file
+    from depfix.catalog.detections import (
+        STATUS_PLANNED, STATUS_REPORT_ONLY, mark_detection_planned, mark_detection_status,
+    )
+
+    path = learned_migrations_file(settings)
+    try:
+        mark_detection_planned(
+            path, repo_full_name=artifact.repo_full_name, change=artifact.change,
+            commit_sha=artifact.base_sha, artifact_path=str(artifact_path),
+            files=[e.relpath for e in artifact.edits],
+        )
+        members = [k for k in artifact.member_dedupe_keys if k != artifact.change_dedupe_key]
+        if members:
+            mark_detection_status(
+                path, repo_full_name=artifact.repo_full_name, dedupe_keys=members,
+                status=STATUS_PLANNED if artifact.edits else STATUS_REPORT_ONLY,
+                plan_artifact=str(artifact_path),
+            )
+    except (OSError, yaml.YAMLError) as exc:
+        console.print(f"[yellow]Could not record planned PR in {path}: {exc}[/yellow]")
+
+
+def _record_applied_detections(settings: Settings, outcome: OrchestratorOutcome) -> None:
+    from depfix.catalog import learned_migrations_file
+    from depfix.catalog.detections import STATUS_PR_OPENED, mark_detection_status
+
+    path = learned_migrations_file(settings)
+    for repo in outcome.repos:
+        for change in repo.changes:
+            if change.pr_url:
+                mark_detection_status(
+                    path, repo_full_name=repo.repo_full_name,
+                    dedupe_keys=change.member_dedupe_keys or (change.dedupe_key,),
+                    status=STATUS_PR_OPENED, pr_url=change.pr_url,
+                )
+
+
 def _outcome_text(change: ChangeOutcome) -> str:
     if change.skip_reason is not None:
         if change.skip_detail_text:
@@ -751,7 +863,8 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
                 if change.suppressed_call_sites
                 else ""
             )
-            console.print(f"    {change.package} {change.old_api}: {verb}{suppressed}{suffix}")
+            source = f" [dim](scan: {change.scan_source})[/dim]" if change.scan_source else ""
+            console.print(f"    {change.package} {change.old_api}: {verb}{suppressed}{suffix}{source}")
     console.print(
         f"\n{outcome.prs_opened} PR(s), {outcome.changes_failed} failed change(s), "
         f"${outcome.total_cost_usd:.4f} spent"
@@ -796,7 +909,10 @@ def _cmd_watch(args: argparse.Namespace) -> int:
 
     try:
         with SourceDeps.from_settings() as deps:
-            outcome = Watcher(deps=deps, dry_run=args.dry_run).run_once(providers)
+            outcome = Watcher(
+                deps=deps, dry_run=args.dry_run,
+                ttl_seconds=0 if args.refresh else None,
+            ).run_once(providers)
     except Exception as e:
         console.print(f"[red]Watch failed: {e}[/red]")
         logger.exception("Watcher crashed")
@@ -804,10 +920,9 @@ def _cmd_watch(args: argparse.Namespace) -> int:
 
     _print_watch_outcome(outcome, show_changes=args.show_changes)
 
-    # Exit non-zero only if every feed failed — cron reads non-zero as "page us".
-    if outcome.failures and len(outcome.failures) == outcome.feeds_polled:
-        return 1
-    return 0
+    # Exit non-zero only if every enabled feed is dark. A cached feed was
+    # healthy on its last poll, so it counts as alive.
+    return 1 if outcome.all_failed else 0
 
 
 def _cmd_classify(args: argparse.Namespace) -> int:
@@ -884,9 +999,21 @@ def _cmd_classify(args: argparse.Namespace) -> int:
 
 def _cmd_scan(args: argparse.Namespace) -> int:
     settings = get_settings()
+
+    if getattr(args, "anyversion", False):
+        settings.drift_scope = "any"
+        from depfix.defaults import load_local_defaults, _path
+        import yaml as _yaml
+        _local = load_local_defaults()
+        _local["drift_scope"] = "any"
+        try:
+            _path().write_text(_yaml.safe_dump(_local, sort_keys=True), encoding="utf-8")
+        except OSError:
+            pass
+
     ledger = CostLedger()
     _scan_coordinator = _build_scan_coordinator(settings, ledger)
-    _scan_strategy = "agent" if _scan_coordinator is not None else "deterministic"
+    _scan_strategy = settings.scan_strategy if _scan_coordinator is not None else "deterministic"
 
     try:
         local_path, remote_repo = _scan_location(args)
@@ -949,7 +1076,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     explicitly_selected_change = bool(args.change_file or args.from_event is not None)
     scan_change = change if explicitly_selected_change else None
     changes_to_assess = [change] if scan_change is not None else provider_changes
-    target = build_scan_target(provider, scan_change)
+    target = build_scan_target(provider, scan_change, feed_changes=changes_to_assess)
     if args.old_api:
         if change is not None:
             console.print(
@@ -962,7 +1089,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     )
     judge = None
     if settings.scan_llm_judge_enabled and scan_change is not None:
-        completer = _build_completer(settings)
+        # Call-site judging (yes/no decisions on ambiguous call sites) uses the
+        # heavy model (Sonnet-class) — the judgment quality materially affects
+        # whether a fix is attempted, so accuracy outweighs cost here.
+        completer = _build_completer(settings, heavy=True)
         if completer is not None:
             from depfix.obs.cost import CostStage
             from depfix.scanners.judge import LLMCallSiteJudge
@@ -973,10 +1103,21 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             )
 
     _print_header()
+    light, heavy = _resolve_light_model(settings)
+    if light != heavy:
+        console.print(
+            f"[dim]Model tiers — scan/classify: {light}  fix/generate: {heavy}[/dim]"
+        )
+    console.print(
+        f"[dim]Looking for {len(target.feed_symbols)} feed-derived symbol(s) "
+        "(old APIs + replacements)[/dim]" if target.feed_symbols else
+        "[dim]No feed change names an API symbol yet; recording SDK usage only[/dim]"
+    )
 
     owner = name = ""
     gh_auth: GitHubAppAuth | None = None
     try:
+        _max_data_bytes = int(settings.scan_max_data_mb * 1024 * 1024)
         if local_path:
             repo_full_name = str(Path(local_path).resolve())
             result = scan_path(
@@ -987,6 +1128,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 strategy=_scan_strategy,
                 provider=provider,
                 agent_completer=_scan_coordinator,
+                max_data_bytes=_max_data_bytes,
             )
         else:
             assert remote_repo is not None
@@ -1004,6 +1146,16 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 max_repo_mb=settings.clone_max_repo_mb,
             )
             repo_full_name = f"{owner}/{name}"
+            # Read per-repo .depfix.yml before cloning so max_repo_mb can
+            # override the fleet cap for large repos.
+            _per_repo_max_mb: int | None = None
+            try:
+                from depfix.repoconfig.loader import parse_repo_config
+                _config_text = gh_auth.get_file_contents(owner, name, settings.repo_config_filename)
+                if _config_text:
+                    _per_repo_max_mb = parse_repo_config(_config_text).max_repo_mb
+            except Exception:
+                pass
             result = scan_repo(
                 owner,
                 name,
@@ -1019,7 +1171,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 strategy=_scan_strategy,
                 provider=provider,
                 agent_completer=_scan_coordinator,
+                max_data_bytes=_max_data_bytes,
+                max_repo_mb=_per_repo_max_mb,
             )
+    except RepoTooLargeError as exc:
+        console.print(f"[yellow]Info: {exc}[/yellow]")
+        return 0
     except (CloneError, GitHubAppError, FileNotFoundError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
         return 1
@@ -1041,11 +1198,22 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         package_ecosystems: dict[str, tuple[str, ...]] = {}
         for sdk in provider.sdk_packages:
             package_ecosystems[sdk.name] = (*package_ecosystems.get(sdk.name, ()), sdk.ecosystem)
+        github_repos = {
+            str(feed.config.get("package") or feed.config.get("gem")): str(feed.config["github_repo"])
+            for feed in provider.feeds
+            if feed.config.get("github_repo") and (feed.config.get("package") or feed.config.get("gem"))
+        }
+        drift_completer = _build_completer(settings)
+        if drift_completer is not None:
+            drift_completer = CostTrackingCompleter(drift_completer, ledger)
         captured = capture_repository_dependency_drift(
             provider.id,
             repository=repo_full_name,
             dependencies=result.dependencies,
             package_ecosystems=package_ecosystems,
+            github_repos=github_repos,
+            completer=drift_completer,
+            github_api_url=settings.github_api_url,
         )
         if captured:
             console.print(
@@ -1101,6 +1269,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             )
     assessments = assess_scan_changes(
         result, changes_to_assess, provider_id=provider.id
+    )
+    _record_scan_detections(
+        settings, repo_full_name=repo_full_name, provider_id=provider.id,
+        result=result, assessments=assessments,
     )
     _print_scan_assessments(assessments)
     _print_dependency_drift_summary(result, assessments)
@@ -1172,9 +1344,32 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 result=result,
                 provider_id=provider.id,
                 change=scan_change,
+                narrowed_symbols=target.symbols,
             )
             record_scan_assessments(session, scan=scan_row, assessments=assessments)
-        console.print(f"[dim]saved scan to database ({repo_full_name})[/dim]\n")
+        console.print(f"[dim]saved scan to database ({repo_full_name})[/dim]")
+        if target.symbols:
+            console.print(
+                "[yellow]Narrowed scan: plan will not reuse it (not a superset). "
+                "Run without --change-file/--from-event/--old-api for a reusable scan.[/yellow]"
+            )
+        elif local_path is not None:
+            console.print(
+                f"[yellow]Local scan stored under {repo_full_name}; "
+                "`depfix plan OWNER/NAME` looks up owner/name. Use --repo to make it "
+                "reusable.[/yellow]"
+            )
+        else:
+            console.print(
+                f"[dim]Reusable by:[/dim] depfix plan {repo_full_name} "
+                f"--provider {provider.id}"
+            )
+        console.print()
+    else:
+        console.print(
+            "[yellow]--no-save: nothing persisted, so `depfix plan` will rescan "
+            "(and re-pay any scan-agent cost).[/yellow]"
+        )
 
     console.print("[dim]Evaluating depfix's deterministic regression corpus...[/dim]")
     evaluation_args = argparse.Namespace(
@@ -1410,10 +1605,17 @@ def _cmd_fix(args: argparse.Namespace) -> int:
     _print_header()
     _print_breaking_change(breaking)
     if llm_provider == "bedrock":
-        console.print(
-            f"[dim]Using provider: bedrock  model: {settings.bedrock_model}  "
-            f"region: {settings.bedrock_region}[/dim]\n"
-        )
+        light, heavy = _resolve_light_model(settings)
+        if light != heavy:
+            console.print(
+                f"[dim]Using provider: bedrock  heavy: {heavy}  light: {light}  "
+                f"region: {settings.bedrock_region}[/dim]\n"
+            )
+        else:
+            console.print(
+                f"[dim]Using provider: bedrock  model: {heavy}  "
+                f"region: {settings.bedrock_region}[/dim]\n"
+            )
     elif llm_provider == "ollama":
         console.print(f"[dim]Using provider: ollama  model: {ollama_model}[/dim]\n")
     else:
@@ -1481,6 +1683,9 @@ def _cmd_fix(args: argparse.Namespace) -> int:
             )
             result = service_result.pipeline_result
             progress.update(task, completed=True)
+    except RepoTooLargeError as exc:
+        console.print(f"[yellow]Info: {exc}[/yellow]")
+        return 0
     except (CloneError, GitHubAppError) as exc:
         console.print(f"[red]Error: {exc}[/red]")
         return 1
@@ -1646,6 +1851,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     if getattr(args, "no_upgrade_plans", False):
         settings.upgrade_plans_enabled = False
 
+    if getattr(args, "reuse_scan", None):
+        settings.plan_reuse_scan = args.reuse_scan
+
     # A repository named directly on the command line is an explicit opt-in.
     # The repo-config gate remains for unattended, fleet-wide discovery.
     has_explicit_repos = bool(getattr(args, "repos", None) or getattr(args, "repo", None))
@@ -1661,10 +1869,17 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         console.print("[red]Error: GOOGLE_API_KEY not set. Use --api-key or .env[/red]")
         return 2
     if llm_provider == "bedrock":
-        console.print(
-            f"[dim]Using provider: bedrock  model: {settings.bedrock_model}  "
-            f"region: {settings.bedrock_region}[/dim]"
-        )
+        light, heavy = _resolve_light_model(settings)
+        if light != heavy:
+            console.print(
+                f"[dim]Using provider: bedrock  heavy: {heavy}  light: {light}  "
+                f"region: {settings.bedrock_region}[/dim]"
+            )
+        else:
+            console.print(
+                f"[dim]Using provider: bedrock  model: {heavy}  "
+                f"region: {settings.bedrock_region}[/dim]"
+            )
 
     providers_file = args.providers_file or settings.providers_file
     try:
@@ -1762,6 +1977,17 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
             )
             gh_auth.close()
             return 2
+        report_only = [a for a in discovered if not a.edits and not a.is_upgrade]
+        discovered = [a for a in discovered if a.edits or a.is_upgrade]
+        if report_only:
+            console.print(
+                f"[dim]{len(report_only)} report-only drift plan(s) skipped (no rewritable "
+                f"manifest); see {settings.learned_migrations_file}[/dim]"
+            )
+        if not discovered:
+            console.print("[yellow]No plan with committable edits to apply.[/yellow]")
+            gh_auth.close()
+            return 0
         for artifact in discovered:
             plan_artifacts[(artifact.repo_full_name, artifact.change_dedupe_key)] = artifact
         changes = [artifact.change for artifact in discovered]
@@ -1872,13 +2098,25 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 if change.plan_artifact is None:
                     continue
                 canonical = change.plan_artifact.write_for_repo(settings.plan_dir)
+                archived = change.plan_artifact.write_to_archive(settings.plan_dir)
+                _record_planned_detection(settings, change.plan_artifact, canonical)
                 if change.plan_artifact.is_upgrade:
                     console.print(f"[green]Upgrade plan:[/green] {canonical}  "
                                   f"[dim]{change.plan_artifact.upgrade_package} "
                                   f"{change.plan_artifact.upgrade_from or '?'} → "
                                   f"{change.plan_artifact.upgrade_to}[/dim]")
+                elif change.plan_artifact.is_drift:
+                    art = change.plan_artifact
+                    color = "red" if art.drift_risk == "multi-major" else "yellow"
+                    label = "PR planned" if art.edits else "report-only, no PR"
+                    console.print(
+                        f"[{color}]Version drift ({art.drift_risk}, {label}):[/{color}] "
+                        f"{canonical}  [dim]{art.change.package} "
+                        f"{art.change.old_version} → {art.change.new_version}[/dim]"
+                    )
                 else:
                     console.print(f"[green]Plan artifact:[/green] {canonical}")
+                console.print(f"[dim]Archived to:[/dim] {archived}")
                 if args.plan_output_dir != Path(settings.plan_dir).as_posix():
                     stamped = legacy_dir / (
                         f"{outcome.run_id}-"
@@ -1915,6 +2153,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
     if not outcome.locked:
         console.print("[yellow]Another orchestrator run already holds the lock; skipped.[/yellow]")
+
+    if args.command == "apply":
+        _record_applied_detections(settings, outcome)
 
     if not outcome.failures and outcome.locked and getattr(args, "_depfix_has_target", False):
         from depfix.defaults import save_context
@@ -2129,6 +2370,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the full structural change list for each event",
     )
+    watch_p.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Ignore FEED_POLL_TTL_SECONDS and poll every feed now.",
+    )
     _add_command_logging_arguments(watch_p)
 
     # -- classify -----------------------------------------------------------------
@@ -2249,6 +2495,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan_p.add_argument(
         "--no-save", action="store_true", help="Don't persist this scan to the database"
+    )
+    scan_p.add_argument(
+        "--anyversion",
+        action="store_true",
+        help="Produce a PR artifact for a version drift of ANY distance "
+        "(overrides DRIFT_SCOPE for this run and persists to .depfix-local.yml).",
     )
     scan_p.add_argument(
         "--show-low",
@@ -2427,6 +2679,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print a row for every skipped repo and change too, not just the ones "
         "actually processed.",
+    )
+    workflow_p.add_argument(
+        "--reuse-scan", choices=["auto", "require", "never"], default=None,
+        help="Where call sites come from. 'require' refuses to rescan, so a plan "
+        "can only reflect a `depfix scan` you reviewed.",
     )
     _add_command_logging_arguments(workflow_p)
 
@@ -2617,7 +2874,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 _STATUS_STYLE_MAP = {
     "pr_opened": "green", "fixed_no_pr": "cyan", "no_call_sites": "dim",
     "version_not_affected": "dim",
-    "no_kept_edits": "yellow", "failed": "red", "ignored": "dim",
+    "report_only": "yellow", "no_kept_edits": "yellow", "failed": "red", "ignored": "dim",
 }
 
 

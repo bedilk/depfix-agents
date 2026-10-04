@@ -11,12 +11,6 @@ providers:
     ecosystem: pypi
   - name: ruby-openai
     ecosystem: rubygems
-  call_site_anchors:
-  - new OpenAI(
-  - openai.chat.completions
-  - openai.responses
-  - openai.embeddings
-  - api.openai.com
   feeds:
   - kind: npm_dist_tag
     package: openai
@@ -53,15 +47,6 @@ providers:
     ecosystem: pypi
   - name: stripe
     ecosystem: rubygems
-  call_site_anchors:
-  - new Stripe(
-  - stripe.charges
-  - stripe.paymentIntents
-  - stripe.checkout.sessions
-  - 'apiVersion:'
-  - api.stripe.com
-  - stripe.Charge
-  - 'Stripe::'
   feeds:
   - kind: npm_dist_tag
     package: stripe
@@ -102,10 +87,6 @@ providers:
     ecosystem: pypi
   - name: anthropic
     ecosystem: rubygems
-  call_site_anchors:
-  - new Anthropic(
-  - anthropic.messages.create
-  - api.anthropic.com
   feeds:
   - kind: npm_dist_tag
     package: '@anthropic-ai/sdk'
@@ -140,10 +121,6 @@ providers:
     ecosystem: npm
   - name: supabase
     ecosystem: pypi
-  call_site_anchors:
-  - createClient(
-  - supabase.from(
-  - supabase.auth
   feeds:
   - kind: npm_dist_tag
     package: '@supabase/supabase-js'
@@ -172,10 +149,6 @@ providers:
   sdk_packages:
   - name: ai
     ecosystem: npm
-  call_site_anchors:
-  - generateText(
-  - streamText(
-  - useChat(
   feeds:
   - kind: npm_dist_tag
     package: ai
@@ -208,10 +181,6 @@ providers:
     ecosystem: pypi
   - name: sentry-ruby
     ecosystem: rubygems
-  call_site_anchors:
-  - Sentry.init(
-  - Sentry.captureException(
-  - Sentry.captureMessage(
   feeds:
   - kind: npm_dist_tag
     package: '@sentry/node'
@@ -244,10 +213,6 @@ providers:
     ecosystem: npm
   - name: prisma
     ecosystem: pypi
-  call_site_anchors:
-  - new PrismaClient(
-  - prisma.$queryRaw
-  - prisma.$executeRaw
   feeds:
   - kind: npm_dist_tag
     package: '@prisma/client'
@@ -272,10 +237,6 @@ providers:
     ecosystem: pypi
   - name: clerk-sdk-ruby
     ecosystem: rubygems
-  call_site_anchors:
-  - auth(
-  - currentUser(
-  - clerkClient
   feeds:
   - kind: npm_dist_tag
     package: '@clerk/nextjs'
@@ -312,14 +273,6 @@ providers:
     ecosystem: pypi
   - name: langchain-google-genai
     ecosystem: pypi
-  call_site_anchors:
-  - new ChatOpenAI(
-  - new OpenAIEmbeddings(
-  - new OpenAI(
-  - ChatOpenAI(
-  - ChatAnthropic(
-  - ChatGoogleGenerativeAI(
-  - from langchain
   feeds:
   - kind: npm_dist_tag
     package: '@langchain/openai'
@@ -364,11 +317,6 @@ providers:
     ecosystem: pypi
   - name: aws-sdk-s3
     ecosystem: rubygems
-  call_site_anchors:
-  - new S3Client(
-  - new S3(
-  - new PutObjectCommand(
-  - new GetObjectCommand(
   feeds:
   - kind: npm_dist_tag
     package: '@aws-sdk/client-s3'
@@ -393,11 +341,6 @@ providers:
     ecosystem: npm
   - name: firebase-admin
     ecosystem: pypi
-  call_site_anchors:
-  - initializeApp(
-  - getAuth(
-  - getFirestore(
-  - getDatabase(
   feeds:
   - kind: npm_dist_tag
     package: firebase
@@ -430,10 +373,6 @@ providers:
     ecosystem: pypi
   - name: twilio-ruby
     ecosystem: rubygems
-  call_site_anchors:
-  - require("twilio")
-  - client.messages.create(
-  - client.calls.create(
   feeds:
   - kind: npm_dist_tag
     package: twilio
@@ -466,9 +405,6 @@ providers:
     ecosystem: pypi
   - name: sendgrid-ruby
     ecosystem: rubygems
-  call_site_anchors:
-  - sgMail.setApiKey(
-  - sgMail.send(
   feeds:
   - kind: npm_dist_tag
     package: '@sendgrid/mail'
@@ -508,12 +444,6 @@ providers:
     ecosystem: rubygems
   - name: PyGithub
     ecosystem: pypi
-  call_site_anchors:
-  - new Octokit(
-  - octokit.rest.
-  - octokit.request(
-  - context.octokit.
-  - context.github.
   feeds:
   - kind: npm_dist_tag
     package: '@octokit/rest'
@@ -540,10 +470,6 @@ providers:
     ecosystem: pypi
   - name: slack-ruby-client
     ecosystem: rubygems
-  call_site_anchors:
-  - new WebClient(
-  - web.chat.postMessage(
-  - web.conversations.
   feeds:
   - kind: npm_dist_tag
     package: '@slack/web-api'
@@ -576,10 +502,6 @@ providers:
     ecosystem: pypi
   - name: discordrb
     ecosystem: rubygems
-  call_site_anchors:
-  - new Client(
-  - client.login(
-  - client.on("interactionCreate"
   feeds:
   - kind: npm_dist_tag
     package: discord.js
@@ -608,10 +530,6 @@ providers:
     ecosystem: pypi
   - name: mongo
     ecosystem: rubygems
-  call_site_anchors:
-  - new MongoClient(
-  - client.db(
-  - .collection(
   feeds:
   - kind: npm_dist_tag
     package: mongodb
@@ -644,11 +562,6 @@ providers:
     ecosystem: pypi
   - name: redis
     ecosystem: rubygems
-  call_site_anchors:
-  - createClient(
-  - client.connect(
-  - client.get(
-  - client.set(
   feeds:
   - kind: npm_dist_tag
     package: redis
@@ -675,10 +588,6 @@ providers:
     ecosystem: pypi
   - name: posthog-ruby
     ecosystem: rubygems
-  call_site_anchors:
-  - new PostHog(
-  - posthog.capture(
-  - posthog.identify(
   feeds:
   - kind: npm_dist_tag
     package: posthog-node
@@ -705,10 +614,6 @@ providers:
     ecosystem: pypi
   - name: algolia
     ecosystem: rubygems
-  call_site_anchors:
-  - algoliasearch(
-  - searchClient.search(
-  - initIndex(
   feeds:
   - kind: npm_dist_tag
     package: algoliasearch
@@ -735,12 +640,6 @@ providers:
     ecosystem: npm
   - name: google-cloud-storage
     ecosystem: pypi
-  call_site_anchors:
-  - new Storage(
-  - storage.bucket(
-  - bucket.file(
-  - new GoogleAuth(
-  - google.cloud.storage
   feeds:
   - kind: npm_dist_tag
     package: '@google-cloud/storage'
@@ -775,12 +674,6 @@ providers:
     ecosystem: pypi
   - name: elasticsearch
     ecosystem: rubygems
-  call_site_anchors:
-  - new Client(
-  - client.search(
-  - client.indices.
-  - Elasticsearch(
-  - elasticsearch.Elasticsearch(
   feeds:
   - kind: npm_dist_tag
     package: '@elastic/elasticsearch'
@@ -817,12 +710,6 @@ providers:
     ecosystem: pypi
   - name: pg
     ecosystem: rubygems
-  call_site_anchors:
-  - new Pool(
-  - pool.query(
-  - new Client(
-  - client.query(
-  - psycopg.connect(
   feeds:
   - kind: npm_dist_tag
     package: pg
@@ -857,12 +744,6 @@ providers:
     ecosystem: pypi
   - name: ruby-kafka
     ecosystem: rubygems
-  call_site_anchors:
-  - new Kafka(
-  - producer.send(
-  - consumer.run(
-  - KafkaProducer(
-  - KafkaConsumer(
   feeds:
   - kind: npm_dist_tag
     package: kafkajs
@@ -897,12 +778,6 @@ providers:
     ecosystem: pypi
   - name: bunny
     ecosystem: rubygems
-  call_site_anchors:
-  - amqp.connect(
-  - channel.assertQueue(
-  - channel.sendToQueue(
-  - pika.BlockingConnection(
-  - channel.basic_publish(
   feeds:
   - kind: npm_dist_tag
     package: amqplib

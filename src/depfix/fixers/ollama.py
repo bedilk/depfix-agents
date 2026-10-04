@@ -60,7 +60,7 @@ class OllamaFixGenerator:
         if redaction.redacted:
             logger.info(
                 "Redacted %d secret value(s) in %s before sending to %s",
-                len(redaction.secrets), file_usage.filepath, self.model,
+                redaction.redacted_count, file_usage.filepath, self.model,
             )
         prompt = self._build_prompt(safe_usage, breaking_change, feedback=safe_feedback)
 

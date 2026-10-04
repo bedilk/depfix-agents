@@ -43,6 +43,10 @@ def has_test_script(root: str | Path, ecosystem: str = "javascript") -> bool:
         from depfix.ecosystems.python_runtime import has_pytest_setup
 
         return has_pytest_setup(root)
+    if ecosystem == "go":
+        from depfix.ecosystems.go_runtime import has_test_setup
+
+        return has_test_setup(root)
     if ecosystem == "ruby":
         from depfix.ecosystems.ruby_runtime import has_test_setup
 
@@ -150,6 +154,8 @@ def run_tests(
     root = Path(root)
     effective_cwd = Path(test_cwd) if test_cwd else root
 
+    if ecosystem == "go":
+        return _run_go_tests(effective_cwd, timeout=timeout, max_output_bytes=max_output_bytes)
     if ecosystem == "ruby":
         return _run_ruby_tests(effective_cwd, timeout=timeout, max_output_bytes=max_output_bytes)
     if ecosystem == "python":
@@ -271,6 +277,57 @@ def _run_pytest(
 
     return TestRunResult(
         framework=TestFramework.PYTEST,
+        command=result.argv,
+        exit_code=result.exit_code,
+        duration_ms=result.duration_ms,
+        cases=cases,
+        parse_error=parse_error,
+        used_fallback_parser=used_fallback,
+        raw_output_tail=(result.stdout[-2000:] + result.stderr[-2000:]),
+    )
+
+
+def _run_go_tests(cwd: Path, *, timeout: float, max_output_bytes: int) -> TestRunResult:
+    """Run ``go test -json -count=1 ./...`` and parse its event stream.
+
+    ``-count=1`` is not optional: Go's test cache would otherwise serve the
+    after-fix run from the baseline run's results, producing a pass for code
+    that was never executed.
+    """
+    from depfix.ecosystems.go_runtime import test_argv
+    from depfix.ecosystems.specs import GO
+
+    argv = test_argv(cwd)
+    if argv is None:
+        return TestRunResult(
+            framework=TestFramework.GO_TEST,
+            parse_error="go not on PATH, or no go.mod in this checkout",
+            used_fallback_parser=True,
+        )
+
+    result = run_sandboxed(
+        argv,
+        cwd=cwd,
+        timeout=timeout,
+        extra_env={"CI": "1"},
+        max_output_bytes=max_output_bytes,
+        extra_allowlist=GO.env_allowlist_extra,
+    )
+    if result.timed_out:
+        return TestRunResult(
+            framework=TestFramework.GO_TEST,
+            command=result.argv,
+            exit_code=result.exit_code,
+            duration_ms=result.duration_ms,
+            timed_out=True,
+            raw_output_tail=result.stdout[-2000:] + result.stderr[-2000:],
+        )
+
+    cases, parse_error, used_fallback = parse_output(
+        TestFramework.GO_TEST, result.stdout, result.stderr
+    )
+    return TestRunResult(
+        framework=TestFramework.GO_TEST,
         command=result.argv,
         exit_code=result.exit_code,
         duration_ms=result.duration_ms,

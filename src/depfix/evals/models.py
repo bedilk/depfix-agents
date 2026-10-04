@@ -97,7 +97,6 @@ class EvalCase:
     provider_id: str = ""
     sdk_packages: list[str] = field(default_factory=list)
     api_base_urls: list[str] = field(default_factory=list)
-    call_site_anchors: list[str] = field(default_factory=list)
     symbols: list[str] = field(default_factory=list)
     expected_call_sites: list[ExpectedCallSite] = field(default_factory=list)
     forbidden_files: list[str] = field(default_factory=list)

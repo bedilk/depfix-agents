@@ -15,6 +15,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
 
+#: Hard ceiling on how many files a single repository scan may read.
+#:
+#: ``scan_max_files`` below is the knob an operator turns; this is the
+#: number they cannot turn it past. Enforced twice on purpose: here, so
+#: a bad ``SCAN_MAX_FILES`` fails at start-up rather than halfway through
+#: a fleet run; and in every scanner via
+#: :func:`depfix.scanners.limits.clamp_max_files`, so a programmatic caller
+#: (a test, a script, a future adapter) cannot exceed it either.
+MAX_SCANNABLE_FILES = 15_000
+
 
 class Settings(BaseSettings):
     """Runtime settings for depfix."""
@@ -32,7 +42,11 @@ class Settings(BaseSettings):
         default="gemini", description="Which LLM backend to use for `depfix run`"
     )
     google_api_key: str = Field(default="", description="Google Generative AI API key")
-    gemini_model: str = Field(default="gemini-2.5-flash", description="Gemini model id")
+    gemini_model: str = Field(default="gemini-2.5-flash", description="Gemini model ID for heavy tasks")
+    gemini_light_model: str = Field(
+        default="gemini-2.0-flash-lite",
+        description="Gemini model ID for lightweight tasks. Empty means use gemini_model for everything.",
+    )
 
     # --- AWS Bedrock (Claude) -------------------------------------------------
     bedrock_access_key: str = Field(default="", description="AWS Bedrock access key")
@@ -41,7 +55,12 @@ class Settings(BaseSettings):
     bedrock_profile: str = Field(default="", description="AWS profile name for Bedrock auth")
     bedrock_model: str = Field(
         default="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-        description="Bedrock model ID",
+        description="Bedrock model ID for heavy tasks (fix generation, characterization, retry).",
+    )
+    bedrock_light_model: str = Field(
+        default="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        description="Bedrock model ID for lightweight tasks (classification, scanning, judging). "
+        "Set to empty string to use bedrock_model for everything.",
     )
     llm_max_retries: int = Field(default=3, ge=1, le=10)
     llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
@@ -59,6 +78,10 @@ class Settings(BaseSettings):
     # --- Ollama (local LLM) ---------------------------------------------------
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_model: str = Field(default="qwen2.5-coder:7b")
+    ollama_light_model: str = Field(
+        default="",
+        description="Ollama model for lightweight tasks. Empty means use ollama_model for everything.",
+    )
     ollama_timeout: float = Field(default=120.0, ge=1.0, le=600.0)
 
     # --- Scanner defaults -----------------------------------------------------
@@ -98,6 +121,16 @@ class Settings(BaseSettings):
         ge=0,
         description="Downgrade a same-major drift to a draft review PR once the minor gap "
         "exceeds this. None (default) keeps every same-major drift automatic.",
+    )
+    drift_scope: str = Field(
+        default="one-major",
+        description="Which registry version drifts produce a PR artifact.\n"
+        "  one-major: a same-major drift OR a single-major step (N -> N+1) is "
+        "actionable; a gap of 2+ majors is report-only.\n"
+        "  any-minor: only a same-major drift (any minor/patch distance) is "
+        "actionable; ANY major step is report-only.\n"
+        "  any: every forward drift is actionable regardless of distance. "
+        "Enabled per-run by `depfix scan --anyversion`.",
     )
 
     # --- change sources (Week 1) ----------------------------------------------
@@ -169,9 +202,22 @@ class Settings(BaseSettings):
         description="Skip individual source files larger than this during a repo scan.",
     )
     scan_max_files: int = Field(
-        default=20_000,
+        default=MAX_SCANNABLE_FILES,
         ge=1,
-        description="Hard cap on files scanned per repo, to bound worst-case scan time.",
+        le=MAX_SCANNABLE_FILES,
+        description=(
+            "Files scanned per repo, to bound worst-case scan time. Cannot exceed "
+            f"MAX_SCANNABLE_FILES ({MAX_SCANNABLE_FILES}); a larger value is a "
+            "configuration error, not a silently-clamped request."
+        ),
+    )
+    scan_max_data_mb: float = Field(
+        default=50.0,
+        ge=0.1,
+        description=(
+            "Hard cap on total data read across all scanned files per repo (in MB). "
+            "The scanner stops accepting new files once cumulative bytes read reaches this limit."
+        ),
     )
     scan_min_recall: float = Field(
         default=0.85,
@@ -179,6 +225,29 @@ class Settings(BaseSettings):
         le=1.0,
         description="Recall floor for the call_sites eval category. Per docs/plan.md, "
         "falling below this is the trigger to bring in tree-sitter instead of regex.",
+    )
+    scan_type_resolve: bool = Field(
+        default=True,
+        description="Use the repo's own type checker (tsc for TS, pyright for Python) to "
+        "find SDK call sites with declaration evidence. Falls back silently when "
+        "the type checker is unavailable.",
+    )
+    scan_align_symbols: bool = Field(
+        default=True,
+        description="When changes remain unmatched after deterministic scanning, run one "
+        "cheap LLM call per (provider, commit) to align documented API names "
+        "with observed symbols. Skipped when nothing is ambiguous.",
+    )
+    scan_max_cost_usd: float | None = Field(
+        default=0.10,
+        ge=0.0,
+        description="Hard budget for LLM spend within one scan. The scan stops cleanly and "
+        "reports partial results when this is exceeded. None means uncapped.",
+    )
+    scan_judge_model: str = Field(
+        default="",
+        description="Model ID for the cheap alignment/judge calls during scan. Empty means "
+        "use the main model. Set to a flash/haiku model to reduce cost.",
     )
     scan_llm_judge_enabled: bool = Field(default=False)
     scan_llm_judge_max_candidates: int = Field(default=20, ge=1, le=100)
@@ -230,7 +299,19 @@ class Settings(BaseSettings):
         description="Total wall-clock budget for one plan-time impact check.",
     )
     verify_typecheck_timeout: float = Field(default=300.0, ge=1.0, le=1800.0)
+    plan_reuse_scan: Literal["auto", "require", "never"] = Field(
+        default="auto",
+        description="Where plan/apply get call sites. 'auto': reuse a matching "
+        "`depfix scan` result, else rescan. 'require': refuse to rescan, so the "
+        "artifact can only ever reflect a scan the operator reviewed. 'never': "
+        "always rescan (debugging).",
+    )
     plan_dir: str = Field(default=".depfix/plans")
+    learned_migrations_file: str = Field(
+        default=".depfix/learned_migrations.yaml",
+        description="Per-repo YAML store of confirmed breaking changes discovered during scanning.",
+    )
+    learned_migrations_include_candidates: bool = Field(default=False)
     repository_observations_file: str = Field(
         default=".depfix/repository_migrations.yaml",
         description="Where `depfix scan` records resolved repository API usage. "
@@ -347,6 +428,16 @@ class Settings(BaseSettings):
         description="Maximum LOW-confidence sites the CallSiteJudgeAgent will "
         "review per repo scan in hybrid mode. Sites beyond the cap keep their "
         "original LOW confidence without LLM review.",
+    )
+
+    # --- Feed poll TTL ------------------------------------------------------------
+    feed_poll_ttl_seconds: int = Field(
+        default=3600,
+        ge=0,
+        description="How long (seconds) a feed poll result is considered fresh. When a feed "
+        "was last polled within this window the HTTP call is skipped and the stored "
+        "token is reused. 0 disables TTL-based skipping (always poll). Useful for "
+        "local dev or tests where you want fresh data every run.",
     )
 
     # --- Version cooldown gate ----------------------------------------------------

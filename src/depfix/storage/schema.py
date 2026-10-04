@@ -289,6 +289,10 @@ class RepoScanRow(Base):
     provider_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     files_scanned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     manifest_matches: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    dependencies: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    #: Non-empty when this scan was narrowed to one change's symbols. A narrowed
+    #: scan is NOT a superset, so plan must not reuse it for another change.
+    narrowed_symbols: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     errors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     scanned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
@@ -333,6 +337,8 @@ class CallSiteRow(Base):
     evidence: Mapped[str] = mapped_column(Text, nullable=False, default="")
     severity: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
     severity_evidence: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)
+    context_before: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    context_after: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     repo_scan: Mapped[RepoScanRow] = relationship(back_populates="call_sites")
 
@@ -569,6 +575,9 @@ class AttemptStatus(enum.StrEnum):
     FIXED_NO_PR = "fixed_no_pr"
     NO_CALL_SITES = "no_call_sites"
     VERSION_NOT_AFFECTED = "version_not_affected"
+    #: Upstream removed an API this repo still calls, with no replacement.
+    #: Information only: never fixed, never a PR. Rechecked when HEAD moves.
+    REPORT_ONLY = "report_only"
     NO_KEPT_EDITS = "no_kept_edits"
     FAILED = "failed"
     IGNORED = "ignored"

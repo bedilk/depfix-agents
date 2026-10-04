@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from depfix.catalog.learned import (
@@ -22,7 +21,6 @@ __all__ = [
     "STATUS_CANDIDATE",
     "STATUS_CONFIRMED",
     "LearnedMigration",
-    "canonical_providers_file",
     "learned_migrations_file",
     "load_learned_migrations",
     "persist_learned_migrations",
@@ -30,12 +28,6 @@ __all__ = [
     "record_detected_usage",
     "repository_observations_file",
 ]
-
-
-def canonical_providers_file() -> str | None:
-    """The bundled, hand-curated migration catalog. Read-only at runtime."""
-    candidate = Path(__file__).with_name("canonical_migrations.yaml")
-    return str(candidate) if candidate.is_file() else None
 
 
 def repository_observations_file(settings: "Settings | None" = None) -> str:

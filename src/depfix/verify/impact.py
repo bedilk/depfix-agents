@@ -111,7 +111,7 @@ def run_impact_check(
         return ImpactReport(ran=False, skipped_reason=f"budget of {max_seconds:.0f}s exhausted before {phase}")
     if not checkout.is_temporary:
         return ImpactReport(ran=False, skipped_reason="checkout is not disposable")
-    if ecosystem not in ("javascript", "python", "ruby"):
+    if ecosystem not in ("javascript", "python", "ruby", "go"):
         return ImpactReport(ran=False, skipped_reason=f"no impact runner for {ecosystem}")
     if not has_test_script(root, ecosystem):
         return ImpactReport(ran=False, skipped_reason="repo has no test setup")
@@ -155,6 +155,8 @@ def run_impact_check(
             )
         if ecosystem == "ruby":
             _regenerate_ruby_lockfile(checkout, editor, touched, timeout=install_timeout)
+        if ecosystem == "go":
+            _regenerate_go_lockfile(checkout, editor, touched, timeout=install_timeout)
 
         if (over := budget_exhausted("the bumped install")) is not None:
             return over
@@ -230,6 +232,13 @@ def _manifest_bump_contents(
         return {
             bump.manifest_relpath: bump.fixed_content
             for bump in build_ruby_dependency_drift_bumps(root, change)
+        }
+    if ecosystem == "go":
+        from depfix.ecosystems.go_manifests import build_go_dependency_drift_bumps
+
+        return {
+            bump.manifest_relpath: bump.fixed_content
+            for bump in build_go_dependency_drift_bumps(root, change)
         }
     return _python_requirement_bumps(root, change)
 
@@ -337,4 +346,37 @@ def _regenerate_ruby_lockfile(
         if relpath in before and after != before[relpath]:
             lockfile.write_text(before[relpath], encoding="utf-8")
             editor.write_fix(relpath, after)
+            touched.append(relpath)
+
+
+def _regenerate_go_lockfile(
+    checkout: Checkout, editor: WorkspaceEditor, touched: list[str], *, timeout: float
+) -> None:
+    """Refresh go.sum so the bumped install can resolve at all, recording any
+    changed file with the editor so the ``finally`` revert restores it too."""
+    from depfix.ecosystems.go_lockfile import go_generated_paths, try_refresh_go_lockfile
+
+    root = Path(checkout.path)
+    before: dict[str, str] = {}
+    for generated in go_generated_paths(root):
+        try:
+            before[generated.relative_to(root).as_posix()] = generated.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+
+    ok, message = try_refresh_go_lockfile(root, timeout=timeout)
+    if not ok:
+        logger.debug("impact check: go.sum not regenerated: %s", message)
+        return
+    for relpath, original_text in before.items():
+        path = root / relpath
+        try:
+            refreshed = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if refreshed == original_text:
+            continue
+        path.write_text(original_text, encoding="utf-8")
+        editor.write_fix(relpath, refreshed)
+        if relpath not in touched:
             touched.append(relpath)

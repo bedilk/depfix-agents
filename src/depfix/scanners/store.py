@@ -9,6 +9,7 @@ opening their own transaction -- callers wrap with
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from depfix.core.models import BreakingChange
 from depfix.scanners.matching import ScanChangeAssessment
-from depfix.scanners.models import SCANNER_VERSION, RepoScanResult
+from depfix.scanners.models import SCANNER_VERSION, DeclaredDependency, RepoScanResult
 from depfix.storage.schema import (
     BreakingChangeRow,
     CallSiteRow,
@@ -64,6 +65,7 @@ def record_scan(
     installation_id: int | None = None,
     default_branch: str | None = None,
     change: BreakingChange | None = None,
+    narrowed_symbols: tuple[str, ...] | list[str] = (),
 ) -> RepoScanRow:
     """Persist one :class:`RepoScanResult`, creating the parent ``repo`` row
     if this is the first scan of it.
@@ -94,6 +96,8 @@ def record_scan(
         provider_id=provider_id,
         files_scanned=result.files_scanned,
         manifest_matches=list(result.manifest_matches),
+        dependencies=[dataclasses.asdict(d) for d in result.dependencies],
+        narrowed_symbols=list(narrowed_symbols),
         errors=list(result.errors),
         scanned_at=now,
     )
@@ -110,6 +114,8 @@ def record_scan(
             evidence=site.evidence,
             severity=scan_severity.value if site.is_actionable and scan_severity else None,
             severity_evidence=scan_evidence.value if site.is_actionable and scan_evidence else None,
+            context_before=list(site.context_before),
+            context_after=list(site.context_after),
         )
         for site in result.call_sites
     ]
@@ -128,6 +134,86 @@ def latest_scan(session: Session, repo_full_name: str) -> RepoScanRow | None:
         .limit(1)
     )
     return session.execute(stmt).scalar_one_or_none()
+
+
+def latest_scan_for_provider(
+    session: Session, repo_full_name: str, provider_id: str
+) -> RepoScanRow | None:
+    """Most recent scan of ``repo_full_name`` for a specific provider."""
+    stmt = (
+        select(RepoScanRow)
+        .where(
+            RepoScanRow.repo_id == repo_full_name,
+            RepoScanRow.provider_id == provider_id,
+        )
+        .order_by(RepoScanRow.scanned_at.desc())
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def load_scan_result(scan_row: RepoScanRow) -> RepoScanResult:
+    """Rebuild the exact result ``depfix scan`` produced, so plan's fix/verify
+    stages see the same evidence the operator read."""
+    from depfix.scanners.models import CallSite, CallSiteKind, MatchConfidence
+
+    call_sites = [
+        CallSite(
+            filepath=row.filepath,
+            line_number=row.line_number,
+            column=row.column,
+            line_content=row.line_content,
+            kind=CallSiteKind(row.kind),
+            confidence=MatchConfidence(row.confidence),
+            symbol=row.symbol,
+            provider_id=row.provider_id,
+            evidence=row.evidence,
+            context_before=tuple(row.context_before or ()),
+            context_after=tuple(row.context_after or ()),
+        )
+        for row in scan_row.call_sites
+    ]
+    return RepoScanResult(
+        repo_full_name=scan_row.repo_id,
+        commit_sha=scan_row.commit_sha,
+        scanner_version=scan_row.scanner_version,
+        call_sites=call_sites,
+        manifest_matches=list(scan_row.manifest_matches),
+        dependencies=[
+            DeclaredDependency(**d) for d in (scan_row.dependencies or [])
+            if isinstance(d, dict)
+        ],
+        files_scanned=scan_row.files_scanned,
+        errors=list(scan_row.errors),
+    )
+
+
+def reusable_scan_for_provider(
+    session: Session, repo_full_name: str, provider_id: str, *, commit_sha: str,
+) -> RepoScanRow | None:
+    """The newest scan plan may safely reuse. Three correctness conditions:
+
+    * same ``commit_sha`` -- call-site line numbers belong to one tree, and the
+      plan artifact is pinned to that tree's sha;
+    * broad (empty ``narrowed_symbols``) -- a narrowed scan is not a superset;
+    * same ``scanner_version`` -- older output may use other conventions.
+    """
+    if not commit_sha:
+        return None
+    rows = session.scalars(
+        select(RepoScanRow)
+        .where(
+            RepoScanRow.repo_id == repo_full_name,
+            RepoScanRow.provider_id == provider_id,
+            RepoScanRow.commit_sha == commit_sha,
+        )
+        .order_by(RepoScanRow.scanned_at.desc())
+    ).all()
+    compatible_versions = {SCANNER_VERSION, f"agent-{SCANNER_VERSION}"}
+    return next(
+        (r for r in rows if r.scanner_version in compatible_versions and not r.narrowed_symbols),
+        None,
+    )
 
 
 def record_scan_assessments(

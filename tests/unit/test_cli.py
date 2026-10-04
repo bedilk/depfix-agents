@@ -243,7 +243,7 @@ def test_scan_derives_feed_candidate_only_from_observed_api_usage(monkeypatch, t
     monkeypatch.setattr(cli, "ensure_changes_detected", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(cli, "all_changes_for_provider", lambda _provider: [])
     monkeypatch.setattr(cli, "latest_change_for_provider", lambda _provider: (None, None))
-    monkeypatch.setattr(cli, "_build_completer", lambda _settings: object())
+    monkeypatch.setattr(cli, "_build_completer", lambda _settings, **_kw: object())
     monkeypatch.setattr(cli, "_print_header", lambda: None)
     monkeypatch.setattr(cli, "_print_scan_result", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(cli, "_print_scan_assessments", lambda *_args, **_kwargs: None)
@@ -312,7 +312,7 @@ def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "ensure_changes_detected", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(cli, "all_changes_for_provider", lambda _provider: [])
     monkeypatch.setattr(cli, "latest_change_for_provider", lambda _provider: (None, None))
-    monkeypatch.setattr(cli, "_build_completer", lambda _settings: object())
+    monkeypatch.setattr(cli, "_build_completer", lambda _settings, **_kw: object())
     monkeypatch.setattr(cli, "_print_header", lambda: None)
     monkeypatch.setattr(cli, "_print_scan_result", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(cli, "_print_scan_assessments", lambda *_args, **_kwargs: None)
@@ -320,8 +320,6 @@ def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "init_schema", lambda: None)
     monkeypatch.setattr(cli, "record_scan", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(cli, "record_scan_assessments", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(catalog, "canonical_providers_file", lambda: "catalog.yaml")
-
     @contextmanager
     def fake_session_scope():
         yield object()
@@ -356,8 +354,53 @@ def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_pat
     monkeypatch.setattr(catalog, "record_detected_usage", record)
 
     assert cli._cmd_scan(args) == 0
-    assert learned["path"] == "catalog.yaml"
+    assert learned["path"] == ".depfix/repository_migrations.yaml"
     assert learned["commit_sha"] == "observed-sha"
     assert learned["detected_symbols"] == ["openai.createChatCompletion"]
     assert learned["classified_changes"] == [candidate]
     assert learned["sdk_versions"] == {"openai": "3.3.0"}
+
+
+# -- tiered model routing ------------------------------------------------------
+
+
+def test_resolve_light_model_returns_separate_ids_for_bedrock() -> None:
+    settings = Settings(
+        llm_provider="bedrock",
+        bedrock_model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        bedrock_light_model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    )
+    light, heavy = cli._resolve_light_model(settings)
+    assert light == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert heavy == "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+
+def test_resolve_light_model_falls_back_to_heavy_when_empty() -> None:
+    settings = Settings(
+        llm_provider="bedrock",
+        bedrock_model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        bedrock_light_model="",
+    )
+    light, heavy = cli._resolve_light_model(settings)
+    assert light == heavy
+
+
+def test_resolve_light_model_works_for_gemini() -> None:
+    settings = Settings(
+        llm_provider="gemini",
+        gemini_model="gemini-2.5-flash",
+        gemini_light_model="gemini-2.0-flash-lite",
+    )
+    light, heavy = cli._resolve_light_model(settings)
+    assert light == "gemini-2.0-flash-lite"
+    assert heavy == "gemini-2.5-flash"
+
+
+def test_resolve_light_model_works_for_ollama() -> None:
+    settings = Settings(
+        llm_provider="ollama",
+        ollama_model="qwen2.5-coder:7b",
+        ollama_light_model="",
+    )
+    light, heavy = cli._resolve_light_model(settings)
+    assert light == heavy == "qwen2.5-coder:7b"

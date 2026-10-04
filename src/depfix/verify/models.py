@@ -78,6 +78,7 @@ class TestFramework(StrEnum):
     PYTEST = "pytest"
     RSPEC = "rspec"
     MINITEST = "minitest"
+    GO_TEST = "go_test"
     UNKNOWN = "unknown"
 
 

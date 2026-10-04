@@ -38,6 +38,7 @@ class ChangeKind(StrEnum):
 
     METHOD_RENAMED = "method_renamed"
     METHOD_REMOVED = "method_removed"
+    METHOD_DEPRECATED = "method_deprecated"
     MODULE_SHAPE_CHANGED = "module_shape_changed"
     PARAM_RENAMED = "param_renamed"
     PARAM_REMOVED = "param_removed"
@@ -74,7 +75,11 @@ REMOVAL_KINDS: frozenset[ChangeKind] = frozenset(
 # the classifiers; a security advisory with no published fix is a different
 # thing -- a real finding with no upgrade path yet -- so it is listed here
 # only, and never leaks into removal-shaped classification logic.
-_NEW_API_OPTIONAL_KINDS: frozenset[ChangeKind] = REMOVAL_KINDS | {ChangeKind.SECURITY_ADVISORY}
+# Deprecations may also have no named successor yet.
+_NEW_API_OPTIONAL_KINDS: frozenset[ChangeKind] = REMOVAL_KINDS | {
+    ChangeKind.SECURITY_ADVISORY,
+    ChangeKind.METHOD_DEPRECATED,
+}
 
 # Kinds that represent a method/function/operation that was removed entirely.
 METHOD_REMOVAL_KINDS: frozenset = frozenset({ChangeKind.METHOD_REMOVED})
@@ -94,6 +99,7 @@ class ClassificationSource(StrEnum):
     MANUAL = "manual"  # hand-written (eval corpus, CLI --change-file)
     REGISTRY = "registry"  # deterministic package-registry version movement
     SECURITY = "security"  # sourced from an advisory database (OSV/GHSA)
+    AGENT = "agent"  # agent-discovered via repo+feed scan (old→new mapping)
 
 
 @dataclass

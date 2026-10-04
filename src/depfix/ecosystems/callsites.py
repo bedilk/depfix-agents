@@ -2,13 +2,12 @@
 
 The JS scanner (:mod:`depfix.scanners.callsites`) is binding-aware: it
 follows what an import is *bound to* and propagates through re-exports.
-This scanner is deliberately one notch simpler -- import statements, the
-change's dotted symbols, and provider anchors, matched per line after
-comment masking -- because that is the level at which ten ecosystems can
-be supported honestly today. Confidence encodes exactly that honesty:
-import hits carry the spec's ``import_confidence`` (HIGH only where the
-pattern derives mechanically from the package name), symbol/anchor hits
-are MEDIUM/LOW just as in the JS scanner.
+This scanner is one notch simpler -- import statements and feed-derived
+symbols (old APIs to migrate, plus their replacements as migration evidence),
+matched per line after comment masking. Confidence encodes exactly that
+honesty: import hits carry the spec's ``import_confidence`` (HIGH only where
+the pattern derives mechanically from the package name), symbol hits are
+MEDIUM (with SDK import) or LOW (no import in file).
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ from pathlib import Path
 
 from depfix.ecosystems.base import EcosystemSpec
 from depfix.ecosystems.registry import ecosystem_for_registry
+from depfix.scanners.limits import MAX_SCANNABLE_FILES, clamp_max_files
 from depfix.scanners.models import (
     CallSite,
     CallSiteKind,
@@ -31,8 +31,23 @@ from depfix.scanners.models import (
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_FILE_BYTES = 1_000_000
-_DEFAULT_MAX_FILES = 5_000
+_DEFAULT_MAX_FILES = MAX_SCANNABLE_FILES
 _CONTEXT_LINES = 3
+
+
+def _member_call_pattern(symbol: str, provider_id: str) -> re.Pattern[str] | None:
+    """``openai.chat.completions.create`` -> ``.chat.completions.create(`` on any
+    receiver -- real code calls it on ``client``, not on ``openai``."""
+    member = (
+        symbol[len(provider_id) + 1:]
+        if provider_id and symbol.startswith(f"{provider_id}.")
+        else symbol.partition(".")[2]
+    )
+    if not member:
+        return None
+    return re.compile(
+        r"\.\s*" + r"\s*\.\s*".join(re.escape(part) for part in member.split(".")) + r"\s*\("
+    )
 
 
 def mask_comments(source: str, spec: EcosystemSpec) -> str:
@@ -68,11 +83,13 @@ class GenericImportScanner:
         spec: EcosystemSpec,
         *,
         max_file_bytes: int = _DEFAULT_MAX_FILE_BYTES,
-        max_files: int = _DEFAULT_MAX_FILES,
+        max_files: int | None = None,
+        max_data_bytes: int = 0,
     ) -> None:
         self._spec = spec
         self._max_file_bytes = max_file_bytes
-        self._max_files = max_files
+        self._max_files = clamp_max_files(max_files)
+        self._max_data_bytes = max_data_bytes  # 0 = no cap
 
     def scan(self, root: Path, target: ScanTarget) -> RepoScanResult:
         spec = self._spec
@@ -86,13 +103,10 @@ class GenericImportScanner:
                 for pattern in spec.import_regexes(package):
                     import_patterns.append((package, pattern))
 
+        feed_symbols = list(dict.fromkeys((*target.symbols, *target.feed_symbols)))
         symbol_patterns = [
-            (symbol, re.compile(re.escape(symbol)))
-            for symbol in target.symbols
-        ]
-        anchor_patterns = [
-            (anchor, re.compile(re.escape(anchor)))
-            for anchor in target.call_site_anchors
+            (symbol, re.compile(re.escape(symbol)), _member_call_pattern(symbol, target.provider_id))
+            for symbol in feed_symbols
         ]
 
         result = RepoScanResult(repo_full_name="", commit_sha="")
@@ -111,11 +125,16 @@ class GenericImportScanner:
                 continue
             files.append(path)
 
+        data_bytes_read = 0
         for path in files:
             try:
-                if path.stat().st_size > self._max_file_bytes:
+                file_size = path.stat().st_size
+                if file_size > self._max_file_bytes:
                     continue
+                if self._max_data_bytes > 0 and data_bytes_read + file_size > self._max_data_bytes:
+                    break
                 source = path.read_text(encoding="utf-8")
+                data_bytes_read += file_size
             except (OSError, UnicodeDecodeError) as exc:
                 result.errors.append(f"{path}: {exc}")
                 continue
@@ -124,6 +143,7 @@ class GenericImportScanner:
             relpath = path.relative_to(root).as_posix()
             lines = masked.splitlines()
             raw_lines = source.splitlines()
+            file_imports_sdk = any(p.search(masked) for _pkg, p in import_patterns)
 
             for line_number, line in enumerate(lines, start=1):
                 for package, pattern in import_patterns:
@@ -135,23 +155,22 @@ class GenericImportScanner:
                             symbol=package, provider_id=target.provider_id,
                             evidence=f"{self._spec.display_name} import of {package}",
                         ))
-                for symbol, pattern in symbol_patterns:
-                    match = pattern.search(line)
-                    if match:
+                for symbol, full_pattern, member_pattern in symbol_patterns:
+                    match = full_pattern.search(line)
+                    confidence = MatchConfidence.MEDIUM
+                    evidence = f"references feed symbol {symbol}"
+                    if match is None and member_pattern is not None:
+                        match = member_pattern.search(line)
+                        if match is not None:
+                            confidence = (MatchConfidence.MEDIUM if file_imports_sdk
+                                          else MatchConfidence.LOW)
+                            evidence = f"calls the member path of feed symbol {symbol}" + (
+                                "" if file_imports_sdk else " (no SDK import in this file)")
+                    if match is not None:
                         sites.append(_site(
                             relpath, line_number, match.start(), raw_lines,
-                            kind=CallSiteKind.METHOD_CALL, confidence=MatchConfidence.MEDIUM,
-                            symbol=symbol, provider_id=target.provider_id,
-                            evidence=f"references migrated symbol {symbol}",
-                        ))
-                for anchor, pattern in anchor_patterns:
-                    match = pattern.search(line)
-                    if match:
-                        sites.append(_site(
-                            relpath, line_number, match.start(), raw_lines,
-                            kind=CallSiteKind.ANCHOR, confidence=MatchConfidence.LOW,
-                            symbol=anchor, provider_id=target.provider_id,
-                            evidence=f"matched provider anchor {anchor!r}",
+                            kind=CallSiteKind.METHOD_CALL, confidence=confidence,
+                            symbol=symbol, provider_id=target.provider_id, evidence=evidence,
                         ))
 
         result.call_sites = dedupe_call_sites(sites)

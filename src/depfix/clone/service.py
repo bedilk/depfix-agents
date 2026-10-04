@@ -29,6 +29,16 @@ class CloneError(RuntimeError):
     """Raised for any failure to obtain a usable checkout."""
 
 
+class RepoTooLargeError(CloneError):
+    """Raised when a repo's working tree exceeds ``clone_max_repo_mb``.
+
+    Caught separately from generic CloneError so callers can treat
+    an oversized repo as a skippable info condition rather than a hard
+    failure -- the repo is real and the App is installed, it's just
+    too large for the current fleet configuration.
+    """
+
+
 @dataclass(frozen=True)
 class Checkout:
     """A local working copy -- either a fresh shallow clone or an existing
@@ -155,7 +165,7 @@ class CloneService:
 
         size_mb = _dir_size_bytes(resolved, exclude_dirs=_COPY_EXCLUDE_DIRS) / (1024 * 1024)
         if size_mb > self._max_repo_mb:
-            raise CloneError(
+            raise RepoTooLargeError(
                 f"{resolved} is {size_mb:.0f}MB (excluding .git/node_modules), "
                 f"exceeds the {self._max_repo_mb}MB cap (clone_max_repo_mb)"
             )
@@ -250,10 +260,10 @@ class CloneService:
         size_mb = _dir_size_bytes(dest) / (1024 * 1024)
         if size_mb > effective_cap:
             self._cleanup(dest)
-            raise CloneError(
-                f"{owner}/{repo} checkout is {size_mb:.0f}MB, exceeds the "
-                f"{effective_cap}MB cap. Raise it for this repo only by adding "
-                f"`max_repo_mb: {int(size_mb) + 50}` to its .depfix.yml, "
+            raise RepoTooLargeError(
+                f"{owner}/{repo} is {size_mb:.0f}MB — larger than the {effective_cap}MB "
+                f"scan cap. Skipping. To include it, raise the cap for this repo only "
+                f"by adding `max_repo_mb: {int(size_mb) + 50}` to its .depfix.yml, "
                 f"or fleet-wide via CLONE_MAX_REPO_MB."
             )
 

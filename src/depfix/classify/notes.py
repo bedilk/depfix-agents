@@ -40,6 +40,10 @@ Identify BREAKING changes only — changes that require calling code to be \
 updated. Ignore purely additive changes (new optional params, new endpoints, \
 new fields).
 
+Use method_deprecated when the notes say a method still works but is deprecated \
+and will be removed in a future version. Prefer this over method_removed when \
+the method is still callable today.
+
 For each breaking change you MUST include a verbatim "evidence" quote — an \
 exact substring copied from the release notes below, proving the change is \
 real. Do not paraphrase the evidence. If you cannot find an exact quote for \
@@ -166,7 +170,7 @@ class NotesClassifier:
         new_api = str(candidate.get("new_api") or "").strip()
         description = str(candidate.get("description") or "").strip() or old_api
 
-        hints = [s for s in (normalize_api(old_api), normalize_api(new_api)) if s]
+        hints = [s for s in (normalize_api(old_api),) if s]
 
         try:
             change = BreakingChange(

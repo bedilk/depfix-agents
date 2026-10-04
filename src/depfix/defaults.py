@@ -10,7 +10,8 @@ import yaml
 logger = logging.getLogger(__name__)
 _FILENAME = ".depfix-local.yml"
 _ALLOWED = frozenset({"llm_provider", "google_api_key", "gemini_model", "ollama_model",
-    "ollama_base_url", "providers_file", "output_dir", "plan_dir", "log_level", "log_format"})
+    "ollama_base_url", "providers_file", "output_dir", "plan_dir", "log_level", "log_format",
+    "drift_scope"})
 # Repository and provider are stable user preferences. Event IDs and local
 # change-file paths are not: an ID belongs to one database and a path belongs
 # to one checkout. Reusing either can silently override automatic detection.

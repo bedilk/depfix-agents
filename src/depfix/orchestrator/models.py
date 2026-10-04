@@ -62,6 +62,8 @@ class ChangeOutcome:
     removals: list = field(default_factory=list)
     upgrade: object | None = None
     member_dedupe_keys: tuple[str, ...] = ()
+    #: "reused (depfix scan)" | "reused (this run)" | "rescanned" | "missing"
+    scan_source: str = ""
 
     @property
     def skipped(self) -> bool:
@@ -165,7 +167,7 @@ class OrchestratorOutcome:
         total_cost = 0.0
         for repo in self.repos:
             for change in repo.changes:
-                if change.plan_artifact is None:
+                if change.plan_artifact is None or not change.plan_artifact.edits:
                     continue
                 severity = change.severity or Severity.NONE
                 by_severity[severity] = by_severity.get(severity, 0) + 1

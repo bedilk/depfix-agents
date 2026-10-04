@@ -266,8 +266,10 @@ _DETERMINISTIC_SOURCES = frozenset({"spec_diff", "registry", "security", "manual
 
 _LEARNED_HEADER = (
     "# Depfix-managed learned migrations. Local state -- do not commit.\n"
-    "# 'candidate' entries are unverified (e.g. LLM-derived) and keep their original\n"
-    "# source/confidence; 'confirmed' entries have deterministic or verified evidence.\n"
+    "# migrations: reusable changes. 'candidate' = unverified (e.g. LLM-derived),\n"
+    "#   'confirmed' = deterministic or verified evidence. Re-imported into the DB.\n"
+    "# detections: per-repository drift found by scan/plan (version drift and API\n"
+    "#   call-site drift), with the plan artifact / PR each one led to. Never re-imported.\n"
 )
 
 
@@ -286,29 +288,47 @@ def _utcnow_iso() -> str:
     return datetime.now(tz=UTC).isoformat(timespec="seconds")
 
 
-def _read_learned(path: Path) -> dict[str, dict]:
+def _empty_document() -> dict:
+    return {"version": LEARNED_FORMAT_VERSION, "migrations": {}, "detections": {}}
+
+
+def _read_document(path: Path) -> dict:
+    """The whole store, normalized. Never raises."""
     if not path.is_file():
-        return {}
+        return _empty_document()
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as exc:
         logger.warning("could not read learned migrations at %s: %s", path, exc)
-        return {}
-    entries = data.get("migrations") if isinstance(data, dict) else None
-    if not isinstance(entries, dict):
-        return {}
-    return {k: v for k, v in entries.items() if isinstance(k, str) and isinstance(v, dict)}
+        return _empty_document()
+    if not isinstance(data, dict):
+        return _empty_document()
+    migrations = data.get("migrations")
+    detections = data.get("detections")
+    return {
+        "version": LEARNED_FORMAT_VERSION,
+        "migrations": {
+            k: v for k, v in migrations.items() if isinstance(k, str) and isinstance(v, dict)
+        } if isinstance(migrations, dict) else {},
+        "detections": {
+            k: [e for e in v if isinstance(e, dict)]
+            for k, v in detections.items() if isinstance(k, str) and isinstance(v, list)
+        } if isinstance(detections, dict) else {},
+    }
 
 
-def _write_learned(path: Path, entries: dict[str, dict]) -> bool:
+def _write_document(path: Path, document: dict) -> bool:
     """Atomically write the store. Returns False (never raises) on I/O failure."""
-    document = {"version": LEARNED_FORMAT_VERSION, "migrations": dict(sorted(entries.items()))}
+    payload = {
+        "version": LEARNED_FORMAT_VERSION,
+        "migrations": dict(sorted(document.get("migrations", {}).items())),
+        "detections": dict(sorted(document.get("detections", {}).items())),
+    }
     tmp = path.with_suffix(f"{path.suffix}.tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_text(
-            _LEARNED_HEADER
-            + yaml.safe_dump(document, sort_keys=False, allow_unicode=True),
+            _LEARNED_HEADER + yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
             encoding="utf-8",
         )
         os.replace(tmp, path)
@@ -318,6 +338,17 @@ def _write_learned(path: Path, entries: dict[str, dict]) -> bool:
             tmp.unlink()
         return False
     return True
+
+
+def _read_learned(path: Path) -> dict[str, dict]:
+    return _read_document(path)["migrations"]
+
+
+def _write_learned(path: Path, entries: dict[str, dict]) -> bool:
+    """Replace only the migrations section; detections are preserved."""
+    document = _read_document(path)
+    document["migrations"] = entries
+    return _write_document(path, document)
 
 
 def persist_learned_migrations(path: str | Path, changes: Iterable[BreakingChange]) -> int:
@@ -401,97 +432,3 @@ def promote_learned_migration(path: str | Path, dedupe_key: str, confirmed_by: s
     return _write_learned(path, entries)
 
 
-def export_learned_to_canonical(
-    learned_path: str | Path, canonical_path: str | Path, provider_id: str
-) -> int:
-    """Export confirmed learned migrations to canonical_migrations.yaml as fixture_changes.
-
-    This enables plan/apply phases to use newly discovered breaking changes.
-    Returns count of migrations exported.
-    """
-    import yaml
-    from depfix.sources.fixture_change import FixtureChangeSource
-
-    learned_path = Path(learned_path)
-    canonical_path = Path(canonical_path)
-
-    # Load learned migrations
-    learned = load_learned_migrations(learned_path, provider_id=provider_id, include_candidates=False)
-    if not learned:
-        return 0
-
-    # Load existing canonical file
-    canonical_text = canonical_path.read_text(encoding="utf-8") if canonical_path.is_file() else ""
-    data = yaml.safe_load(canonical_text) or {"providers": []}
-    providers = data.get("providers", [])
-
-    # Find or create provider entry
-    provider_entry = next((p for p in providers if p.get("id") == provider_id), None)
-    if provider_entry is None:
-        provider_entry = {
-            "id": provider_id,
-            "sdk_packages": [],
-            "call_site_anchors": [],
-            "feeds": []
-        }
-        providers.append(provider_entry)
-
-    # Ensure feeds list exists
-    if "feeds" not in provider_entry:
-        provider_entry["feeds"] = []
-
-    # Export each learned migration as a fixture_change
-    exported = 0
-    for lm in learned:
-        change = lm.change
-        if not change.old_api or not change.new_version:
-            continue
-
-        # Create fixture_change entry
-        fixture_id = f"{provider_id}-learned-{change.dedupe_key[:16]}"
-        existing_fixture = next(
-            (f for f in provider_entry["feeds"] if f.get("id") == fixture_id),
-            None
-        )
-        if existing_fixture is not None:
-            continue  # Already exported
-
-        spec_change = {
-            "kind": change.kind.value,
-            "severity": "breaking",
-            "subject": change.old_api,
-        }
-        if change.new_api:
-            spec_change["after"] = change.new_api
-        spec_change["detail"] = change.description or f"Migration from {change.old_api}"
-
-        fixture = {
-            "kind": "fixture_change",
-            "id": fixture_id,
-            "old_token": change.old_version,
-            "new_token": change.new_version,
-            "spec_changes": [spec_change]
-        }
-
-        provider_entry["feeds"].append(fixture)
-        exported += 1
-
-    if exported == 0:
-        return 0
-
-    # Write updated canonical file
-    data["providers"] = providers
-    updated_text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-    canonical_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = canonical_path.with_suffix(f"{canonical_path.suffix}.tmp")
-    try:
-        tmp.write_text(updated_text, encoding="utf-8")
-        os.replace(tmp, canonical_path)
-        logger.info(f"Exported {exported} learned migration(s) to {canonical_path}")
-    except OSError as exc:
-        logger.warning(f"Could not export to {canonical_path}: {exc}")
-        with contextlib.suppress(OSError):
-            tmp.unlink()
-        return 0
-
-    return exported

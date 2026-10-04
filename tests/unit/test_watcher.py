@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -82,13 +83,19 @@ def _fake_deps() -> SourceDeps:
         http=object(),  # type: ignore[arg-type]
         npm=object(),  # type: ignore[arg-type]
         pypi=object(),  # type: ignore[arg-type]
+        rubygems=object(),  # type: ignore[arg-type]
         spec_cache_dir=Path("/tmp/depfix-test-cache"),
         max_spec_bytes=1024,
         github_api_url="https://example.invalid",
     )
 
 
-def _watcher(sources: dict[tuple[str, str], ChangeSource], *, dry_run: bool = False) -> Watcher:
+def _watcher(
+    sources: dict[tuple[str, str], ChangeSource],
+    *,
+    dry_run: bool = False,
+    ttl_seconds: int = 0,
+) -> Watcher:
     def builder(provider_id: str, feed: FeedSpec, deps: SourceDeps) -> ChangeSource:
         key = feed.config.get("feed_key", "scripted")
         try:
@@ -96,9 +103,9 @@ def _watcher(sources: dict[tuple[str, str], ChangeSource], *, dry_run: bool = Fa
         except KeyError:
             raise UnsupportedSourceKind(f"no stub registered for {(provider_id, key)}") from None
 
-    watcher = Watcher(deps=_fake_deps(), source_builder=builder, dry_run=dry_run)
-    watcher.sources = sources  # test-only handle for post-run assertions
-    return watcher
+    # Existing tests poll twice and expect two real polls, so caching is off by default.
+    return Watcher(deps=_fake_deps(), source_builder=builder, dry_run=dry_run,
+                   ttl_seconds=ttl_seconds)
 
 
 def _provider(
@@ -294,3 +301,78 @@ def test_dry_run_persists_nothing(in_memory_db: Any) -> None:
         assert session.get(Provider, provider.id) is None
         assert session.scalars(select(FeedState)).first() is None
         assert session.scalars(select(ChangeEventRow)).first() is None
+
+
+# -- TTL cache ---------------------------------------------------------------
+
+
+def test_recent_successful_poll_is_served_from_cache(in_memory_db: Any) -> None:
+    provider = _provider()
+    source = _ScriptedSource([FeedPoll.baseline("1.0.0"), FeedPoll.unchanged("1.0.0")])
+    watcher = _watcher({(provider.id, "scripted"): source}, ttl_seconds=3600)
+
+    watcher.run_once([provider])
+    second = watcher.run_once([provider])
+
+    assert len(source.seen_states) == 1  # no second HTTP poll
+    (report,) = second.reports
+    assert report.status == "cached"
+    assert "1.0.0" in report.detail
+    assert second.feeds_polled == 0 and second.feeds_cached == 1
+    assert not second.all_failed
+
+
+def test_failed_poll_is_never_cached(in_memory_db: Any) -> None:
+    provider = _provider()
+    source = _ScriptedSource([FeedPoll.failure("boom"), FeedPoll.baseline("1.0.0")])
+    watcher = _watcher({(provider.id, "scripted"): source}, ttl_seconds=3600)
+
+    watcher.run_once([provider])
+    second = watcher.run_once([provider])
+
+    assert len(source.seen_states) == 2
+    assert second.reports[0].status == "baseline"
+
+
+def test_expired_ttl_polls_again(in_memory_db: Any) -> None:
+    provider = _provider()
+    source = _ScriptedSource([FeedPoll.baseline("1.0.0"), FeedPoll.unchanged("1.0.0")])
+    watcher = _watcher({(provider.id, "scripted"): source}, ttl_seconds=3600)
+    watcher.run_once([provider])
+
+    with db_module.session_scope() as session:
+        state = session.scalar(select(FeedState))
+        state.last_polled_at = datetime.now(UTC) - timedelta(hours=2)
+
+    second = watcher.run_once([provider])
+
+    assert len(source.seen_states) == 2
+    assert second.reports[0].status == "unchanged"
+
+
+def test_future_last_polled_at_does_not_freeze_the_feed(in_memory_db: Any) -> None:
+    provider = _provider()
+    source = _ScriptedSource([FeedPoll.baseline("1.0.0"), FeedPoll.unchanged("1.0.0")])
+    watcher = _watcher({(provider.id, "scripted"): source}, ttl_seconds=3600)
+    watcher.run_once([provider])
+
+    with db_module.session_scope() as session:
+        session.scalar(select(FeedState)).last_polled_at = datetime.now(UTC) + timedelta(days=1)
+
+    watcher.run_once([provider])
+    assert len(source.seen_states) == 2
+
+
+def test_one_failure_among_cached_feeds_is_not_all_failed(in_memory_db: Any) -> None:
+    healthy, flaky = _provider("acme"), _provider("globex")
+    ok = _ScriptedSource([FeedPoll.baseline("1.0.0")])
+    bad = _ScriptedSource([FeedPoll.failure("boom")])
+    watcher = _watcher(
+        {(healthy.id, "scripted"): ok, (flaky.id, "scripted"): bad}, ttl_seconds=3600
+    )
+
+    watcher.run_once([healthy, flaky])
+    second = watcher.run_once([healthy, flaky])
+
+    assert second.feeds_cached == 1 and len(second.failures) == 1
+    assert not second.all_failed  # cron must not page

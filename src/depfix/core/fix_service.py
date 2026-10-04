@@ -15,11 +15,11 @@ from depfix.agent import FixAgent, make_fix_strategy
 from depfix.agent.tools import FixToolset
 from depfix.apply.models import EditOrigin, FileEdit
 from depfix.apply.workspace import WorkspaceEditor
-from depfix.classify.llm import GeminiCompleter, LLMCompleter, OllamaCompleter
+from depfix.classify.llm import BedrockCompleter, GeminiCompleter, LLMCompleter, OllamaCompleter
 from depfix.clone import Checkout
 from depfix.codemods import CodemodRegistry
 from depfix.config import Settings
-from depfix.core.models import BreakingChange, ChangeKind
+from depfix.core.models import BreakingChange, ChangeKind, is_method_removal
 from depfix.obs.cost import CostLedger, CostStage
 from depfix.core.pipeline import FixPipeline, FixPipelineResult
 from depfix.fixers.bedrock import BedrockFixGenerator
@@ -110,7 +110,19 @@ def build_fix_pipeline(
 
 
 def _build_completer_for_characterize(settings: Settings) -> LLMCompleter | None:
-    """Build the fixture-only completer for the characterization oracle."""
+    """Build the fixture-only completer for the characterization oracle.
+
+    Characterization generates test fixtures — a code-generation task —
+    so it uses the heavy model (Sonnet-class), not the light one.
+    """
+    if settings.llm_provider == "bedrock":
+        return BedrockCompleter(
+            aws_access_key=settings.bedrock_access_key,
+            aws_secret_key=settings.bedrock_secret_key,
+            aws_region=settings.bedrock_region,
+            aws_profile=settings.bedrock_profile,
+            model=settings.bedrock_model,
+        )
     if settings.llm_provider == "gemini":
         if not settings.google_api_key:
             return None
@@ -127,6 +139,14 @@ def _build_fallback_fixer(settings: Settings) -> BedrockFixGenerator | FixGenera
     if not settings.llm_fallback_model:
         return None
     provider = (settings.llm_fallback_provider or settings.llm_provider).strip()
+    if provider == "bedrock":
+        return BedrockFixGenerator(
+            aws_access_key=settings.bedrock_access_key,
+            aws_secret_key=settings.bedrock_secret_key,
+            aws_region=settings.bedrock_region,
+            aws_profile=settings.bedrock_profile,
+            model=settings.llm_fallback_model,
+        )
     if provider == "gemini":
         if not settings.google_api_key:
             return None
@@ -169,6 +189,18 @@ def run_fix_for_change(
             )
             return FixServiceResult(result, [], repo_config.verify and settings.verify_enabled)
         return _run_dependency_drift(checkout, scan_result, change, settings, repo_config)
+
+    if is_method_removal(change):
+        result = FixPipelineResult(
+            repo_full_name=scan_result.repo_full_name, breaking_change=change,
+            files_scanned=scan_result.files_scanned, files_affected=0, edits=(),
+            total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+            codemod_notes=(
+                f"{change.old_api} was removed upstream with no replacement; "
+                "reported only, no fix generated",
+            ),
+        )
+        return FixServiceResult(result, [], repo_config.verify and settings.verify_enabled)
 
     ecosystem = detect_repo_ecosystem(checkout.path)
     if ecosystem == "typescript":
@@ -271,6 +303,7 @@ def _run_dependency_drift(
         change,
         max_major_gap=settings.drift_max_major_gap,
         max_minor_gap=settings.drift_max_minor_gap,
+        scope=settings.drift_scope,
     )
     ecosystem = detect_repo_ecosystem(checkout.path)
     if ecosystem == "typescript":
@@ -294,7 +327,7 @@ def _run_dependency_drift(
     if ecosystem == "javascript":
         from depfix.codemods.lockfile import build_dependency_drift_plan
 
-        plan = build_dependency_drift_plan(checkout.path, change)
+        plan = build_dependency_drift_plan(checkout.path, change, scope=settings.drift_scope)
         cross_major = plan.cross_major
         drift_bumps = [
             (
@@ -326,6 +359,17 @@ def _run_dependency_drift(
             )
             for bump in build_ruby_dependency_drift_bumps(checkout.path, change)
         ]
+    elif ecosystem == "go":
+        from depfix.ecosystems.go_manifests import build_go_dependency_drift_bumps
+
+        drift_bumps = [
+            (
+                bump.manifest_relpath, bump.fixed_content, bump.note,
+                f"Registry drift: {bump.package} {bump.old_version} -> {bump.new_version} "
+                f"in {bump.manifest_relpath}.",
+            )
+            for bump in build_go_dependency_drift_bumps(checkout.path, change)
+        ]
     else:
         from depfix.ecosystems import get as get_ecosystem
 
@@ -335,9 +379,9 @@ def _run_dependency_drift(
         )
         return report_only(
             f"dependency drift detected for {pretty}; automatic manifest writers are "
-            "currently available for npm, PyPI, and RubyGems only. This drift is reported "
-            "for review until a manifest, lockfile, and verification adapter exists for "
-            "this ecosystem."
+            "currently available for npm, PyPI, RubyGems, and Go modules only. This "
+            "drift is reported for review until a manifest, lockfile, and verification "
+            "adapter exists for this ecosystem."
         )
 
     editor = WorkspaceEditor(checkout)
@@ -412,6 +456,62 @@ def _run_dependency_drift(
                         lock_edit,
                         derivation_trace=f"JavaScript lockfile refreshed after dependency drift: {message}",
                     ))
+
+    # Go is the one ecosystem whose generated file must be refreshed *before*
+    # verification: without matching go.sum hashes, `go mod download` and
+    # `go test` both refuse to build ("missing go.sum entry"), so a correct
+    # manifest bump would be verified as a failure. `go mod tidy` is also
+    # allowed to rewrite go.mod itself, so whatever actually changed is
+    # re-registered with the editor.
+    if (
+        ecosystem == "go"
+        and settings.lockfile_regenerate
+        and checkout.is_temporary
+        and edits
+    ):
+        from depfix.ecosystems.go_lockfile import go_generated_paths, try_refresh_go_lockfile
+
+        before: dict[str, str] = {}
+        for generated in go_generated_paths(checkout.path):
+            try:
+                relpath = generated.relative_to(checkout.path).as_posix()
+                before[relpath] = generated.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError, ValueError):
+                continue
+
+        ok, message = try_refresh_go_lockfile(
+            checkout.path,
+            package=change.package,
+            timeout=settings.verify_install_timeout,
+            max_output_bytes=settings.verify_max_output_bytes,
+        )
+        notes.append(message)
+        if ok:
+            for relpath, original_text in before.items():
+                path = checkout.path / relpath
+                try:
+                    refreshed = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                if refreshed == original_text:
+                    continue
+                path.write_text(original_text, encoding="utf-8")
+                refreshed_edit = dataclasses.replace(
+                    editor.write_fix(
+                        relpath, refreshed, confidence=1.0,
+                        origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                    ),
+                    derivation_trace=f"Go generated file refreshed after drift: {message}.",
+                )
+                if not refreshed_edit.changed:
+                    continue
+                existing = next(
+                    (i for i, edit in enumerate(edits) if edit.relpath == relpath), None
+                )
+                if existing is None:
+                    edits.append(refreshed_edit)
+                else:
+                    edits[existing] = refreshed_edit
 
     verification = None
     if edits and verify_required:

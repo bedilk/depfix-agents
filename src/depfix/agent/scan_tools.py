@@ -91,6 +91,9 @@ class ScanToolset:
         self._github_api_url = github_api_url.rstrip("/")
         self.call_log: list[tuple[str, str]] = []
         self.files_read: set[str] = set()
+        # Agent-discovered old-API call sites, staged in-memory until the
+        # orchestrator persists them. verify_line is the hallucination gate.
+        self.discovered_anchors: list[dict] = []
 
     # -- repo tools -----------------------------------------------------------
 
@@ -227,6 +230,32 @@ class ScanToolset:
         except (OSError, subprocess.TimeoutExpired):
             return ""
         return result.stdout.strip() if result.returncode == 0 else ""
+
+    def record_call_site_anchor(
+        self,
+        *,
+        symbol: str,
+        filepath: str,
+        line_number: int,
+        line_content: str,
+    ) -> ToolResult:
+        """Verify the line exists, then stage it as a discovered old-API call
+        site. This is the agent's ONLY write; everything else stays read-only.
+        The orchestrator flushes ``discovered_anchors`` to disk after the run."""
+        self.call_log.append(("record_call_site_anchor", f"{symbol}@{filepath}:{line_number}"))
+        if not symbol or not filepath or line_number <= 0:
+            return ToolResult.error("symbol, filepath, and a positive line_number are required")
+        if not self.verify_line(filepath, line_number, line_content):
+            return ToolResult.error(
+                f"{filepath}:{line_number} does not match the claimed content; not recorded"
+            )
+        self.discovered_anchors.append({
+            "symbol": symbol,
+            "filepath": filepath,
+            "line_number": line_number,
+            "line_content": line_content,
+        })
+        return ToolResult(ok=True, content=f"anchor recorded: {symbol} at {filepath}:{line_number}")
 
     # -- feed tools -----------------------------------------------------------
 
