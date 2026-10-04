@@ -111,9 +111,9 @@ providers:
     url: https://docs.anthropic.com/en/release-notes/api
   - kind: ts_exports_diff
     package: '@anthropic-ai/sdk'
-  # Fixture: real migration in @anthropic-ai/sdk ≥0.37 — messages.stream()
-  # is the preferred streaming API; messages.create({stream:true}) still works
-  # but the new stream helper is the documented upgrade path.
+  # Fixture: messages.stream() introduced in @anthropic-ai/sdk 0.37 as the
+  # preferred streaming helper. messages.create() still works for non-streaming,
+  # but streaming callers should migrate.
   - kind: fixture_change
     id: anthropic-sdk-stream-api-0.20-0.131
     old_token: "0.20.9"
@@ -124,9 +124,11 @@ providers:
         subject: "anthropic.messages.create"
         after: "anthropic.messages.stream"
         detail: >
-          In @anthropic-ai/sdk ≥0.37, use client.messages.stream({...}) for
-          streaming responses instead of client.messages.create({stream:true,...}).
-          The stream helper gives strongly-typed events and a finalMessage() method.
+          Replace streaming calls: const stream = client.messages.stream({model,
+          max_tokens, messages}); const msg = await stream.finalMessage();
+          For non-streaming, messages.create() is unchanged.
+          messages.stream() returns a MessageStream — call .finalMessage() to get
+          the completed Message, or iterate with for-await for incremental events.
 - id: supabase
   name: Supabase
   api_version_scheme: semver
