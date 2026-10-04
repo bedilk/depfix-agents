@@ -95,6 +95,7 @@ from depfix.scanners.models import RepoScanResult, ScanTarget
 from depfix.scanners.removals import collect_removal_notices
 from depfix.scanners.store import load_scan_result
 from depfix.scanners.strategy import resolve_scan_strategy
+from depfix.severity import EvidenceKind, Severity
 from depfix.sources.semver import drift_risk
 from depfix.storage import (
     AttemptStatus,
@@ -1489,6 +1490,21 @@ class Orchestrator:
             codemod_notes=tuple(result.notes),
         )
 
+    def _upgrade_severity(
+        self, plan: UpgradePlan, result: UpgradeResult
+    ) -> tuple[Severity, EvidenceKind]:
+        """Determine severity for an upgrade outcome."""
+        from depfix.verify.verifier import VerificationReport
+
+        if isinstance(result.verification, VerificationReport):
+            if result.verification.new_failure_count > 0:
+                return Severity.CRITICAL, EvidenceKind.TEST_FAILURE
+            if result.verification.typechecked and result.verification.new_diagnostics:
+                return Severity.CRITICAL, EvidenceKind.TYPE_ERROR
+        if result.committable and plan.migrations:
+            return Severity.HIGH, EvidenceKind.STRUCTURAL
+        return Severity.MEDIUM, EvidenceKind.STRUCTURAL
+
     def _open_upgrade_pr(
         self,
         *,
@@ -1630,7 +1646,7 @@ class Orchestrator:
                 )
                 plan_digest = ""
             outcome.cost_usd = result.total_cost
-            outcome.severity, outcome.severity_evidence = self._upgrade_severity(plan, result)  # type: ignore[attr-defined]
+            outcome.severity, outcome.severity_evidence = self._upgrade_severity(plan, result)
 
             if not result.committable:
                 detail = (
