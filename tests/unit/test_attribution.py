@@ -62,9 +62,7 @@ def test_import_graph_ambiguous_when_test_imports_multiple_touched_files_falls_t
 ) -> None:
     (tmp_path / "a.js").write_text("module.exports = {};\n", encoding="utf-8")
     (tmp_path / "b.js").write_text("module.exports = {};\n", encoding="utf-8")
-    (tmp_path / "index.test.js").write_text(
-        'require("./a");\nrequire("./b");\n', encoding="utf-8"
-    )
+    (tmp_path / "index.test.js").write_text('require("./a");\nrequire("./b");\n', encoding="utf-8")
 
     result = attribute_failures(
         [_failure("uses both", "index.test.js")],

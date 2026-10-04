@@ -3,6 +3,7 @@
 Revision ID: 0006
 Revises: 0005
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -17,11 +18,17 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("pull_request", sa.Column("state", sa.String(16), nullable=False, server_default="open"))
-    op.add_column("pull_request", sa.Column("merged", sa.Boolean(), nullable=False, server_default=sa.false()))
+    op.add_column(
+        "pull_request", sa.Column("state", sa.String(16), nullable=False, server_default="open")
+    )
+    op.add_column(
+        "pull_request", sa.Column("merged", sa.Boolean(), nullable=False, server_default=sa.false())
+    )
     op.add_column("pull_request", sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("pull_request", sa.Column("merged_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("pull_request", sa.Column("last_reconciled_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "pull_request", sa.Column("last_reconciled_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.create_index("ix_pull_request_state", "pull_request", ["state"])
 
 

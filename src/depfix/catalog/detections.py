@@ -148,6 +148,7 @@ def build_anchor_detection(
     if not anchors and not api_mapping:
         return None
     from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
+
     synthetic = BreakingChange(
         provider_id=provider_id,
         package=f"{provider_id}:agent-anchors",
@@ -166,7 +167,9 @@ def build_anchor_detection(
     entry["call_sites"] = anchors[:_MAX_SITES]
     entry["anchors"] = anchors[:_MAX_SITES]
     entry["api_mapping"] = api_mapping
-    entry["reason"] = "agent-discovered old-API call sites pending feed-classified migration records"
+    entry["reason"] = (
+        "agent-discovered old-API call sites pending feed-classified migration records"
+    )
     return entry
 
 

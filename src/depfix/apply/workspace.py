@@ -100,7 +100,8 @@ class WorkspaceEditor:
                 usages_fixed=usages_fixed,
                 validation=validation,
                 error_message=f"could not read {relpath}: {exc}",
-                origin=origin, codemod_id=codemod_id,
+                origin=origin,
+                codemod_id=codemod_id,
             )
 
         try:
@@ -116,7 +117,8 @@ class WorkspaceEditor:
                 usages_fixed=usages_fixed,
                 validation=validation,
                 error_message=f"could not decode {relpath} as utf-8: {exc}",
-                origin=origin, codemod_id=codemod_id,
+                origin=origin,
+                codemod_id=codemod_id,
             )
 
         if relpath not in self._originals:
@@ -132,7 +134,8 @@ class WorkspaceEditor:
                 confidence=confidence,
                 usages_fixed=usages_fixed,
                 validation=validation,
-                origin=origin, codemod_id=codemod_id,
+                origin=origin,
+                codemod_id=codemod_id,
             )
 
         diff = create_unified_diff(original_text, fixed_content, relpath)
@@ -151,10 +154,15 @@ class WorkspaceEditor:
                 usages_fixed=usages_fixed,
                 validation=validation,
                 error_message=f"could not write {relpath}: {exc}",
-                origin=origin, codemod_id=codemod_id,
+                origin=origin,
+                codemod_id=codemod_id,
             )
 
-        verdict = EditVerdict.SUSPECT if validation is not None and not validation.is_valid else EditVerdict.APPLIED
+        verdict = (
+            EditVerdict.SUSPECT
+            if validation is not None and not validation.is_valid
+            else EditVerdict.APPLIED
+        )
         return FileEdit(
             relpath=relpath,
             original_content=original_text,
@@ -164,7 +172,8 @@ class WorkspaceEditor:
             confidence=confidence,
             usages_fixed=usages_fixed,
             validation=validation,
-            origin=origin, codemod_id=codemod_id,
+            origin=origin,
+            codemod_id=codemod_id,
         )
 
     def revert(self, relpath: str) -> bool:

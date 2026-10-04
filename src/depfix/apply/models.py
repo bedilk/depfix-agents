@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from depfix.core.models import ValidationResult
 
 
-class EditOrigin(str, enum.Enum):
+class EditOrigin(enum.StrEnum):
     """Who authored an edit."""
 
     CODEMOD = "codemod"
@@ -19,7 +19,7 @@ class EditOrigin(str, enum.Enum):
     PLAN = "plan"
 
 
-class EditVerdict(str, enum.Enum):
+class EditVerdict(enum.StrEnum):
     """Outcome of writing one candidate fix to one file.
 
     ``APPLIED``: the edit is on disk and nothing has flagged it as suspect.

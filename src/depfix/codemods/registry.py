@@ -57,9 +57,7 @@ class CodemodRegistry:
                 logger.exception("codemod %s raised in claims(); ignoring it", codemod.id)
         return None
 
-    def apply(
-        self, relpath: str, source: str, change: BreakingChange
-    ) -> CodemodResult | None:
+    def apply(self, relpath: str, source: str, change: BreakingChange) -> CodemodResult | None:
         """Run the selected rule against one file.
 
         ``None`` means no rule claimed this change at all, which is the

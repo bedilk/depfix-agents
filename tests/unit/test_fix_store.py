@@ -41,48 +41,48 @@ def db_session(monkeypatch: pytest.MonkeyPatch) -> Session:
 
 
 def _breaking_change(**overrides: object) -> BreakingChange:
-    defaults: dict[str, object] = dict(
-        package="openai",
-        old_version="3.x",
-        new_version="4.x",
-        old_api="openai.createModeration",
-        new_api="openai.moderations.create",
-        description="moderations moved under a namespace",
-        migration_guide="use openai.moderations.create",
-        kind=ChangeKind.METHOD_RENAMED,
-        source=ClassificationSource.MANUAL,
-    )
+    defaults: dict[str, object] = {
+        "package": "openai",
+        "old_version": "3.x",
+        "new_version": "4.x",
+        "old_api": "openai.createModeration",
+        "new_api": "openai.moderations.create",
+        "description": "moderations moved under a namespace",
+        "migration_guide": "use openai.moderations.create",
+        "kind": ChangeKind.METHOD_RENAMED,
+        "source": ClassificationSource.MANUAL,
+    }
     defaults.update(overrides)
     return BreakingChange(**defaults)  # type: ignore[arg-type]
 
 
 def _edit(relpath: str, verdict: EditVerdict, **overrides: object) -> FileEdit:
-    defaults: dict[str, object] = dict(
-        relpath=relpath,
-        original_content="old\n",
-        fixed_content="new\n",
-        diff="--- a\n+++ b\n",
-        verdict=verdict,
-        confidence=0.9,
-        usages_fixed=1,
-    )
+    defaults: dict[str, object] = {
+        "relpath": relpath,
+        "original_content": "old\n",
+        "fixed_content": "new\n",
+        "diff": "--- a\n+++ b\n",
+        "verdict": verdict,
+        "confidence": 0.9,
+        "usages_fixed": 1,
+    }
     defaults.update(overrides)
     return FileEdit(**defaults)  # type: ignore[arg-type]
 
 
 def _result(**overrides: object) -> FixPipelineResult:
-    defaults: dict[str, object] = dict(
-        repo_full_name="acme/widgets",
-        breaking_change=_breaking_change(),
-        files_scanned=5,
-        files_affected=1,
-        edits=(_edit("src/chat.js", EditVerdict.KEPT),),
-        total_usages_fixed=1,
-        total_cost=0.01,
-        total_tokens=123,
-        duration_ms=456,
-        verification=None,
-    )
+    defaults: dict[str, object] = {
+        "repo_full_name": "acme/widgets",
+        "breaking_change": _breaking_change(),
+        "files_scanned": 5,
+        "files_affected": 1,
+        "edits": (_edit("src/chat.js", EditVerdict.KEPT),),
+        "total_usages_fixed": 1,
+        "total_cost": 0.01,
+        "total_tokens": 123,
+        "duration_ms": 456,
+        "verification": None,
+    }
     defaults.update(overrides)
     return FixPipelineResult(**defaults)  # type: ignore[arg-type]
 
@@ -150,7 +150,9 @@ def test_record_fix_run_persists_every_edit_regardless_of_verdict(db_session: Se
 # -- record_fix_run: verification test runs ---------------------------------------
 
 
-def _test_run_result(framework: TestFramework, cases: list[TestCase], **kwargs: object) -> TestRunResult:
+def _test_run_result(
+    framework: TestFramework, cases: list[TestCase], **kwargs: object
+) -> TestRunResult:
     return TestRunResult(framework=framework, cases=cases, **kwargs)  # type: ignore[arg-type]
 
 

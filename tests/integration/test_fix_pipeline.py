@@ -19,7 +19,6 @@ this suite for tests that hit a real, paid LLM API; this one doesn't.
 from __future__ import annotations
 
 import shutil
-import tempfile
 from pathlib import Path
 
 import pytest

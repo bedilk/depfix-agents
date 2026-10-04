@@ -37,9 +37,7 @@ _TEST_SUFFIX_RE = re.compile(r"^(?P<base>.+?)\.(?:test|spec)\.(?:js|jsx|ts|tsx|m
 #: simpler than the scanner's own import regexes (which exist to build
 #: symbol *bindings*) -- attribution only needs "what files does this test
 #: touch", not what's imported from them.
-_RELATIVE_IMPORT_SPEC_RE = re.compile(
-    r"""(?:from\s+|require\(\s*)['"](\.[^'"]+)['"]"""
-)
+_RELATIVE_IMPORT_SPEC_RE = re.compile(r"""(?:from\s+|require\(\s*)['"](\.[^'"]+)['"]""")
 
 
 @dataclass

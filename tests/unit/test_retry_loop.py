@@ -80,7 +80,9 @@ def test_retry_loop_fixes_a_reverted_edit_on_second_round(
     (tmp_path / "src").mkdir()
     (tmp_path / _RELPATH).write_text(_ORIGINAL, encoding="utf-8")
 
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
     monkeypatch.setattr(
         "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
     )
@@ -90,9 +92,12 @@ def test_retry_loop_fixes_a_reverted_edit_on_second_round(
 
     def fake_run_tests(root, **kwargs):
         calls["n"] += 1
-        # 1: initial baseline (clean), 2: initial after-fix (broken -> fails),
-        # 3: retry baseline (clean), 4: retry after-fix (fixed -> passes).
-        cases = [failing_case] if calls["n"] == 2 else []
+        # Odd calls are baselines (clean), even calls are after-fix.
+        # Calls 2 and 3 (after-fix + flake retry) fail because the broken
+        # code is still on disk; calls 5+ (retry round) succeed because
+        # RetryLoop rewrites with the correct code.
+        is_after_fix = calls["n"] in (2, 3)
+        cases = [failing_case] if is_after_fix else []
         return _run(TestFramework.NODE_TEST, cases)
 
     monkeypatch.setattr("depfix.verify.verifier.run_tests", fake_run_tests)

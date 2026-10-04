@@ -23,8 +23,8 @@ from depfix.apply.workspace import WorkspaceEditor
 from depfix.codemods import CodemodRegistry
 from depfix.core.models import BreakingChange, FileUsage
 from depfix.fixers.gemini import FixGenerator
-from depfix.redaction import RedactionError
 from depfix.fixers.ollama import OllamaFixGenerator
+from depfix.redaction import RedactionError
 from depfix.retry.loop import RetryLoop
 from depfix.scanners.models import RepoScanResult
 from depfix.validators.javascript import FixValidator
@@ -140,19 +140,35 @@ class FixPipeline:
                 result = batch_results.get(usage.filepath)
                 if result is None or result.source is None:
                     continue
-                validation = self._validator.validate(usage.file_content, result.source, usage.filepath)
+                validation = self._validator.validate(
+                    usage.file_content, result.source, usage.filepath
+                )
                 if not validation.is_valid:
-                    self._codemod_notes.append(f"{usage.filepath}: batch codemod invalid; fell back to model")
+                    self._codemod_notes.append(
+                        f"{usage.filepath}: batch codemod invalid; fell back to model"
+                    )
                     continue
-                edit = editor.write_fix(usage.filepath, result.source, confidence=1.0,
-                    usages_fixed=usage.usage_count, validation=validation,
-                    origin=EditOrigin.CODEMOD, codemod_id=result.codemod_id)
-                batch_edits[usage.filepath] = replace(edit, derivation_trace=(
-                    f"Deterministic codemod `{result.codemod_id}` rewrote "
-                    f"{usage.usage_count} site(s). {result.note}"))
+                edit = editor.write_fix(
+                    usage.filepath,
+                    result.source,
+                    confidence=1.0,
+                    usages_fixed=usage.usage_count,
+                    validation=validation,
+                    origin=EditOrigin.CODEMOD,
+                    codemod_id=result.codemod_id,
+                )
+                batch_edits[usage.filepath] = replace(
+                    edit,
+                    derivation_trace=(
+                        f"Deterministic codemod `{result.codemod_id}` rewrote "
+                        f"{usage.usage_count} site(s). {result.note}"
+                    ),
+                )
                 self._codemod_notes.append(f"{usage.filepath}: {result.note}")
-        edits = [batch_edits.get(usage.filepath) or self._fix_one(usage, breaking_change, editor)
-                 for usage in file_usages]
+        edits = [
+            batch_edits.get(usage.filepath) or self._fix_one(usage, breaking_change, editor)
+            for usage in file_usages
+        ]
 
         # A migration changes both code and the SDK version. The verifier's
         # install step must see the bumped manifest, otherwise migrated code
@@ -186,7 +202,9 @@ class FixPipeline:
                 )
                 if rounds_used:
                     logger.info(
-                        "retry loop used %d round(s) for %s", rounds_used, scan_result.repo_full_name
+                        "retry loop used %d round(s) for %s",
+                        rounds_used,
+                        scan_result.repo_full_name,
                     )
 
         # Preserve the checkout's original manifest. fix_service will create
@@ -199,9 +217,13 @@ class FixPipeline:
 
         cross_file_warnings: tuple[str, ...] = ()
         if self._codemods is not None:
-            cross_file_warnings = tuple(self._codemods.audit_cross_file(
-                breaking_change, editor.checkout.path, {e.relpath for e in edits if e.is_on_disk}
-            ))
+            cross_file_warnings = tuple(
+                self._codemods.audit_cross_file(
+                    breaking_change,
+                    editor.checkout.path,
+                    {e.relpath for e in edits if e.is_on_disk},
+                )
+            )
 
         return FixPipelineResult(
             repo_full_name=scan_result.repo_full_name,
@@ -214,7 +236,7 @@ class FixPipeline:
             total_tokens=self._fixer.total_tokens,
             duration_ms=int((time.time() - start) * 1000),
             verification=verification,
-            codemod_notes=tuple([*self._codemod_notes, *cross_file_warnings]),
+            codemod_notes=(*self._codemod_notes, *cross_file_warnings),
         )
 
     def _fix_one(
@@ -240,13 +262,21 @@ class FixPipeline:
                 if validation.is_valid:
                     self._codemod_notes.append(f"{file_usage.filepath}: {result.note}")
                     edit = editor.write_fix(
-                        file_usage.filepath, result.source, confidence=1.0,
-                        usages_fixed=file_usage.usage_count, validation=validation,
-                        origin=EditOrigin.CODEMOD, codemod_id=result.codemod_id,
+                        file_usage.filepath,
+                        result.source,
+                        confidence=1.0,
+                        usages_fixed=file_usage.usage_count,
+                        validation=validation,
+                        origin=EditOrigin.CODEMOD,
+                        codemod_id=result.codemod_id,
                     )
-                    return replace(edit, derivation_trace=(
-                        f"Deterministic codemod `{result.codemod_id}` rewrote "
-                        f"{file_usage.usage_count} site(s). {result.note}"))
+                    return replace(
+                        edit,
+                        derivation_trace=(
+                            f"Deterministic codemod `{result.codemod_id}` rewrote "
+                            f"{file_usage.usage_count} site(s). {result.note}"
+                        ),
+                    )
                 self._codemod_notes.append(
                     f"{file_usage.filepath}: {result.codemod_id} produced invalid syntax; fell back to the model"
                 )
@@ -299,6 +329,10 @@ class FixPipeline:
             origin=EditOrigin.LLM,
         )
         model = getattr(self._fixer, "model", "unknown")
-        return replace(edit, derivation_trace=(
-            f"LLM ({model}) generated a migration for {file_usage.usage_count} usage(s) of "
-            f"`{breaking_change.old_api}` → `{breaking_change.new_api}`; confidence {confidence:.2f}."))
+        return replace(
+            edit,
+            derivation_trace=(
+                f"LLM ({model}) generated a migration for {file_usage.usage_count} usage(s) of "
+                f"`{breaking_change.old_api}` → `{breaking_change.new_api}`; confidence {confidence:.2f}."
+            ),
+        )

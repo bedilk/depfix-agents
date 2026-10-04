@@ -16,10 +16,21 @@ from depfix.scanners.language import LanguageScanResult
 
 logger = logging.getLogger(__name__)
 
-_SKIP_DIRS = frozenset({
-    "node_modules", ".git", "vendor", "venv", ".venv", "__pycache__",
-    "target", "build", "dist", ".eggs", "site-packages",
-})
+_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "vendor",
+        "venv",
+        ".venv",
+        "__pycache__",
+        "target",
+        "build",
+        "dist",
+        ".eggs",
+        "site-packages",
+    }
+)
 
 
 class LanguageScanner(Protocol):
@@ -75,41 +86,48 @@ scanner_registry = ScannerRegistry()
 
 
 def _register_builtins() -> None:
-    from depfix.scanners.languages.python import PythonScanner
+    from depfix.scanners.languages.elixir import ElixirScanner
     from depfix.scanners.languages.go import GoScanner
     from depfix.scanners.languages.java import JavaScanner
     from depfix.scanners.languages.kotlin import KotlinScanner
-    from depfix.scanners.languages.ruby import RubyScanner
-    from depfix.scanners.languages.elixir import ElixirScanner
     from depfix.scanners.languages.php import PhpScanner
+    from depfix.scanners.languages.python import PythonScanner
+    from depfix.scanners.languages.ruby import RubyScanner
 
     scanner_registry.register(
-        "python", lambda pkgs: PythonScanner(pkgs),
+        "python",
+        lambda pkgs: PythonScanner(pkgs),
         (".py", ".pyi"),
     )
     scanner_registry.register(
-        "go", lambda pkgs: GoScanner(pkgs),
+        "go",
+        lambda pkgs: GoScanner(pkgs),
         (".go",),
     )
     # Java gets .java only; Kotlin gets .kt/.kts with Kotlin-specific patterns
     scanner_registry.register(
-        "java", lambda pkgs: JavaScanner(pkgs),
+        "java",
+        lambda pkgs: JavaScanner(pkgs),
         (".java",),
     )
     scanner_registry.register(
-        "kotlin", lambda pkgs: KotlinScanner(pkgs),
+        "kotlin",
+        lambda pkgs: KotlinScanner(pkgs),
         (".kt", ".kts"),
     )
     scanner_registry.register(
-        "ruby", lambda pkgs: RubyScanner(pkgs),
+        "ruby",
+        lambda pkgs: RubyScanner(pkgs),
         (".rb", ".rake", ".ru"),
     )
     scanner_registry.register(
-        "elixir", lambda pkgs: ElixirScanner(pkgs),
+        "elixir",
+        lambda pkgs: ElixirScanner(pkgs),
         (".ex", ".exs"),
     )
     scanner_registry.register(
-        "php", lambda pkgs: PhpScanner(pkgs),
+        "php",
+        lambda pkgs: PhpScanner(pkgs),
         (".php", ".phtml"),
     )
 

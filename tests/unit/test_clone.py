@@ -120,7 +120,7 @@ def test_clone_enforces_max_repo_mb_cap_and_cleans_up(tmp_path: Path) -> None:
     clone_dir = tmp_path / "clones"
     service = CloneService(clone_dir=str(clone_dir), max_repo_mb=0)
 
-    with pytest.raises(CloneError, match="exceeds the"):
+    with pytest.raises(CloneError, match="larger than"):
         service.clone("acme", "widgets", url=str(source))
 
     # The oversized checkout must not be left behind.

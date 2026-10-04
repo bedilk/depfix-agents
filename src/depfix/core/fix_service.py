@@ -20,12 +20,12 @@ from depfix.clone import Checkout
 from depfix.codemods import CodemodRegistry
 from depfix.config import Settings
 from depfix.core.models import BreakingChange, ChangeKind, is_method_removal
-from depfix.obs.cost import CostLedger, CostStage
 from depfix.core.pipeline import FixPipeline, FixPipelineResult
 from depfix.fixers.bedrock import BedrockFixGenerator
 from depfix.fixers.gemini import FixGenerator
 from depfix.fixers.ollama import OllamaFixGenerator
 from depfix.gh.pr import committable_edits
+from depfix.obs.cost import CostLedger, CostStage
 from depfix.repoconfig.models import RepoConfig
 from depfix.retry.loop import RetryLoop
 from depfix.scanners import CallSiteScanner
@@ -134,7 +134,9 @@ def _build_completer_for_characterize(settings: Settings) -> LLMCompleter | None
     )
 
 
-def _build_fallback_fixer(settings: Settings) -> BedrockFixGenerator | FixGenerator | OllamaFixGenerator | None:
+def _build_fallback_fixer(
+    settings: Settings,
+) -> BedrockFixGenerator | FixGenerator | OllamaFixGenerator | None:
     """Instantiate the configured stronger fallback model, if any."""
     if not settings.llm_fallback_model:
         return None
@@ -182,9 +184,15 @@ def run_fix_for_change(
             not change.new_api.strip() or not change.new_version.strip()
         ):
             result = FixPipelineResult(
-                repo_full_name=scan_result.repo_full_name, breaking_change=change,
-                files_scanned=scan_result.files_scanned, files_affected=0, edits=(),
-                total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+                repo_full_name=scan_result.repo_full_name,
+                breaking_change=change,
+                files_scanned=scan_result.files_scanned,
+                files_affected=0,
+                edits=(),
+                total_usages_fixed=0,
+                total_cost=0.0,
+                total_tokens=0,
+                duration_ms=0,
                 codemod_notes=("security advisory has no published fix; reported for review",),
             )
             return FixServiceResult(result, [], repo_config.verify and settings.verify_enabled)
@@ -192,9 +200,15 @@ def run_fix_for_change(
 
     if is_method_removal(change):
         result = FixPipelineResult(
-            repo_full_name=scan_result.repo_full_name, breaking_change=change,
-            files_scanned=scan_result.files_scanned, files_affected=0, edits=(),
-            total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+            repo_full_name=scan_result.repo_full_name,
+            breaking_change=change,
+            files_scanned=scan_result.files_scanned,
+            files_affected=0,
+            edits=(),
+            total_usages_fixed=0,
+            total_cost=0.0,
+            total_tokens=0,
+            duration_ms=0,
             codemod_notes=(
                 f"{change.old_api} was removed upstream with no replacement; "
                 "reported only, no fix generated",
@@ -220,7 +234,11 @@ def run_fix_for_change(
             breaking_change=change,
             files_scanned=scan_result.files_scanned,
             files_affected=0,
-            edits=(), total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+            edits=(),
+            total_usages_fixed=0,
+            total_cost=0.0,
+            total_tokens=0,
+            duration_ms=0,
             codemod_notes=(note,),
         )
         logger.info("skipping %s: unsupported ecosystem %s", change.dedupe_key[:12], pretty)
@@ -241,9 +259,15 @@ def run_fix_for_change(
             )
 
     primary = _run_once(
-        checkout=checkout, scan_result=scan_result, change=change, settings=settings,
-        repo_config=repo_config, fixer=fixer, max_retries=max_retries,
-        characterizer=characterizer, ecosystem=ecosystem,
+        checkout=checkout,
+        scan_result=scan_result,
+        change=change,
+        settings=settings,
+        repo_config=repo_config,
+        fixer=fixer,
+        max_retries=max_retries,
+        characterizer=characterizer,
+        ecosystem=ecosystem,
     )
     if ledger is not None:
         ledger.record(CostStage.FIX_GENERATION, primary.pipeline_result.total_cost)
@@ -256,7 +280,8 @@ def run_fix_for_change(
 
     logger.info(
         "primary model produced no committable edits for %s; escalating to fallback model %s",
-        change.dedupe_key[:12], settings.llm_fallback_model,
+        change.dedupe_key[:12],
+        settings.llm_fallback_model,
     )
     # Restore the checkout explicitly. A new WorkspaceEditor alone would
     # capture the primary's rejected contents as its "original" state.
@@ -266,9 +291,15 @@ def run_fix_for_change(
             restore_editor.write_fix(edit.relpath, edit.original_content)
 
     escalated = _run_once(
-        checkout=checkout, scan_result=scan_result, change=change, settings=settings,
-        repo_config=repo_config, fixer=fallback, max_retries=max_retries,
-        characterizer=characterizer, ecosystem=ecosystem,
+        checkout=checkout,
+        scan_result=scan_result,
+        change=change,
+        settings=settings,
+        repo_config=repo_config,
+        fixer=fallback,
+        max_retries=max_retries,
+        characterizer=characterizer,
+        ecosystem=ecosystem,
     )
     if ledger is not None:
         ledger.record(CostStage.RETRY, escalated.pipeline_result.total_cost)
@@ -311,9 +342,15 @@ def _run_dependency_drift(
 
     def report_only(note: str) -> FixServiceResult:
         result = FixPipelineResult(
-            repo_full_name=scan_result.repo_full_name, breaking_change=change,
-            files_scanned=scan_result.files_scanned, files_affected=0, edits=(),
-            total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+            repo_full_name=scan_result.repo_full_name,
+            breaking_change=change,
+            files_scanned=scan_result.files_scanned,
+            files_affected=0,
+            edits=(),
+            total_usages_fixed=0,
+            total_cost=0.0,
+            total_tokens=0,
+            duration_ms=0,
             codemod_notes=(note,),
         )
         return FixServiceResult(result, [], verify_required)
@@ -331,7 +368,9 @@ def _run_dependency_drift(
         cross_major = plan.cross_major
         drift_bumps = [
             (
-                bump.manifest_relpath, bump.fixed_content, bump.note,
+                bump.manifest_relpath,
+                bump.fixed_content,
+                bump.note,
                 f"Registry drift: {bump.package} {bump.old_range} -> {bump.new_range} "
                 f"in {bump.manifest_relpath}.",
             )
@@ -342,7 +381,9 @@ def _run_dependency_drift(
 
         drift_bumps = [
             (
-                bump.manifest_relpath, bump.fixed_content, bump.note,
+                bump.manifest_relpath,
+                bump.fixed_content,
+                bump.note,
                 f"Registry drift: {bump.package} {bump.old_spec} -> {bump.new_spec} "
                 f"in {bump.manifest_relpath}.",
             )
@@ -353,7 +394,9 @@ def _run_dependency_drift(
 
         drift_bumps = [
             (
-                bump.manifest_relpath, bump.fixed_content, bump.note,
+                bump.manifest_relpath,
+                bump.fixed_content,
+                bump.note,
                 f"Registry drift: {bump.package} {bump.old_spec} -> {bump.new_spec} "
                 f"in {bump.manifest_relpath}.",
             )
@@ -364,7 +407,9 @@ def _run_dependency_drift(
 
         drift_bumps = [
             (
-                bump.manifest_relpath, bump.fixed_content, bump.note,
+                bump.manifest_relpath,
+                bump.fixed_content,
+                bump.note,
                 f"Registry drift: {bump.package} {bump.old_version} -> {bump.new_version} "
                 f"in {bump.manifest_relpath}.",
             )
@@ -374,8 +419,10 @@ def _run_dependency_drift(
         from depfix.ecosystems import get as get_ecosystem
 
         spec = get_ecosystem(ecosystem)
-        pretty = spec.display_name if spec is not None else (
-            ecosystem if ecosystem != "unknown" else "this repository's"
+        pretty = (
+            spec.display_name
+            if spec is not None
+            else (ecosystem if ecosystem != "unknown" else "this repository's")
         )
         return report_only(
             f"dependency drift detected for {pretty}; automatic manifest writers are "
@@ -394,8 +441,11 @@ def _run_dependency_drift(
         )
     for relpath, fixed_content, note, trace in drift_bumps:
         edit = editor.write_fix(
-            relpath, fixed_content, confidence=1.0,
-            origin=EditOrigin.CODEMOD, codemod_id="manifest.dependency-drift",
+            relpath,
+            fixed_content,
+            confidence=1.0,
+            origin=EditOrigin.CODEMOD,
+            codemod_id="manifest.dependency-drift",
         )
         if not edit.changed:
             notes.append(f"manifest drift update not written: {relpath}")
@@ -424,7 +474,8 @@ def _run_dependency_drift(
             except OSError:
                 continue
         ok, message = try_refresh_javascript_lockfile(
-            checkout.path, timeout=settings.verify_install_timeout,
+            checkout.path,
+            timeout=settings.verify_install_timeout,
             max_output_bytes=settings.verify_max_output_bytes,
         )
         notes.append(message)
@@ -448,14 +499,19 @@ def _run_dependency_drift(
                     continue
                 lockfile.write_bytes(original_lock)
                 lock_edit = editor.write_fix(
-                    relpath, refreshed_lock, confidence=1.0,
-                    origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                    relpath,
+                    refreshed_lock,
+                    confidence=1.0,
+                    origin=EditOrigin.CODEMOD,
+                    codemod_id="manifest.lockfile-regen",
                 )
                 if lock_edit.changed:
-                    edits.append(dataclasses.replace(
-                        lock_edit,
-                        derivation_trace=f"JavaScript lockfile refreshed after dependency drift: {message}",
-                    ))
+                    edits.append(
+                        dataclasses.replace(
+                            lock_edit,
+                            derivation_trace=f"JavaScript lockfile refreshed after dependency drift: {message}",
+                        )
+                    )
 
     # Go is the one ecosystem whose generated file must be refreshed *before*
     # verification: without matching go.sum hashes, `go mod download` and
@@ -463,12 +519,7 @@ def _run_dependency_drift(
     # manifest bump would be verified as a failure. `go mod tidy` is also
     # allowed to rewrite go.mod itself, so whatever actually changed is
     # re-registered with the editor.
-    if (
-        ecosystem == "go"
-        and settings.lockfile_regenerate
-        and checkout.is_temporary
-        and edits
-    ):
+    if ecosystem == "go" and settings.lockfile_regenerate and checkout.is_temporary and edits:
         from depfix.ecosystems.go_lockfile import go_generated_paths, try_refresh_go_lockfile
 
         before: dict[str, str] = {}
@@ -498,8 +549,11 @@ def _run_dependency_drift(
                 path.write_text(original_text, encoding="utf-8")
                 refreshed_edit = dataclasses.replace(
                     editor.write_fix(
-                        relpath, refreshed, confidence=1.0,
-                        origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                        relpath,
+                        refreshed,
+                        confidence=1.0,
+                        origin=EditOrigin.CODEMOD,
+                        codemod_id="manifest.lockfile-regen",
                     ),
                     derivation_trace=f"Go generated file refreshed after drift: {message}.",
                 )
@@ -516,7 +570,8 @@ def _run_dependency_drift(
     verification = None
     if edits and verify_required:
         verifier = Verifier(
-            editor, install_timeout=settings.verify_install_timeout,
+            editor,
+            install_timeout=settings.verify_install_timeout,
             test_timeout=settings.verify_test_timeout,
             ignore_scripts=settings.verify_ignore_scripts,
             max_output_bytes=settings.verify_max_output_bytes,
@@ -549,7 +604,8 @@ def _run_dependency_drift(
         )
 
         ok, message = try_refresh_python_lockfile(
-            checkout.path, timeout=settings.verify_install_timeout,
+            checkout.path,
+            timeout=settings.verify_install_timeout,
         )
         notes.append(message)
         if ok:
@@ -560,8 +616,11 @@ def _run_dependency_drift(
                 except UnicodeDecodeError:
                     continue
                 lock_edit = editor.write_fix(
-                    relpath, content, confidence=1.0,
-                    origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                    relpath,
+                    content,
+                    confidence=1.0,
+                    origin=EditOrigin.CODEMOD,
+                    codemod_id="manifest.lockfile-regen",
                 )
                 if not lock_edit.changed:
                     continue
@@ -583,7 +642,8 @@ def _run_dependency_drift(
         )
 
         ok, message = try_refresh_ruby_lockfile(
-            checkout.path, timeout=settings.verify_install_timeout,
+            checkout.path,
+            timeout=settings.verify_install_timeout,
         )
         notes.append(message)
         if ok:
@@ -594,8 +654,11 @@ def _run_dependency_drift(
                 except UnicodeDecodeError:
                     continue
                 lock_edit = editor.write_fix(
-                    relpath, content, confidence=1.0,
-                    origin=EditOrigin.CODEMOD, codemod_id="manifest.lockfile-regen",
+                    relpath,
+                    content,
+                    confidence=1.0,
+                    origin=EditOrigin.CODEMOD,
+                    codemod_id="manifest.lockfile-regen",
                 )
                 if not lock_edit.changed:
                     continue
@@ -607,9 +670,15 @@ def _run_dependency_drift(
 
     needs_major_review = policy == "review_pr" or cross_major
     result = FixPipelineResult(
-        repo_full_name=scan_result.repo_full_name, breaking_change=change,
-        files_scanned=scan_result.files_scanned, files_affected=len(edits), edits=tuple(edits),
-        total_usages_fixed=0, total_cost=0.0, total_tokens=0, duration_ms=0,
+        repo_full_name=scan_result.repo_full_name,
+        breaking_change=change,
+        files_scanned=scan_result.files_scanned,
+        files_affected=len(edits),
+        edits=tuple(edits),
+        total_usages_fixed=0,
+        total_cost=0.0,
+        total_tokens=0,
+        duration_ms=0,
         verification=verification,
         codemod_notes=(
             *notes,
@@ -678,7 +747,10 @@ def _run_once(
     if committable and not result.confidence.at_least(floor):
         logger.info(
             "withholding %d edit(s) for %s: confidence %s is below apply_min_confidence %s",
-            len(committable), change.dedupe_key[:12], result.confidence.value, floor.value,
+            len(committable),
+            change.dedupe_key[:12],
+            result.confidence.value,
+            floor.value,
         )
         committable = []
     if committable:
@@ -687,33 +759,45 @@ def _run_once(
 
         bumped_any = False
         for bump in build_manifest_bumps(checkout.path, change):
-            edit = editor.write_fix(bump.manifest_relpath, bump.fixed_content, confidence=1.0, usages_fixed=0)
+            edit = editor.write_fix(
+                bump.manifest_relpath, bump.fixed_content, confidence=1.0, usages_fixed=0
+            )
             if not edit.changed:
                 # write_fix declined (e.g. identical content, encoding error,
                 # or an I/O failure) -- do not report an untouched/failed
                 # manifest as a kept, on-disk fix.
                 result = dataclasses.replace(
-                    result, codemod_notes=(*result.codemod_notes,
+                    result,
+                    codemod_notes=(
+                        *result.codemod_notes,
                         f"manifest bump for {bump.manifest_relpath} was not written: "
-                        f"{edit.error_message or 'no change on disk'}")
+                        f"{edit.error_message or 'no change on disk'}",
+                    ),
                 )
                 continue
             edit = dataclasses.replace(
-                edit, verdict=EditVerdict.KEPT, origin=EditOrigin.CODEMOD,
+                edit,
+                verdict=EditVerdict.KEPT,
+                origin=EditOrigin.CODEMOD,
                 codemod_id="manifest.version-bump",
-                derivation_trace=(f"Manifest bump: {bump.package} {bump.old_range} → "
-                                  f"{bump.new_range} in {bump.manifest_relpath}."),
+                derivation_trace=(
+                    f"Manifest bump: {bump.package} {bump.old_range} → "
+                    f"{bump.new_range} in {bump.manifest_relpath}."
+                ),
             )
             committable.append(edit)
             result = dataclasses.replace(
-                result, edits=(*result.edits, edit), codemod_notes=(*result.codemod_notes, bump.note)
+                result,
+                edits=(*result.edits, edit),
+                codemod_notes=(*result.codemod_notes, bump.note),
             )
             bumped_any = True
         if bumped_any and settings.lockfile_regenerate and checkout.is_temporary:
             from depfix.codemods.lockfile import lockfile_paths, try_regenerate_lockfile
 
             ok, message = try_regenerate_lockfile(
-                checkout.path, timeout=settings.verify_install_timeout,
+                checkout.path,
+                timeout=settings.verify_install_timeout,
                 ignore_scripts=settings.verify_ignore_scripts,
             )
             if ok:
@@ -726,16 +810,26 @@ def _run_once(
                     edit = editor.write_fix(relpath, content, confidence=1.0, usages_fixed=0)
                     if edit.changed:
                         edit = dataclasses.replace(
-                            edit, verdict=EditVerdict.KEPT, origin=EditOrigin.CODEMOD,
+                            edit,
+                            verdict=EditVerdict.KEPT,
+                            origin=EditOrigin.CODEMOD,
                             codemod_id="manifest.lockfile-regen",
                             derivation_trace=f"Lockfile regenerated after manifest bump: {message}.",
                         )
                         committable.append(edit)
-                        result = dataclasses.replace(result, edits=(*result.edits, edit),
-                            codemod_notes=(*result.codemod_notes, message))
+                        result = dataclasses.replace(
+                            result,
+                            edits=(*result.edits, edit),
+                            codemod_notes=(*result.codemod_notes, message),
+                        )
             else:
-                result = dataclasses.replace(result, codemod_notes=(*result.codemod_notes,
-                    f"lockfile not regenerated: {message}; regenerate it before merging"))
+                result = dataclasses.replace(
+                    result,
+                    codemod_notes=(
+                        *result.codemod_notes,
+                        f"lockfile not regenerated: {message}; regenerate it before merging",
+                    ),
+                )
     return FixServiceResult(
         pipeline_result=result,
         committable=committable,

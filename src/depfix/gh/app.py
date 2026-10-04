@@ -129,7 +129,9 @@ class GitHubAppAuth:
             )
         if resp.status_code == 422:
             permission_detail = (
-                ", ".join(f"{name}={level}" for name, level in sorted(requested_permissions.items()))
+                ", ".join(
+                    f"{name}={level}" for name, level in sorted(requested_permissions.items())
+                )
                 if requested_permissions
                 else "the required permission"
             )
@@ -291,7 +293,9 @@ class GitHubAppAuth:
             raise GitHubAppError(f"{owner}/{repo}:{path} is a directory, not a file")
         encoding = data.get("encoding", "base64")
         if encoding != "base64":
-            raise GitHubAppError(f"{owner}/{repo}:{path}: unsupported content encoding {encoding!r}")
+            raise GitHubAppError(
+                f"{owner}/{repo}:{path}: unsupported content encoding {encoding!r}"
+            )
         return base64.b64decode(data["content"]).decode("utf-8")
 
     def ref_sha(self, owner: str, repo: str, ref: str) -> str:

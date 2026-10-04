@@ -14,7 +14,6 @@ import pytest
 from depfix.ecosystems import registry
 from depfix.ecosystems.specs import ALL_SPECS
 
-
 # -- detect ------------------------------------------------------------------
 
 
@@ -73,12 +72,12 @@ def test_detect_scores_kotlin_for_gradle_kts_not_java(tmp_path: Path) -> None:
     assert registry.detect(tmp_path) == "kotlin"
 
 
-def test_detect_ignores_markers_nested_below_the_root(tmp_path: Path) -> None:
+def test_detect_finds_nested_manifest_in_monorepo_layout(tmp_path: Path) -> None:
     nested = tmp_path / "sub"
     nested.mkdir()
     (nested / "go.mod").write_text("module x\n", encoding="utf-8")
 
-    assert registry.detect(tmp_path) == "unknown"
+    assert registry.detect(tmp_path) == "go"
 
 
 # -- get / all_ids / fixable_ids ---------------------------------------------
@@ -90,8 +89,8 @@ def test_all_ids_covers_the_ten_specs_in_declaration_order() -> None:
     assert registry.all_ids()[0] == "javascript"
 
 
-def test_fixable_ids_is_javascript_and_python_only() -> None:
-    assert registry.fixable_ids() == frozenset({"javascript", "python"})
+def test_fixable_ids_includes_all_fix_supported_ecosystems() -> None:
+    assert registry.fixable_ids() == frozenset({"javascript", "python", "ruby", "go"})
 
 
 def test_get_returns_spec_by_id_and_none_for_unknown() -> None:

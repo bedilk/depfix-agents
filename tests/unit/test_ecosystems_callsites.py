@@ -72,8 +72,13 @@ def test_mask_comments_leaves_comment_marker_inside_a_string_alone() -> None:
 def test_mask_comments_is_a_noop_for_a_spec_without_comment_syntax() -> None:
     spec = get("javascript")
     assert spec is not None
-    bare = spec.__class__(id="x", display_name="X", registry_aliases=("x",),
-                          source_extensions=frozenset({".x"}), markers=())
+    bare = spec.__class__(
+        id="x",
+        display_name="X",
+        registry_aliases=("x",),
+        source_extensions=frozenset({".x"}),
+        markers=(),
+    )
 
     assert mask_comments("# not a comment here\n", bare) == "# not a comment here\n"
 
@@ -82,7 +87,9 @@ def test_mask_comments_is_a_noop_for_a_spec_without_comment_syntax() -> None:
 
 
 def test_python_import_statement_is_high_confidence_sdk_import(tmp_path: Path) -> None:
-    (tmp_path / "app.py").write_text("import openai\n\nclient = openai.Client()\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "import openai\n\nclient = openai.Client()\n", encoding="utf-8"
+    )
 
     result = GenericImportScanner(PYTHON).scan(tmp_path, _target())
 
@@ -153,9 +160,7 @@ def test_symbol_match_is_a_medium_confidence_method_call(tmp_path: Path) -> None
 
 
 def test_commented_symbol_is_masked_out(tmp_path: Path) -> None:
-    (tmp_path / "app.py").write_text(
-        "# openai.ChatCompletion.create()\n", encoding="utf-8"
-    )
+    (tmp_path / "app.py").write_text("# openai.ChatCompletion.create()\n", encoding="utf-8")
 
     result = GenericImportScanner(PYTHON).scan(
         tmp_path,
@@ -226,9 +231,7 @@ def test_scan_finds_call_sites_in_nested_directories(tmp_path: Path) -> None:
 def test_php_import_hit_is_medium_confidence_because_namespace_is_a_guess(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "Client.php").write_text(
-        "<?php\nuse Stripe\\StripeClient;\n", encoding="utf-8"
-    )
+    (tmp_path / "Client.php").write_text("<?php\nuse Stripe\\StripeClient;\n", encoding="utf-8")
 
     result = GenericImportScanner(PHP).scan(
         tmp_path, _target(provider_id="stripe", sdk_packages=("stripe/stripe-php",))

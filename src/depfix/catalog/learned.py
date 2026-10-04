@@ -52,11 +52,7 @@ def record_detected_usage(
     managed catalog reflects one repository commit exactly.
     """
     symbols = sorted(
-        {
-            symbol
-            for symbol in detected_symbols
-            if symbol and not _is_generic_scanner_symbol(symbol)
-        }
+        {symbol for symbol in detected_symbols if symbol and not _is_generic_scanner_symbol(symbol)}
     )
     sdk_package, sdk_version = _sdk_metadata(sdk_versions or {})
     latest_version = _feed_latest_version(classified_changes, sdk_package)
@@ -85,15 +81,10 @@ def record_detected_usage(
         entry
         for entry in existing
         if not (
-            entry.get("provider_id") == provider_id
-            and entry.get("repository") == repo_full_name
+            entry.get("provider_id") == provider_id and entry.get("repository") == repo_full_name
         )
     ]
-    if (
-        not symbols
-        and len(remaining) == len(existing)
-        and not normalized_legacy_entries
-    ):
+    if not symbols and len(remaining) == len(existing) and not normalized_legacy_entries:
         return 0
     updated_entries = [*remaining, *entries]
     if updated_entries:
@@ -206,15 +197,15 @@ def _match_symbol(
         old_symbols = symbols_for_change(provider_id, change)
         if _matches_any(symbol, old_symbols):
             return change, "old"
-        if change.new_api and _matches_any(
-            symbol, symbols_for_api(provider_id, change.new_api)
-        ):
+        if change.new_api and _matches_any(symbol, symbols_for_api(provider_id, change.new_api)):
             return change, "new"
     return None
 
 
 def _matches_any(symbol: str, candidates: tuple[str, ...]) -> bool:
-    return any(symbol == candidate or symbol.startswith(f"{candidate}.") for candidate in candidates)
+    return any(
+        symbol == candidate or symbol.startswith(f"{candidate}.") for candidate in candidates
+    )
 
 
 def _is_generic_scanner_symbol(symbol: str) -> bool:
@@ -309,11 +300,16 @@ def _read_document(path: Path) -> dict:
         "version": LEARNED_FORMAT_VERSION,
         "migrations": {
             k: v for k, v in migrations.items() if isinstance(k, str) and isinstance(v, dict)
-        } if isinstance(migrations, dict) else {},
+        }
+        if isinstance(migrations, dict)
+        else {},
         "detections": {
             k: [e for e in v if isinstance(e, dict)]
-            for k, v in detections.items() if isinstance(k, str) and isinstance(v, list)
-        } if isinstance(detections, dict) else {},
+            for k, v in detections.items()
+            if isinstance(k, str) and isinstance(v, list)
+        }
+        if isinstance(detections, dict)
+        else {},
     }
 
 
@@ -430,5 +426,3 @@ def promote_learned_migration(path: str | Path, dedupe_key: str, confirmed_by: s
         return False
     entry.update(status=STATUS_CONFIRMED, confirmed_by=confirmed_by, confirmed_at=_utcnow_iso())
     return _write_learned(path, entries)
-
-

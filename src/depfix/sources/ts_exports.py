@@ -141,8 +141,10 @@ class TsExportsSource(ChangeSource):
             # First-sight comparison found nothing: behave like a plain baseline.
             return FeedPoll.baseline(version)
 
-        severity = Severity.BREAKING if changes else (
-            Severity.BREAKING if is_major_bump(old_token, version) else Severity.UNKNOWN
+        severity = (
+            Severity.BREAKING
+            if changes
+            else (Severity.BREAKING if is_major_bump(old_token, version) else Severity.UNKNOWN)
         )
         summary = (
             f"{len(removed)} exported symbol(s) removed"
@@ -174,7 +176,8 @@ class TsExportsSource(ChangeSource):
         if current is None:
             return None
         candidates = [
-            (parsed, v) for v in versions
+            (parsed, v)
+            for v in versions
             if "-" not in v and (parsed := parse_semver(v)) is not None and parsed[0] < current[0]
         ]
         return max(candidates)[1] if candidates else None

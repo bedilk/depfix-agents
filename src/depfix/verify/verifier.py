@@ -1,5 +1,3 @@
-
-
 """Orchestrates evidence-based verification of candidate fixes.
 
 The core comparison is baseline-vs-after-fix by test *identity*, not by
@@ -36,13 +34,14 @@ from depfix.core.models import BreakingChange
 from depfix.verify.attribution import AttributionResult, attribute_failures
 from depfix.verify.characterize import CharacterizationReport, Characterizer
 from depfix.verify.confidence import ConfidenceTier
-from depfix.verify.contract import ContractReport, compare as compare_contracts
+from depfix.verify.contract import ContractReport
+from depfix.verify.contract import compare as compare_contracts
 from depfix.verify.coverage import CoverageReport, check_changed_lines
 from depfix.verify.manager import InstallResult, install_dependencies
-from depfix.verify.models import TestRunResult
+from depfix.verify.models import StageResult, StageStatus, TestRunResult
 from depfix.verify.runner import has_test_script, run_tests
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES
-from depfix.verify.selection import select_test_files
+from depfix.verify.selection import select_test_files, select_tests_for_changes
 from depfix.verify.static_check import (
     StaticCheckResult,
     new_static_diagnostics,
@@ -87,7 +86,7 @@ class VerificationReport:
     #: Structured results for always-run stages (smoke, characterization).
     #: Each entry carries status + skip_reason so callers and PR bodies
     #: can surface skips rather than silently hiding them.
-    stage_results: tuple["StageResult", ...] = ()
+    stage_results: tuple[StageResult, ...] = ()
 
     @property
     def new_failure_count(self) -> int:
@@ -236,13 +235,14 @@ class Verifier:
 
         # Set up coverage and contract tracking infrastructure
         coverage_dir = None
-        contract_shim_path = None
         contract_log_baseline = None
         contract_log_after = None
         if self._coverage_enabled:
             coverage_dir = Path(tempfile.mkdtemp(prefix="depfix-coverage-"))
         if self._contract_enabled:
-            contract_log_baseline = Path(tempfile.mkdtemp(prefix="depfix-contract-")) / "baseline.jsonl"
+            contract_log_baseline = (
+                Path(tempfile.mkdtemp(prefix="depfix-contract-")) / "baseline.jsonl"
+            )
             contract_log_after = Path(tempfile.mkdtemp(prefix="depfix-contract-")) / "after.jsonl"
 
         # Selective test selection
@@ -253,13 +253,16 @@ class Verifier:
             selective_test_files = selection.test_files if selection.test_files else None
 
         baseline = self._run_tests_on_baseline(
-            touched_relpaths, install.package_manager,
+            touched_relpaths,
+            install.package_manager,
             coverage_dir=None,  # Don't need baseline coverage
             contract_log_path=contract_log_baseline,
             selective_test_files=selective_test_files,
         )
         after_fix = self._run_tests_on_fixed(
-            touched_relpaths, edit_by_relpath, install.package_manager,
+            touched_relpaths,
+            edit_by_relpath,
+            install.package_manager,
             coverage_dir=coverage_dir,
             contract_log_path=contract_log_after,
             selective_test_files=selective_test_files,
@@ -409,11 +412,9 @@ class Verifier:
 
         only_files: tuple[str, ...] = ()
         if self._selective_tests:
-            only_files = select_test_files(
-                root, touched_relpaths, ecosystem=self._ecosystem
-            )
+            only_files = select_test_files(root, touched_relpaths, ecosystem=self._ecosystem)
 
-        selective_files = list(Path(root) / f for f in only_files) if only_files else None
+        selective_files = [Path(root) / f for f in only_files] if only_files else None
         return run_tests(
             root,
             timeout=self._test_timeout,
@@ -476,9 +477,7 @@ class Verifier:
     ) -> tuple[CoverageReport | None, ContractReport | None]:
         coverage = None
         if self._coverage_enabled and self._coverage_dir is not None:
-            coverage = check_changed_lines(
-                self._coverage_dir, self._editor.checkout.path, on_disk
-            )
+            coverage = check_changed_lines(self._coverage_dir, self._editor.checkout.path, on_disk)
 
         contract = None
         baseline_path = self._contract_paths.get("baseline")
@@ -522,6 +521,7 @@ class Verifier:
         if self._ecosystem != "javascript":
             return self._editor.checkout.path
         from depfix.scanners.workspace import owning_package_dir
+
         return owning_package_dir(self._editor.checkout.path, first_relpath)
 
     # -- typecheck fallback ----------------------------------------------------
@@ -556,7 +556,6 @@ class Verifier:
             tc_baseline: TypecheckResult | None = None,
             tc_after: TypecheckResult | None = None,
         ) -> VerificationReport:
-            from depfix.verify.models import StageResult, StageStatus
             from depfix.verify.smoke import SmokeStage, run_smoke_check
 
             stage_results: list[StageResult] = []
@@ -588,7 +587,8 @@ class Verifier:
                         self._editor.revert(edit.relpath)
                         settled = tuple(
                             self._settle(candidate, EditVerdict.REVERTED)
-                            if candidate.relpath == edit.relpath and candidate.is_on_disk else candidate
+                            if candidate.relpath == edit.relpath and candidate.is_on_disk
+                            else candidate
                             for candidate in settled
                         )
                         smoke_failures.append(
@@ -606,6 +606,7 @@ class Verifier:
 
             try:
                 from depfix.obs.metrics import verification_stage_outcomes
+
                 for sr in stage_results:
                     verification_stage_outcomes.record_stage_result(sr)
             except Exception:
@@ -879,17 +880,15 @@ class Verifier:
             revert_fix=lambda: self._editor.revert(edit.relpath),
         )
 
-    def _characterization_stage_result(
-        self, report: CharacterizationReport | None
-    ) -> "StageResult":
+    def _characterization_stage_result(self, report: CharacterizationReport | None) -> StageResult:
         """Convert a CharacterizationReport (or None) to a StageResult."""
-        from depfix.verify.models import StageResult, StageStatus
         if report is None:
             # No report = stage couldn't run — structured skip.
             strict = getattr(self, "characterization_strict", False)
             status = StageStatus.FAILED if strict else StageStatus.SKIPPED
             return StageResult(
-                stage="characterization", status=status,
+                stage="characterization",
+                status=status,
                 skip_reason="preconditions_not_met" if status == StageStatus.SKIPPED else None,
                 detail=(
                     "characterizer unavailable, multiple files, or no install"
@@ -901,18 +900,23 @@ class Verifier:
             strict = getattr(self, "characterization_strict", False)
             status = StageStatus.FAILED if strict else StageStatus.SKIPPED
             return StageResult(
-                stage="characterization", status=status,
-                skip_reason=report.skipped_reason or "not_ran" if status == StageStatus.SKIPPED else None,
+                stage="characterization",
+                status=status,
+                skip_reason=report.skipped_reason or "not_ran"
+                if status == StageStatus.SKIPPED
+                else None,
                 detail=report.skipped_reason,
             )
         if report.confirmed:
             return StageResult(
-                stage="characterization", status=StageStatus.PASSED,
+                stage="characterization",
+                status=StageStatus.PASSED,
                 detail="fixture preserved pre-migration behaviour",
                 duration_seconds=report.cost_usd,  # cost as a proxy; real duration not stored
             )
         return StageResult(
-            stage="characterization", status=StageStatus.FAILED,
+            stage="characterization",
+            status=StageStatus.FAILED,
             detail=report.rejected_reason or "fixture failed",
         )
 

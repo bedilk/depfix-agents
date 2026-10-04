@@ -54,9 +54,7 @@ def test_prepare_package_manager_installs_repository_pinned_yarn_in_isolated_cac
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A scan can prepare Yarn Berry without requiring a global Yarn install."""
-    (tmp_path / "package.json").write_text(
-        '{"packageManager": "yarn@4.18.0"}', encoding="utf-8"
-    )
+    (tmp_path / "package.json").write_text('{"packageManager": "yarn@4.18.0"}', encoding="utf-8")
     (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
     cache_dir = tmp_path / "tools"
 
@@ -69,9 +67,7 @@ def test_prepare_package_manager_installs_repository_pinned_yarn_in_isolated_cac
         executable = prefix / "node_modules" / ".bin" / "yarn"
         executable.parent.mkdir(parents=True)
         executable.write_text("#!/bin/sh\n", encoding="utf-8")
-        return SandboxResult(
-            argv=tuple(argv), exit_code=0, stdout="", stderr="", duration_ms=1.0
-        )
+        return SandboxResult(argv=tuple(argv), exit_code=0, stdout="", stderr="", duration_ms=1.0)
 
     monkeypatch.setattr("depfix.verify.manager._which", fake_which)
     monkeypatch.setattr("depfix.verify.manager.run_sandboxed", fake_run_sandboxed)
@@ -89,9 +85,7 @@ def test_prepare_package_manager_installs_repository_pinned_yarn_in_isolated_cac
 def test_prepare_package_manager_marks_an_existing_cached_runtime_as_managed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "package.json").write_text(
-        '{"packageManager": "yarn@4.18.0"}', encoding="utf-8"
-    )
+    (tmp_path / "package.json").write_text('{"packageManager": "yarn@4.18.0"}', encoding="utf-8")
     (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
     cache_dir = tmp_path / "tools"
     executable = cache_dir / "yarn" / "4.18.0" / "node_modules" / ".bin" / "yarn"
@@ -192,9 +186,7 @@ def test_install_dependencies_runs_sandboxed_and_reports_ok(
     def fake_run_sandboxed(argv, *, cwd, timeout, max_output_bytes, **kwargs):
         captured["argv"] = argv
         captured["cwd"] = cwd
-        return SandboxResult(
-            argv=tuple(argv), exit_code=0, stdout="", stderr="", duration_ms=1.0
-        )
+        return SandboxResult(argv=tuple(argv), exit_code=0, stdout="", stderr="", duration_ms=1.0)
 
     monkeypatch.setattr("depfix.verify.manager.run_sandboxed", fake_run_sandboxed)
 

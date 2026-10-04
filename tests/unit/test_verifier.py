@@ -20,14 +20,16 @@ from depfix.verify.attribution import AttributionResult
 from depfix.verify.manager import InstallResult
 from depfix.verify.models import TestCase, TestFramework, TestRunResult, TestStatus
 from depfix.verify.sandbox import SandboxResult
-from depfix.verify.verifier import Verifier, VerificationReport
+from depfix.verify.verifier import VerificationReport, Verifier
 
 
 def _editor(tmp_path: Path) -> WorkspaceEditor:
     return WorkspaceEditor(Checkout(path=tmp_path, is_temporary=False))
 
 
-def _edit(relpath: str, *, verdict: EditVerdict = EditVerdict.APPLIED, fixed: str = "new\n") -> FileEdit:
+def _edit(
+    relpath: str, *, verdict: EditVerdict = EditVerdict.APPLIED, fixed: str = "new\n"
+) -> FileEdit:
     return FileEdit(
         relpath=relpath, original_content="old\n", fixed_content=fixed, diff="", verdict=verdict
     )
@@ -69,7 +71,9 @@ def test_verify_skips_when_no_edits_are_on_disk(tmp_path: Path) -> None:
 def test_verify_marks_suspect_when_no_test_script(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": False)
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": False
+    )
     editor = _editor(tmp_path)
     verifier = Verifier(editor)
     edits = [_edit("a.js")]
@@ -84,7 +88,9 @@ def test_verify_marks_suspect_when_no_test_script(
 def test_verify_marks_suspect_when_install_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
     monkeypatch.setattr(
         "depfix.verify.verifier.install_dependencies",
         lambda root, **kwargs: InstallResult(
@@ -106,7 +112,9 @@ def test_verify_marks_suspect_when_install_fails(
 def test_verify_does_not_touch_edits_not_on_disk_in_early_exit_branches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": False)
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": False
+    )
     editor = _editor(tmp_path)
     verifier = Verifier(editor)
     on_disk = _edit("a.js")
@@ -130,8 +138,12 @@ def test_verify_marks_suspect_when_a_run_crashed(
     # more confident outcome than the "nothing could decide" SUSPECT this
     # test means to exercise.
     (tmp_path / "a.js").write_text("module.exports = 1;\n", encoding="utf-8")
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
     monkeypatch.setattr(
         "depfix.verify.verifier.run_tests",
         lambda root, **kwargs: _run(TestFramework.NODE_TEST, [], timed_out=True),
@@ -152,8 +164,12 @@ def test_verify_marks_suspect_when_either_run_used_fallback_parser(
 ) -> None:
     # See the loadability note in test_verify_marks_suspect_when_a_run_crashed.
     (tmp_path / "a.js").write_text("module.exports = 1;\n", encoding="utf-8")
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
 
     calls = {"n": 0}
 
@@ -179,8 +195,12 @@ def test_verify_keeps_edit_when_no_new_failures(
 ) -> None:
     editor = _editor(tmp_path)
     edit = _apply(editor, "a.js")
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
 
     same_case = TestCase(name="still passes", file="a.test.js", status=TestStatus.PASSED)
     monkeypatch.setattr(
@@ -206,8 +226,12 @@ def test_verify_no_new_failures_branch_also_settles_edits_not_on_disk(
     editor = _editor(tmp_path)
     on_disk_edit = _apply(editor, "a.js")
     never_written = _edit("b.js", verdict=EditVerdict.SKIPPED)
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
     monkeypatch.setattr(
         "depfix.verify.verifier.run_tests",
         lambda root, **kwargs: _run(TestFramework.NODE_TEST, []),
@@ -229,8 +253,12 @@ def test_verify_reverts_attributed_edit_and_keeps_unrelated_edit(
     editor = _editor(tmp_path)
     a_edit = _apply(editor, "a.js", original="a-old\n", fixed="a-new\n")
     b_edit = _apply(editor, "b.js", original="b-old\n", fixed="b-new\n")
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
 
     failing_case = TestCase(name="broken", file="a.test.js", status=TestStatus.FAILED)
     calls = {"n": 0}
@@ -261,10 +289,16 @@ def test_verify_marks_unattributed_ambiguity_as_suspect_for_all_on_disk_edits(
     editor = _editor(tmp_path)
     a_edit = _apply(editor, "a.js")
     b_edit = _apply(editor, "b.js")
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
 
-    failing_case = TestCase(name="mystery failure", file="unknown.test.js", status=TestStatus.FAILED)
+    failing_case = TestCase(
+        name="mystery failure", file="unknown.test.js", status=TestStatus.FAILED
+    )
     calls = {"n": 0}
 
     def fake_run_tests(root, **kwargs):
@@ -290,8 +324,12 @@ def test_verify_attribution_branch_passes_through_edits_not_on_disk(
     editor = _editor(tmp_path)
     a_edit = _apply(editor, "a.js")
     never_written = _edit("b.js", verdict=EditVerdict.SKIPPED)
-    monkeypatch.setattr("depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True)
-    monkeypatch.setattr("depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install())
+    monkeypatch.setattr(
+        "depfix.verify.verifier.has_test_script", lambda root, ecosystem="javascript": True
+    )
+    monkeypatch.setattr(
+        "depfix.verify.verifier.install_dependencies", lambda root, **kwargs: _ok_install()
+    )
 
     failing_case = TestCase(name="broken", file="a.test.js", status=TestStatus.FAILED)
     calls = {"n": 0}

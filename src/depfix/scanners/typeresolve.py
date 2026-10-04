@@ -125,7 +125,12 @@ def resolve_ts_call_sites(
         logger.debug("typeresolve: typescript not loadable at %s", checkout_root)
         return []
     if result.returncode != 0:
-        logger.debug("typeresolve: tsc exited %d for %s: %s", result.returncode, checkout_root, result.stderr[:500])
+        logger.debug(
+            "typeresolve: tsc exited %d for %s: %s",
+            result.returncode,
+            checkout_root,
+            result.stderr[:500],
+        )
         return []
 
     try:
@@ -141,17 +146,19 @@ def resolve_ts_call_sites(
         if key in seen:
             continue
         seen.add(key)
-        sites.append(CallSite(
-            filepath=hit["file"],
-            line_number=hit["line"],
-            column=hit["column"],
-            line_content=hit.get("line_content", ""),
-            kind=CallSiteKind.METHOD_CALL,
-            confidence=MatchConfidence.HIGH,
-            symbol=hit["symbol"],
-            provider_id=provider_id,
-            evidence=f"declared in {hit['declared_in'].split('node_modules/')[-1]}",
-        ))
+        sites.append(
+            CallSite(
+                filepath=hit["file"],
+                line_number=hit["line"],
+                column=hit["column"],
+                line_content=hit.get("line_content", ""),
+                kind=CallSiteKind.METHOD_CALL,
+                confidence=MatchConfidence.HIGH,
+                symbol=hit["symbol"],
+                provider_id=provider_id,
+                evidence=f"declared in {hit['declared_in'].split('node_modules/')[-1]}",
+            )
+        )
     return sites
 
 

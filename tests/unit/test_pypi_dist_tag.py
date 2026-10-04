@@ -40,8 +40,11 @@ def test_joins_github_release_notes_when_configured(respx_mock: respx.Router) ->
         return_value=httpx.Response(200, json={"body": "breaking", "html_url": "u"})
     )
     source = PypiDistTagSource(
-        "openai", {"package": "openai", "github_repo": "openai/openai-python"},
-        _FakePypiClient("2.0.0"), http=httpx.Client(base_url=_GH_BASE), github_api_url=_GH_BASE,
+        "openai",
+        {"package": "openai", "github_repo": "openai/openai-python"},
+        _FakePypiClient("2.0.0"),
+        http=httpx.Client(base_url=_GH_BASE),
+        github_api_url=_GH_BASE,
     )
 
     result = source.poll(FeedStateSnapshot(last_token="1.4.3"))

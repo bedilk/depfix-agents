@@ -26,9 +26,7 @@ def _change(
 
 def test_api_version_codemod_claims_dated_version_bump() -> None:
     codemod = ApiVersionLiteralCodemod()
-    change = _change(
-        kind=ChangeKind.API_VERSION_BUMP, old_api="2023-10-16", new_api="2024-06-20"
-    )
+    change = _change(kind=ChangeKind.API_VERSION_BUMP, old_api="2023-10-16", new_api="2024-06-20")
     assert codemod.claims(change)
 
 
@@ -40,9 +38,7 @@ def test_api_version_codemod_does_not_claim_non_dated_values() -> None:
 
 def test_api_version_codemod_rewrites_matching_literal() -> None:
     codemod = ApiVersionLiteralCodemod()
-    change = _change(
-        kind=ChangeKind.API_VERSION_BUMP, old_api="2023-10-16", new_api="2024-06-20"
-    )
+    change = _change(kind=ChangeKind.API_VERSION_BUMP, old_api="2023-10-16", new_api="2024-06-20")
     source = 'const client = new Stripe(key, { apiVersion: "2023-10-16" });\n'
 
     result = codemod.apply(source, change)
@@ -54,9 +50,7 @@ def test_api_version_codemod_rewrites_matching_literal() -> None:
 
 def test_api_version_codemod_is_unchanged_when_literal_absent() -> None:
     codemod = ApiVersionLiteralCodemod()
-    change = _change(
-        kind=ChangeKind.API_VERSION_BUMP, old_api="2023-10-16", new_api="2024-06-20"
-    )
+    change = _change(kind=ChangeKind.API_VERSION_BUMP, old_api="2023-10-16", new_api="2024-06-20")
 
     result = codemod.apply("const x = 1;\n", change)
 

@@ -30,12 +30,16 @@ class LLMCallSiteJudge:
         self._cache: dict[str, JudgeVerdict] = {}
         self.total_cost_usd = 0.0
 
-    def judge(self, change: BreakingChange, call_sites: list[CallSite], root: Path) -> list[CallSite]:
+    def judge(
+        self, change: BreakingChange, call_sites: list[CallSite], root: Path
+    ) -> list[CallSite]:
         by_file: dict[str, list[CallSite]] = {}
         for site in call_sites:
             by_file.setdefault(site.filepath, []).append(site)
         refined: dict[tuple[str, int], JudgeVerdict] = {}
-        for relpath, sites in sorted(by_file.items(), key=lambda item: -len(item[1]))[:self._max_candidates]:
+        for relpath, sites in sorted(by_file.items(), key=lambda item: -len(item[1]))[
+            : self._max_candidates
+        ]:
             try:
                 source = (root / relpath).read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
@@ -48,13 +52,29 @@ class LLMCallSiteJudge:
             if verdict is None:
                 output.append(site)
             elif verdict.affected:
-                confidence = MatchConfidence.HIGH if site.confidence is not MatchConfidence.LOW else MatchConfidence.MEDIUM
-                output.append(replace(site, confidence=confidence, evidence=f"{site.evidence} + LLM judge: {verdict.why}".strip(" +")))
+                confidence = (
+                    MatchConfidence.HIGH
+                    if site.confidence is not MatchConfidence.LOW
+                    else MatchConfidence.MEDIUM
+                )
+                output.append(
+                    replace(
+                        site,
+                        confidence=confidence,
+                        evidence=f"{site.evidence} + LLM judge: {verdict.why}".strip(" +"),
+                    )
+                )
         return output
 
-    def _judge_file(self, change: BreakingChange, relpath: str, source: str, sites: list[CallSite]) -> list[JudgeVerdict]:
+    def _judge_file(
+        self, change: BreakingChange, relpath: str, source: str, sites: list[CallSite]
+    ) -> list[JudgeVerdict]:
         digest = hashlib.sha256(source.encode()).hexdigest()
-        missing = [site for site in sites if self._key(digest, change.dedupe_key, site.line_number) not in self._cache]
+        missing = [
+            site
+            for site in sites
+            if self._key(digest, change.dedupe_key, site.line_number) not in self._cache
+        ]
         if missing:
             prompt = (
                 f"Old SDK API: {change.old_api}; replacement: {change.replacement}.\n"
@@ -65,7 +85,9 @@ class LLMCallSiteJudge:
             response = self._completer.complete(prompt, temperature=0.0)
             self.total_cost_usd += response.cost_estimate
             try:
-                payload = json.loads(response.text.strip().removeprefix("```json").removesuffix("```"))
+                payload = json.loads(
+                    response.text.strip().removeprefix("```json").removesuffix("```")
+                )
             except json.JSONDecodeError:
                 payload = []
             if isinstance(payload, list):
@@ -81,7 +103,11 @@ class LLMCallSiteJudge:
                         self._cache[self._key(digest, change.dedupe_key, line)] = JudgeVerdict(
                             relpath, line, bool(item.get("affected")), str(item.get("why") or "")
                         )
-        return [self._cache[self._key(digest, change.dedupe_key, site.line_number)] for site in sites if self._key(digest, change.dedupe_key, site.line_number) in self._cache]
+        return [
+            self._cache[self._key(digest, change.dedupe_key, site.line_number)]
+            for site in sites
+            if self._key(digest, change.dedupe_key, site.line_number) in self._cache
+        ]
 
     @staticmethod
     def _key(digest: str, dedupe_key: str, line: int) -> str:

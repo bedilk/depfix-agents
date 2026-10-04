@@ -39,7 +39,7 @@ def _member_call_pattern(symbol: str, provider_id: str) -> re.Pattern[str] | Non
     """``openai.chat.completions.create`` -> ``.chat.completions.create(`` on any
     receiver -- real code calls it on ``client``, not on ``openai``."""
     member = (
-        symbol[len(provider_id) + 1:]
+        symbol[len(provider_id) + 1 :]
         if provider_id and symbol.startswith(f"{provider_id}.")
         else symbol.partition(".")[2]
     )
@@ -55,9 +55,7 @@ def mask_comments(source: str, spec: EcosystemSpec) -> str:
     import doesn't become a call site."""
     masked = source
     for open_token, close_token in spec.block_comments:
-        pattern = re.compile(
-            re.escape(open_token) + r".*?" + re.escape(close_token), re.DOTALL
-        )
+        pattern = re.compile(re.escape(open_token) + r".*?" + re.escape(close_token), re.DOTALL)
         masked = pattern.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), masked)
     if spec.line_comments:
         lines = masked.splitlines(keepends=True)
@@ -66,7 +64,11 @@ def mask_comments(source: str, spec: EcosystemSpec) -> str:
                 index = line.find(prefix)
                 # Crude string-awareness: a prefix inside quotes is more
                 # likely a URL ("https://...") than a comment; skip those.
-                if index >= 0 and line[:index].count('"') % 2 == 0 and line[:index].count("'") % 2 == 0:
+                if (
+                    index >= 0
+                    and line[:index].count('"') % 2 == 0
+                    and line[:index].count("'") % 2 == 0
+                ):
                     lines[i] = line[:index] + re.sub(r"[^\n]", " ", line[index:])
                     break
         masked = "".join(lines)
@@ -105,7 +107,11 @@ class GenericImportScanner:
 
         feed_symbols = list(dict.fromkeys((*target.symbols, *target.feed_symbols)))
         symbol_patterns = [
-            (symbol, re.compile(re.escape(symbol)), _member_call_pattern(symbol, target.provider_id))
+            (
+                symbol,
+                re.compile(re.escape(symbol)),
+                _member_call_pattern(symbol, target.provider_id),
+            )
             for symbol in feed_symbols
         ]
 
@@ -149,12 +155,19 @@ class GenericImportScanner:
                 for package, pattern in import_patterns:
                     match = pattern.search(line)
                     if match:
-                        sites.append(_site(
-                            relpath, line_number, match.start(), raw_lines,
-                            kind=CallSiteKind.SDK_IMPORT, confidence=import_confidence,
-                            symbol=package, provider_id=target.provider_id,
-                            evidence=f"{self._spec.display_name} import of {package}",
-                        ))
+                        sites.append(
+                            _site(
+                                relpath,
+                                line_number,
+                                match.start(),
+                                raw_lines,
+                                kind=CallSiteKind.SDK_IMPORT,
+                                confidence=import_confidence,
+                                symbol=package,
+                                provider_id=target.provider_id,
+                                evidence=f"{self._spec.display_name} import of {package}",
+                            )
+                        )
                 for symbol, full_pattern, member_pattern in symbol_patterns:
                     match = full_pattern.search(line)
                     confidence = MatchConfidence.MEDIUM
@@ -162,16 +175,26 @@ class GenericImportScanner:
                     if match is None and member_pattern is not None:
                         match = member_pattern.search(line)
                         if match is not None:
-                            confidence = (MatchConfidence.MEDIUM if file_imports_sdk
-                                          else MatchConfidence.LOW)
+                            confidence = (
+                                MatchConfidence.MEDIUM if file_imports_sdk else MatchConfidence.LOW
+                            )
                             evidence = f"calls the member path of feed symbol {symbol}" + (
-                                "" if file_imports_sdk else " (no SDK import in this file)")
+                                "" if file_imports_sdk else " (no SDK import in this file)"
+                            )
                     if match is not None:
-                        sites.append(_site(
-                            relpath, line_number, match.start(), raw_lines,
-                            kind=CallSiteKind.METHOD_CALL, confidence=confidence,
-                            symbol=symbol, provider_id=target.provider_id, evidence=evidence,
-                        ))
+                        sites.append(
+                            _site(
+                                relpath,
+                                line_number,
+                                match.start(),
+                                raw_lines,
+                                kind=CallSiteKind.METHOD_CALL,
+                                confidence=confidence,
+                                symbol=symbol,
+                                provider_id=target.provider_id,
+                                evidence=evidence,
+                            )
+                        )
 
         result.call_sites = dedupe_call_sites(sites)
         return result
@@ -218,6 +241,6 @@ def _site(
         symbol=symbol,
         provider_id=provider_id,
         evidence=evidence,
-        context_before=tuple(raw_lines[max(0, index - _CONTEXT_LINES):index]),
-        context_after=tuple(raw_lines[index + 1:index + 1 + _CONTEXT_LINES]),
+        context_before=tuple(raw_lines[max(0, index - _CONTEXT_LINES) : index]),
+        context_after=tuple(raw_lines[index + 1 : index + 1 + _CONTEXT_LINES]),
     )

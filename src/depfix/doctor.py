@@ -1,5 +1,3 @@
-
-
 """Preflight checks used by :command:`depfix init`.
 
 Every failure this checks for was first diagnosed the slow way -- by
@@ -62,12 +60,12 @@ def _binary_version(executable: str, *args: str) -> tuple[str | None, str]:
     if path is None:
         return None, ""
     try:
-        result = subprocess.run(
-            [path, *args], capture_output=True, text=True, timeout=15
-        )
+        result = subprocess.run([path, *args], capture_output=True, text=True, timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         return path, ""
-    return path, (result.stdout or result.stderr).strip().splitlines()[0] if (result.stdout or result.stderr) else ""
+    return path, (result.stdout or result.stderr).strip().splitlines()[0] if (
+        result.stdout or result.stderr
+    ) else ""
 
 
 def check_git() -> Check:
@@ -105,13 +103,15 @@ def check_ruby(settings: Settings) -> Check:
     bundle_path = shutil.which("bundle")
     if ruby_path is None:
         return _warn(
-            "ruby", "not on PATH",
+            "ruby",
+            "not on PATH",
             "required only for Ruby fix generation (ruby -c syntax check + bundle install/test); "
             "scan-only Ruby works without it",
         )
     if bundle_path is None:
         return _warn(
-            "ruby", f"{ruby_version}, but bundler missing",
+            "ruby",
+            f"{ruby_version}, but bundler missing",
             "install bundler (`gem install bundler`) to verify Ruby fixes against the repo's suite",
         )
     return _ok("ruby", f"{ruby_version}, bundler present")
@@ -206,9 +206,7 @@ def check_database(settings: Settings) -> list[Check]:
         from alembic.script import ScriptDirectory
 
         cfg = Config()
-        cfg.set_main_option(
-            "script_location", str(Path(__file__).resolve().parent / "migrations")
-        )
+        cfg.set_main_option("script_location", str(Path(__file__).resolve().parent / "migrations"))
         head = ScriptDirectory.from_config(cfg).get_current_head()
         tables = set(inspect(engine).get_table_names())
         if "alembic_version" not in tables:
@@ -318,7 +316,7 @@ def check_llm(settings: Settings) -> Check:
                 aws_profile=settings.bedrock_profile,
                 model=settings.bedrock_model,
             )
-            resp = c.complete("ping", temperature=0.1)
+            c.complete("ping", temperature=0.1)
             return _ok(
                 "llm (bedrock)",
                 f"region={settings.bedrock_region}, model={settings.bedrock_model}",

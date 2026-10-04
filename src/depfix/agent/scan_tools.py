@@ -22,7 +22,6 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -46,12 +45,14 @@ _MAX_FILE_BYTES = 1_000_000
 _MAX_LIST_ENTRIES = 200
 _MAX_URL_BYTES = 500_000
 
-_ALLOWED_HOSTS = frozenset({
-    "registry.npmjs.org",
-    "pypi.org",
-    "api.github.com",
-    "raw.githubusercontent.com",
-})
+_ALLOWED_HOSTS = frozenset(
+    {
+        "registry.npmjs.org",
+        "pypi.org",
+        "api.github.com",
+        "raw.githubusercontent.com",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -60,15 +61,16 @@ class ToolResult:
     content: str
 
     @classmethod
-    def error(cls, message: str) -> "ToolResult":
+    def error(cls, message: str) -> ToolResult:
         return cls(ok=False, content=message)
 
-    def truncate(self) -> "ToolResult":
+    def truncate(self) -> ToolResult:
         if len(self.content) <= _MAX_TOOL_OUTPUT:
             return self
         return ToolResult(
             ok=self.ok,
-            content=self.content[:_MAX_TOOL_OUTPUT] + f"\n… [truncated at {_MAX_TOOL_OUTPUT} bytes]",
+            content=self.content[:_MAX_TOOL_OUTPUT]
+            + f"\n… [truncated at {_MAX_TOOL_OUTPUT} bytes]",
         )
 
 
@@ -225,7 +227,9 @@ class ScanToolset:
         try:
             result = subprocess.run(
                 ["git", "-C", str(self._checkout_root), "rev-parse", "HEAD"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
         except (OSError, subprocess.TimeoutExpired):
             return ""
@@ -249,12 +253,14 @@ class ScanToolset:
             return ToolResult.error(
                 f"{filepath}:{line_number} does not match the claimed content; not recorded"
             )
-        self.discovered_anchors.append({
-            "symbol": symbol,
-            "filepath": filepath,
-            "line_number": line_number,
-            "line_content": line_content,
-        })
+        self.discovered_anchors.append(
+            {
+                "symbol": symbol,
+                "filepath": filepath,
+                "line_number": line_number,
+                "line_content": line_content,
+            }
+        )
         return ToolResult(ok=True, content=f"anchor recorded: {symbol} at {filepath}:{line_number}")
 
     # -- feed tools -----------------------------------------------------------
@@ -272,13 +278,16 @@ class ScanToolset:
         version = metadata.dist_tags.get(dist_tag, "")
         return ToolResult(
             ok=True,
-            content=json.dumps({
-                "package": package,
-                "dist_tag": dist_tag,
-                "version": version,
-                "all_versions": metadata.versions[-20:],
-                "source_url": f"https://www.npmjs.com/package/{package}/v/{version}",
-            }, indent=2),
+            content=json.dumps(
+                {
+                    "package": package,
+                    "dist_tag": dist_tag,
+                    "version": version,
+                    "all_versions": metadata.versions[-20:],
+                    "source_url": f"https://www.npmjs.com/package/{package}/v/{version}",
+                },
+                indent=2,
+            ),
         )
 
     def poll_pypi(self, *, package: str) -> ToolResult:
@@ -293,12 +302,15 @@ class ScanToolset:
             return ToolResult.error(f"PyPI unavailable: {exc}")
         return ToolResult(
             ok=True,
-            content=json.dumps({
-                "package": package,
-                "latest": metadata.latest,
-                "recent_versions": metadata.versions[-20:],
-                "source_url": f"https://pypi.org/project/{package}/{metadata.latest}/",
-            }, indent=2),
+            content=json.dumps(
+                {
+                    "package": package,
+                    "latest": metadata.latest,
+                    "recent_versions": metadata.versions[-20:],
+                    "source_url": f"https://pypi.org/project/{package}/{metadata.latest}/",
+                },
+                indent=2,
+            ),
         )
 
     def poll_github_releases(self, *, repo: str) -> ToolResult:
@@ -324,7 +336,8 @@ class ScanToolset:
                 "body": (r.get("body") or "")[:2000],
                 "published_at": r.get("published_at"),
             }
-            for r in raw[:5] if isinstance(r, dict)
+            for r in raw[:5]
+            if isinstance(r, dict)
         ]
         return ToolResult(ok=True, content=json.dumps(summary, indent=2)).truncate()
 
@@ -341,15 +354,19 @@ class ScanToolset:
         if response.status_code >= 400:
             return ToolResult.error(f"HTTP {response.status_code}")
         import hashlib
+
         body = response.content[:_MAX_URL_BYTES]
         return ToolResult(
             ok=True,
-            content=json.dumps({
-                "url": url,
-                "sha256": hashlib.sha256(body).hexdigest(),
-                "size": len(body),
-                "preview": body[:2000].decode("utf-8", errors="replace"),
-            }, indent=2),
+            content=json.dumps(
+                {
+                    "url": url,
+                    "sha256": hashlib.sha256(body).hexdigest(),
+                    "size": len(body),
+                    "preview": body[:2000].decode("utf-8", errors="replace"),
+                },
+                indent=2,
+            ),
         )
 
     def fetch_url(self, *, url: str, max_bytes: int = 200_000) -> ToolResult:
@@ -370,6 +387,7 @@ class ScanToolset:
 
 def _host_allowed(url: str) -> bool:
     from urllib.parse import urlparse
+
     try:
         host = urlparse(url).netloc.lower()
     except ValueError:

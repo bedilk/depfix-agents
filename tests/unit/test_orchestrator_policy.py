@@ -158,10 +158,16 @@ def test_unknown_provider_is_not_bypassable_by_force() -> None:
 
 def test_removal_without_replacement_is_skipped_even_when_forced() -> None:
     change = BreakingChange(
-        package="openai", old_version="7.17.0", new_version="7.19.0",
-        old_api="openai.responses.connector_id", new_api="", description="d",
-        migration_guide="", kind=ChangeKind.FIELD_REMOVED,
-        source=ClassificationSource.SPEC_DIFF, provider_id="openai",
+        package="openai",
+        old_version="7.17.0",
+        new_version="7.19.0",
+        old_api="openai.responses.connector_id",
+        new_api="",
+        description="d",
+        migration_guide="",
+        kind=ChangeKind.FIELD_REMOVED,
+        source=ClassificationSource.SPEC_DIFF,
+        provider_id="openai",
     )
 
     assert _decide(change=change, force=True) == SkipReason.NO_REPLACEMENT_API
@@ -212,9 +218,7 @@ def test_force_bypasses_max_attempts() -> None:
 
 def test_no_call_sites_unchanged_ref_is_skipped() -> None:
     attempt = _attempt(status=AttemptStatus.NO_CALL_SITES, last_checked_ref_sha="sha-1")
-    assert (
-        _decide(attempt=attempt, current_ref_sha="sha-1") == SkipReason.NO_CALL_SITES_UNCHANGED
-    )
+    assert _decide(attempt=attempt, current_ref_sha="sha-1") == SkipReason.NO_CALL_SITES_UNCHANGED
 
 
 def test_no_call_sites_changed_ref_goes_ahead() -> None:

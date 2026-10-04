@@ -9,7 +9,6 @@ from depfix.ecosystems.go_manifests import (
     build_go_dependency_drift_bumps,
     declares_module,
 )
-from depfix.ecosystems.symbol_index import SymbolIndex, build_index, build_index_from_tarball
 from depfix.ecosystems.registry import (
     all_ids,
     detect,
@@ -17,6 +16,7 @@ from depfix.ecosystems.registry import (
     fixable_ids,
     get,
 )
+from depfix.ecosystems.symbol_index import SymbolIndex, build_index, build_index_from_tarball
 
 __all__ = [
     "COMMON_SKIP_DIRS",

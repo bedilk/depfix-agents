@@ -1,4 +1,5 @@
 """JavaScript dependency-source edits and lockfile refresh adapters."""
+
 from __future__ import annotations
 
 import json
@@ -27,8 +28,10 @@ class ManifestBump:
 
     @property
     def note(self) -> str:
-        return (f"{self.manifest_relpath}: bumped {self.package} {self.section} "
-                f"{self.old_range!r} -> {self.new_range!r}; regenerate the lockfile before merging")
+        return (
+            f"{self.manifest_relpath}: bumped {self.package} {self.section} "
+            f"{self.old_range!r} -> {self.new_range!r}; regenerate the lockfile before merging"
+        )
 
 
 @dataclass(frozen=True)
@@ -148,9 +151,8 @@ def dependency_drift_policy(
     if scope == "any-minor":
         if major_gap != 0:
             return "declined"
-    elif scope == "one-major":
-        if major_gap > 1:
-            return "declined"
+    elif scope == "one-major" and major_gap > 1:
+        return "declined"
     # scope == "any": every forward move is eligible; fall through.
 
     # --- actionable vs review within the eligible band -----------------------
@@ -184,7 +186,9 @@ def _replace_range_version(value: str, new_version: str) -> str | None:
     return f"{match.group(1)}{new_version}"
 
 
-def build_dependency_drift_plan(root: Path, change: BreakingChange, *, scope: str = "one-major") -> DriftPlan:
+def build_dependency_drift_plan(
+    root: Path, change: BreakingChange, *, scope: str = "one-major"
+) -> DriftPlan:
     """Build npm edits for a verified drift or draft review PR.
 
     This is deliberately separate from ``build_manifest_bumps``: API
@@ -243,10 +247,11 @@ def build_dependency_drift_plan(root: Path, change: BreakingChange, *, scope: st
                 )
                 break
             dependencies[change.package] = new_range
-            indent = 4 if "\n    \"" in original else 2
+            indent = 4 if '\n    "' in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
-            bumps.append(ManifestBump(relpath, original, fixed, change.package, section,
-                                      current, new_range))
+            bumps.append(
+                ManifestBump(relpath, original, fixed, change.package, section, current, new_range)
+            )
             break
     if not bumps and not declines:
         declines.append(
@@ -259,7 +264,10 @@ def build_dependency_drift_plan(root: Path, change: BreakingChange, *, scope: st
 
 
 def _build_pnpm_catalog_plan(
-    root: Path, change: BreakingChange, *, target_version: str | None = None,
+    root: Path,
+    change: BreakingChange,
+    *,
+    target_version: str | None = None,
 ) -> DriftPlan:
     """Edit every pnpm catalog that owns ``change.package``."""
     workspace = root / "pnpm-workspace.yaml"
@@ -277,7 +285,10 @@ def _build_pnpm_catalog_plan(
     for catalog_name in sorted(catalog_names):
         label = "catalog" if not catalog_name else f"catalogs.{catalog_name}"
         replacement = _replace_pnpm_catalog_entry(
-            fixed, change, catalog_name, target_version=target_version,
+            fixed,
+            change,
+            catalog_name,
+            target_version=target_version,
         )
         if isinstance(replacement, str):
             declines.append(f"pnpm-workspace.yaml ({label}): {replacement}")
@@ -285,27 +296,50 @@ def _build_pnpm_catalog_plan(
         if replacement is None:
             continue
         prior, fixed, old_range, new_range = replacement
-        bumped.append(ManifestBump(
-            "pnpm-workspace.yaml", prior, fixed, change.package,
-            label, old_range, new_range,
-        ))
+        bumped.append(
+            ManifestBump(
+                "pnpm-workspace.yaml",
+                prior,
+                fixed,
+                change.package,
+                label,
+                old_range,
+                new_range,
+            )
+        )
     if not bumped:
         return DriftPlan([], declines)
     return DriftPlan(
-        [ManifestBump("pnpm-workspace.yaml", original, fixed, change.package,
-                      "catalog", bumped[0].old_range, bumped[-1].new_range)],
+        [
+            ManifestBump(
+                "pnpm-workspace.yaml",
+                original,
+                fixed,
+                change.package,
+                "catalog",
+                bumped[0].old_range,
+                bumped[-1].new_range,
+            )
+        ],
         declines,
     )
 
 
 def _build_pnpm_catalog_bumps(
-    root: Path, change: BreakingChange, *, target_version: str | None = None,
+    root: Path,
+    change: BreakingChange,
+    *,
+    target_version: str | None = None,
 ) -> list[ManifestBump]:
     return _build_pnpm_catalog_plan(root, change, target_version=target_version).bumps
 
 
 def _replace_pnpm_catalog_entry(
-    original: str, change: BreakingChange, catalog_name: str, *, target_version: str | None = None,
+    original: str,
+    change: BreakingChange,
+    catalog_name: str,
+    *,
+    target_version: str | None = None,
 ) -> tuple[str, str, str, str] | str | None:
     """Replace one known pnpm catalog entry without reserializing YAML.
 
@@ -330,7 +364,11 @@ def _replace_pnpm_catalog_entry(
             match = re.match(r"^(?P<indent>\s*)catalogs\s*:\s*(?:#.*)?(?:\r?\n)?$", line)
             if match:
                 catalogs_indent = len(match.group("indent"))
-            elif catalogs_indent is not None and line.strip() and len(line) - len(line.lstrip()) <= catalogs_indent:
+            elif (
+                catalogs_indent is not None
+                and line.strip()
+                and len(line) - len(line.lstrip()) <= catalogs_indent
+            ):
                 break
             elif catalogs_indent is not None:
                 named = re.match(
@@ -398,7 +436,9 @@ def build_manifest_bumps(root: Path, change: BreakingChange) -> list[ManifestBum
     if new_major is None:
         return []
     catalog_bumps = _build_pnpm_catalog_bumps(
-        root, change, target_version=f"{new_major}.0.0",
+        root,
+        change,
+        target_version=f"{new_major}.0.0",
     )
     if catalog_bumps:
         # A source migration in a pnpm workspace must still update the
@@ -430,34 +470,45 @@ def build_manifest_bumps(root: Path, change: BreakingChange) -> list[ManifestBum
                 # than abandoning the whole manifest.
                 continue
             dependencies[change.package] = new_range
-            indent = 4 if "\n    \"" in original else 2
+            indent = 4 if '\n    "' in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
-            bumps.append(ManifestBump(path.relative_to(root).as_posix(), original, fixed,
-                                      change.package, section, current, new_range))
+            bumps.append(
+                ManifestBump(
+                    path.relative_to(root).as_posix(),
+                    original,
+                    fixed,
+                    change.package,
+                    section,
+                    current,
+                    new_range,
+                )
+            )
             break
     return bumps
 
 
-def build_upgrade_manifest_bumps(
-    root: Path, package: str, target_version: str
-) -> "DriftPlan":
+def build_upgrade_manifest_bumps(root: Path, package: str, target_version: str) -> DriftPlan:
     """Rewrite every declaration of ``package`` to exactly ``target_version``.
 
     Unlike ``build_manifest_bumps`` (which floors to ``^{major}.0.0``), this
     targets the version the feed actually observed, so the manifest, the
     lockfile and the PR title all name the same release.
     """
-    from depfix.sources.semver import parse_semver as _semver
     from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
+    from depfix.sources.semver import parse_semver as _semver
 
     if _semver(target_version) is None:
         return DriftPlan([], [f"{target_version!r} is not plain semver"])
 
     # Re-use the existing drift path with a synthetic change pointing at the target
     synthetic = BreakingChange(
-        package=package, old_version="0.0.0", new_version=target_version,
-        old_api=f"{package}@0.0.0", new_api=f"{package}@{target_version}",
-        description="upgrade", migration_guide="",
+        package=package,
+        old_version="0.0.0",
+        new_version=target_version,
+        old_api=f"{package}@0.0.0",
+        new_api=f"{package}@{target_version}",
+        description="upgrade",
+        migration_guide="",
         kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
         source=ClassificationSource.REGISTRY,
     )
@@ -493,14 +544,18 @@ def build_upgrade_manifest_bumps(
             deps[package] = new_range
             indent = 4 if '\n    "' in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
-            bumps.append(ManifestBump(relpath, original, fixed, package, section,
-                                      current, new_range))
+            bumps.append(
+                ManifestBump(relpath, original, fixed, package, section, current, new_range)
+            )
             break
     return DriftPlan(bumps, declines)
 
 
 def try_refresh_javascript_lockfile(
-    root: Path, *, timeout: float = 120.0, max_output_bytes: int = 2_000_000,
+    root: Path,
+    *,
+    timeout: float = 120.0,
+    max_output_bytes: int = 2_000_000,
 ) -> tuple[bool, str]:
     """Refresh the lockfile owned by a JavaScript workspace.
 
@@ -547,7 +602,10 @@ def _manager_major(version: str) -> int:
 
 
 def try_regenerate_lockfile(
-    root: Path, *, timeout: float = 120.0, ignore_scripts: bool = True,
+    root: Path,
+    *,
+    timeout: float = 120.0,
+    ignore_scripts: bool = True,
     max_output_bytes: int = 2_000_000,
 ) -> tuple[bool, str]:
     """Compatibility entry point for callers that need a JS lock refresh.
@@ -557,19 +615,30 @@ def try_regenerate_lockfile(
     """
     del ignore_scripts
     return try_refresh_javascript_lockfile(
-        root, timeout=timeout, max_output_bytes=max_output_bytes,
+        root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
     )
 
 
 def try_refresh_pnpm_lockfile(
-    root: Path, *, timeout: float = 120.0, max_output_bytes: int = 2_000_000,
+    root: Path,
+    *,
+    timeout: float = 120.0,
+    max_output_bytes: int = 2_000_000,
 ) -> tuple[bool, str]:
     """Backward-compatible alias for the package-manager-aware refresher."""
     return try_refresh_javascript_lockfile(
-        root, timeout=timeout, max_output_bytes=max_output_bytes,
+        root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
     )
 
 
 def lockfile_paths(root: Path) -> list[Path]:
     names = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb"}
-    return [path for path in root.rglob("*") if path.is_file() and path.name in names and "node_modules" not in path.parts]
+    return [
+        path
+        for path in root.rglob("*")
+        if path.is_file() and path.name in names and "node_modules" not in path.parts
+    ]

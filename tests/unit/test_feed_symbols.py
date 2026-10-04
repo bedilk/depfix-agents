@@ -1,4 +1,5 @@
 """Feeds -> symbols -> scan -> ACTIONABLE (old) vs CURRENT (already migrated)."""
+
 from pathlib import Path
 
 from depfix.classify.classifier import Classifier
@@ -21,18 +22,18 @@ PROVIDER = ProviderSpec(
 
 
 def _rename(**kw) -> BreakingChange:
-    base = dict(
-        package="openai",
-        old_version="3.3.0",
-        new_version="4.0.0",
-        old_api="openai.createModeration",
-        new_api="openai.moderations.create",
-        description="d",
-        migration_guide="",
-        kind=ChangeKind.METHOD_RENAMED,
-        source=ClassificationSource.RELEASE_NOTES,
-        provider_id="openai",
-    )
+    base = {
+        "package": "openai",
+        "old_version": "3.3.0",
+        "new_version": "4.0.0",
+        "old_api": "openai.createModeration",
+        "new_api": "openai.moderations.create",
+        "description": "d",
+        "migration_guide": "",
+        "kind": ChangeKind.METHOD_RENAMED,
+        "source": ClassificationSource.RELEASE_NOTES,
+        "provider_id": "openai",
+    }
     base.update(kw)
     return BreakingChange(**base)
 
@@ -54,9 +55,11 @@ def _py(tmp_path: Path, source: str):
 
 # -- symbol derivation from feeds --------------------------------------------
 
+
 def test_feed_symbols_cover_old_and_replacement() -> None:
     assert feed_symbols_for_changes("openai", [_rename()]) == (
-        "openai.createModeration", "openai.moderations.create"
+        "openai.createModeration",
+        "openai.moderations.create",
     )
 
 
@@ -82,6 +85,7 @@ def test_registry_drift_contributes_no_symbols() -> None:
 
 
 # -- JavaScript: binding-aware scanner ---------------------------------------
+
 
 def test_js_unmigrated_is_actionable(tmp_path: Path) -> None:
     result = _js(tmp_path, "client.createModeration({});")
@@ -125,6 +129,7 @@ def test_narrowed_scan_still_sees_the_replacement(tmp_path: Path) -> None:
 
 # -- Python: generic import scanner (previously found imports only) ----------
 
+
 def test_python_unmigrated_is_actionable(tmp_path: Path) -> None:
     result = _py(
         tmp_path,
@@ -149,6 +154,7 @@ def test_python_member_path_without_import_is_report_only(tmp_path: Path) -> Non
 
 
 # -- registry events with release notes yield real migrations ----------------
+
 
 class _Notes:
     def complete(self, prompt: str, *, temperature: float = 0.0) -> LLMResponse:

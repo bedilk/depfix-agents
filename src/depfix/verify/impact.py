@@ -67,7 +67,11 @@ class ImpactReport:
             )
         if self.new_failing_tests:
             named = ", ".join(self.new_failing_tests[:5])
-            more = f" (+{len(self.new_failing_tests) - 5} more)" if len(self.new_failing_tests) > 5 else ""
+            more = (
+                f" (+{len(self.new_failing_tests) - 5} more)"
+                if len(self.new_failing_tests) > 5
+                else ""
+            )
             return (
                 f"impact check: {len(self.new_failing_tests)} test(s) newly fail on the new "
                 f"version -- change confirmed breaking for this repo [{named}{more}]"
@@ -108,7 +112,10 @@ def run_impact_check(
         if max_seconds is None or time.monotonic() - started < max_seconds:
             return None
         logger.warning("impact check budget (%.0fs) exhausted before %s", max_seconds, phase)
-        return ImpactReport(ran=False, skipped_reason=f"budget of {max_seconds:.0f}s exhausted before {phase}")
+        return ImpactReport(
+            ran=False, skipped_reason=f"budget of {max_seconds:.0f}s exhausted before {phase}"
+        )
+
     if not checkout.is_temporary:
         return ImpactReport(ran=False, skipped_reason="checkout is not disposable")
     if ecosystem not in ("javascript", "python", "ruby", "go"):
@@ -125,8 +132,11 @@ def run_impact_check(
 
     logger.info("impact check: installing current dependencies for %s", change.package)
     install = install_dependencies(
-        root, timeout=install_timeout, ignore_scripts=ignore_scripts,
-        max_output_bytes=max_output_bytes, ecosystem=ecosystem,
+        root,
+        timeout=install_timeout,
+        ignore_scripts=ignore_scripts,
+        max_output_bytes=max_output_bytes,
+        ecosystem=ecosystem,
     )
     if not install.ok:
         return ImpactReport(
@@ -150,8 +160,11 @@ def run_impact_check(
             touched.append(relpath)
         if ecosystem == "javascript":
             _regenerate_js_lockfile(
-                checkout, editor, touched,
-                timeout=install_timeout, ignore_scripts=ignore_scripts,
+                checkout,
+                editor,
+                touched,
+                timeout=install_timeout,
+                ignore_scripts=ignore_scripts,
             )
         if ecosystem == "ruby":
             _regenerate_ruby_lockfile(checkout, editor, touched, timeout=install_timeout)
@@ -160,10 +173,16 @@ def run_impact_check(
 
         if (over := budget_exhausted("the bumped install")) is not None:
             return over
-        logger.info("impact check: bumping %s to %s and reinstalling", change.package, change.new_version)
+        logger.info(
+            "impact check: bumping %s to %s and reinstalling", change.package, change.new_version
+        )
         bumped_install = install_dependencies(
-            root, timeout=install_timeout, ignore_scripts=ignore_scripts,
-            max_output_bytes=max_output_bytes, ecosystem=ecosystem, frozen=False,
+            root,
+            timeout=install_timeout,
+            ignore_scripts=ignore_scripts,
+            max_output_bytes=max_output_bytes,
+            ecosystem=ecosystem,
+            frozen=False,
         )
         if not bumped_install.ok:
             return ImpactReport(
@@ -214,17 +233,14 @@ def run_impact_check(
                 logger.exception("could not revert %s after impact check", relpath)
 
 
-def _manifest_bump_contents(
-    root: Path, change: BreakingChange, ecosystem: str
-) -> dict[str, str]:
+def _manifest_bump_contents(root: Path, change: BreakingChange, ecosystem: str) -> dict[str, str]:
     """``{relpath: bumped_content}`` for every manifest pinning the affected
     package below the change's new version."""
     if ecosystem == "javascript":
         from depfix.codemods.lockfile import build_manifest_bumps
 
         return {
-            bump.manifest_relpath: bump.fixed_content
-            for bump in build_manifest_bumps(root, change)
+            bump.manifest_relpath: bump.fixed_content for bump in build_manifest_bumps(root, change)
         }
     if ecosystem == "ruby":
         from depfix.ecosystems.ruby_manifests import build_ruby_dependency_drift_bumps
@@ -269,7 +285,11 @@ def _python_requirement_bumps(root: Path, change: BreakingChange) -> dict[str, s
             # scopes *whether* the dependency applies -- it must survive
             # the version rewrite verbatim.
             marker = match.group("marker") or ""
-            return f"{match.group('prefix')}=={new_version} {marker}".rstrip() if marker else f"{match.group('prefix')}=={new_version}"
+            return (
+                f"{match.group('prefix')}=={new_version} {marker}".rstrip()
+                if marker
+                else f"{match.group('prefix')}=={new_version}"
+            )
 
         bumped, count = pattern.subn(_replace, original)
         if count and bumped != original:
@@ -293,7 +313,9 @@ def _regenerate_js_lockfile(
     before: dict[str, str] = {}
     for lockfile in lockfile_paths(Path(checkout.path)):
         try:
-            before[lockfile.relative_to(checkout.path).as_posix()] = lockfile.read_text(encoding="utf-8")
+            before[lockfile.relative_to(checkout.path).as_posix()] = lockfile.read_text(
+                encoding="utf-8"
+            )
         except (OSError, UnicodeDecodeError):
             continue
 
@@ -329,7 +351,9 @@ def _regenerate_ruby_lockfile(
     before: dict[str, str] = {}
     for lockfile in ruby_lockfile_paths(Path(checkout.path)):
         try:
-            before[lockfile.relative_to(checkout.path).as_posix()] = lockfile.read_text(encoding="utf-8")
+            before[lockfile.relative_to(checkout.path).as_posix()] = lockfile.read_text(
+                encoding="utf-8"
+            )
         except (OSError, UnicodeDecodeError):
             continue
 

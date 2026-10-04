@@ -18,8 +18,13 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("fix_run", sa.Column("confidence_tier", sa.String(16), nullable=False, server_default="none"))
-    op.add_column("fix_run", sa.Column("typechecked", sa.Boolean(), nullable=False, server_default=sa.false()))
+    op.add_column(
+        "fix_run",
+        sa.Column("confidence_tier", sa.String(16), nullable=False, server_default="none"),
+    )
+    op.add_column(
+        "fix_run", sa.Column("typechecked", sa.Boolean(), nullable=False, server_default=sa.false())
+    )
 
 
 def downgrade() -> None:

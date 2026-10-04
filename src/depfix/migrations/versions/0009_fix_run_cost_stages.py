@@ -18,9 +18,16 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("fix_run", sa.Column("cost_classify", sa.Float(), nullable=False, server_default="0"))
-    op.add_column("fix_run", sa.Column("cost_characterization", sa.Float(), nullable=False, server_default="0"))
-    op.add_column("fix_run", sa.Column("cost_call_site_judge", sa.Float(), nullable=False, server_default="0"))
+    op.add_column(
+        "fix_run", sa.Column("cost_classify", sa.Float(), nullable=False, server_default="0")
+    )
+    op.add_column(
+        "fix_run",
+        sa.Column("cost_characterization", sa.Float(), nullable=False, server_default="0"),
+    )
+    op.add_column(
+        "fix_run", sa.Column("cost_call_site_judge", sa.Float(), nullable=False, server_default="0")
+    )
 
 
 def downgrade() -> None:

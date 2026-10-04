@@ -99,7 +99,9 @@ def _risk(
     if current_semver is None or feed_semver is None:
         return "No resolved semver comparison; inspect the manifest or lockfile."
     if current_semver[0] != feed_semver[0]:
-        return "Major-version gap: review migrations before upgrading; no automatic edit is planned."
+        return (
+            "Major-version gap: review migrations before upgrading; no automatic edit is planned."
+        )
     if any(a.status is ScanMatchStatus.ACTIONABLE for a in assessments):
         return "Feed-proven migration matches repository usage; eligible for plan."
     if current_semver < feed_semver:

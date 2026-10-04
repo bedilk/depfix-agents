@@ -77,9 +77,7 @@ def test_has_test_script_false_for_python_without_any_marker(tmp_path: Path) -> 
 def test_has_test_script_false_for_pyproject_that_never_mentions_pytest(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "demo"\n', encoding="utf-8"
-    )
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\n', encoding="utf-8")
 
     assert has_test_script(tmp_path, "python") is False
 
@@ -255,7 +253,9 @@ def test_python_run_tests_reports_a_missing_interpreter_without_shelling_out(
 def test_python_smoke_check_passes_for_a_parseable_module(tmp_path: Path) -> None:
     if shutil.which("python3") is None and shutil.which("python") is None:
         pytest.skip("no python interpreter on PATH")
-    (tmp_path / "mod.py").write_text("VALUE = 1\n\n\ndef f():\n    return VALUE\n", encoding="utf-8")
+    (tmp_path / "mod.py").write_text(
+        "VALUE = 1\n\n\ndef f():\n    return VALUE\n", encoding="utf-8"
+    )
 
     result = run_smoke_check(tmp_path, "mod.py", timeout=60)
 

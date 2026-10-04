@@ -69,9 +69,7 @@ def test_assessment_records_no_call_sites_for_an_affected_but_unmatched_change()
 
 
 def test_assessment_marks_a_repo_current_when_it_uses_the_feed_replacement() -> None:
-    assessment = assess_scan_change(
-        _result(symbol="openai.chat.completions.create"), _change()
-    )
+    assessment = assess_scan_change(_result(symbol="openai.chat.completions.create"), _change())
 
     assert assessment.status is ScanMatchStatus.CURRENT
 

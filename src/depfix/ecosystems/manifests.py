@@ -139,7 +139,9 @@ def scan_python_dependencies(root: Path, packages: list[str]) -> list[Dependency
     display = {_normalize_pypi(p): p for p in packages}
     declared: dict[str, tuple[str, str | None]] = {}  # name -> (manifest, spec)
 
-    for req_path in iter_manifest_files(root, ["requirements.txt", "requirements-dev.txt"], frozenset({".git"})):
+    for req_path in iter_manifest_files(
+        root, ["requirements.txt", "requirements-dev.txt"], frozenset({".git"})
+    ):
         text = _read(req_path)
         if text is None:
             continue
@@ -156,7 +158,9 @@ def scan_python_dependencies(root: Path, packages: list[str]) -> list[Dependency
                 continue
             name = _normalize_pypi(match.group("name"))
             if name in wanted:
-                declared.setdefault(name, (str(pyproject_path), (match.group("spec") or "").strip() or None))
+                declared.setdefault(
+                    name, (str(pyproject_path), (match.group("spec") or "").strip() or None)
+                )
 
     locked = _python_locked_versions(root, wanted)
     return [
@@ -175,7 +179,9 @@ def scan_python_dependencies(root: Path, packages: list[str]) -> list[Dependency
 # Go
 # ---------------------------------------------------------------------------
 
-_GO_REQUIRE_RE = re.compile(r"^\s*(?:require\s+)?(?P<module>[\w./-]+)\s+(?P<version>v[\w.+-]+)", re.MULTILINE)
+_GO_REQUIRE_RE = re.compile(
+    r"^\s*(?:require\s+)?(?P<module>[\w./-]+)\s+(?P<version>v[\w.+-]+)", re.MULTILINE
+)
 
 
 def scan_go_dependencies(root: Path, packages: list[str]) -> list[DependencyDeclaration]:
@@ -189,13 +195,20 @@ def scan_go_dependencies(root: Path, packages: list[str]) -> list[DependencyDecl
             for wanted in packages:
                 # go module paths version-suffix majors: stripe-go/v76 still
                 # matches a provider-declared stripe-go.
-                if module == wanted or module.startswith(wanted.rstrip("/") + "/") or wanted.startswith(module + "/"):
-                    out.append(DependencyDeclaration(
-                        package=wanted, manifest_path=str(gomod),
-                        declared_version=match.group("version"),
-                        resolved_version=match.group("version"),  # go.mod pins exactly
-                        source="manifest",
-                    ))
+                if (
+                    module == wanted
+                    or module.startswith(wanted.rstrip("/") + "/")
+                    or wanted.startswith(module + "/")
+                ):
+                    out.append(
+                        DependencyDeclaration(
+                            package=wanted,
+                            manifest_path=str(gomod),
+                            declared_version=match.group("version"),
+                            resolved_version=match.group("version"),  # go.mod pins exactly
+                            source="manifest",
+                        )
+                    )
                     break
     return out
 
@@ -219,13 +232,21 @@ def scan_rust_dependencies(root: Path, packages: list[str]) -> list[DependencyDe
                 normalized = name.replace("_", "-")
                 if normalized not in wanted:
                     continue
-                version = constraint if isinstance(constraint, str) else (
-                    constraint.get("version") if isinstance(constraint, dict) else None
+                version = (
+                    constraint
+                    if isinstance(constraint, str)
+                    else (constraint.get("version") if isinstance(constraint, dict) else None)
                 )
-                out.setdefault(normalized, DependencyDeclaration(
-                    package=display[normalized], manifest_path=str(cargo_toml),
-                    declared_version=version, resolved_version=None, source="manifest",
-                ))
+                out.setdefault(
+                    normalized,
+                    DependencyDeclaration(
+                        package=display[normalized],
+                        manifest_path=str(cargo_toml),
+                        declared_version=version,
+                        resolved_version=None,
+                        source="manifest",
+                    ),
+                )
 
     cargo_lock = _read_toml(root / "Cargo.lock") if (root / "Cargo.lock").is_file() else None
     for pkg in (cargo_lock or {}).get("package", []):
@@ -233,9 +254,11 @@ def scan_rust_dependencies(root: Path, packages: list[str]) -> list[DependencyDe
         if normalized in out and pkg.get("version"):
             entry = out[normalized]
             out[normalized] = DependencyDeclaration(
-                package=entry.package, manifest_path=entry.manifest_path,
+                package=entry.package,
+                manifest_path=entry.manifest_path,
                 declared_version=entry.declared_version,
-                resolved_version=str(pkg["version"]), source="lockfile",
+                resolved_version=str(pkg["version"]),
+                source="lockfile",
             )
     return list(out.values())
 
@@ -244,7 +267,10 @@ def scan_rust_dependencies(root: Path, packages: list[str]) -> list[DependencyDe
 # Ruby (RubyGems)
 # ---------------------------------------------------------------------------
 
-_GEMFILE_RE = re.compile(r"""^\s*gem\s+['"](?P<name>[\w-]+)['"](?:\s*,\s*['"](?P<constraint>[^'"]+)['"])?""", re.MULTILINE)
+_GEMFILE_RE = re.compile(
+    r"""^\s*gem\s+['"](?P<name>[\w-]+)['"](?:\s*,\s*['"](?P<constraint>[^'"]+)['"])?""",
+    re.MULTILINE,
+)
 _GEMFILE_LOCK_RE = re.compile(r"^\s{4}(?P<name>[\w-]+)\s+\((?P<version>[\w.]+)\)", re.MULTILINE)
 
 
@@ -257,19 +283,26 @@ def scan_ruby_dependencies(root: Path, packages: list[str]) -> list[DependencyDe
             continue
         for match in _GEMFILE_RE.finditer(text):
             if match.group("name") in wanted:
-                out.setdefault(match.group("name"), DependencyDeclaration(
-                    package=match.group("name"), manifest_path=str(gemfile),
-                    declared_version=match.group("constraint"), resolved_version=None,
-                    source="manifest",
-                ))
+                out.setdefault(
+                    match.group("name"),
+                    DependencyDeclaration(
+                        package=match.group("name"),
+                        manifest_path=str(gemfile),
+                        declared_version=match.group("constraint"),
+                        resolved_version=None,
+                        source="manifest",
+                    ),
+                )
     lock_text = _read(root / "Gemfile.lock") if (root / "Gemfile.lock").is_file() else None
     for match in _GEMFILE_LOCK_RE.finditer(lock_text or ""):
         if match.group("name") in out:
             entry = out[match.group("name")]
             out[match.group("name")] = DependencyDeclaration(
-                package=entry.package, manifest_path=entry.manifest_path,
+                package=entry.package,
+                manifest_path=entry.manifest_path,
                 declared_version=entry.declared_version,
-                resolved_version=match.group("version"), source="lockfile",
+                resolved_version=match.group("version"),
+                source="lockfile",
             )
     return list(out.values())
 
@@ -290,11 +323,16 @@ def scan_php_dependencies(root: Path, packages: list[str]) -> list[DependencyDec
         for section in ("require", "require-dev"):
             for name, constraint in (data.get(section) or {}).items():
                 if name.lower() in wanted:
-                    out.setdefault(name.lower(), DependencyDeclaration(
-                        package=display[name.lower()], manifest_path=str(composer),
-                        declared_version=str(constraint), resolved_version=None,
-                        source="manifest",
-                    ))
+                    out.setdefault(
+                        name.lower(),
+                        DependencyDeclaration(
+                            package=display[name.lower()],
+                            manifest_path=str(composer),
+                            declared_version=str(constraint),
+                            resolved_version=None,
+                            source="manifest",
+                        ),
+                    )
     lock = _read_json(root / "composer.lock") if (root / "composer.lock").is_file() else None
     for section in ("packages", "packages-dev"):
         for pkg in (lock or {}).get(section, []):
@@ -302,9 +340,11 @@ def scan_php_dependencies(root: Path, packages: list[str]) -> list[DependencyDec
             if name in out and pkg.get("version"):
                 entry = out[name]
                 out[name] = DependencyDeclaration(
-                    package=entry.package, manifest_path=entry.manifest_path,
+                    package=entry.package,
+                    manifest_path=entry.manifest_path,
                     declared_version=entry.declared_version,
-                    resolved_version=str(pkg["version"]).lstrip("v"), source="lockfile",
+                    resolved_version=str(pkg["version"]).lstrip("v"),
+                    source="lockfile",
                 )
     return list(out.values())
 
@@ -330,10 +370,16 @@ def scan_jvm_dependencies(root: Path, packages: list[str]) -> list[DependencyDec
     out: dict[str, DependencyDeclaration] = {}
 
     def note(package: str, manifest: Path, version: str | None) -> None:
-        out.setdefault(package, DependencyDeclaration(
-            package=package, manifest_path=str(manifest),
-            declared_version=version, resolved_version=None, source="manifest",
-        ))
+        out.setdefault(
+            package,
+            DependencyDeclaration(
+                package=package,
+                manifest_path=str(manifest),
+                declared_version=version,
+                resolved_version=None,
+                source="manifest",
+            ),
+        )
 
     for pom in iter_manifest_files(root, ["pom.xml"], frozenset({".git", "target"})):
         text = _read(pom)
@@ -355,17 +401,20 @@ def scan_jvm_dependencies(root: Path, packages: list[str]) -> list[DependencyDec
                 ):
                     note(package, pom, version)
 
-    for gradle in iter_manifest_files(root, ["build.gradle", "build.gradle.kts"], frozenset({".git", "build"})):
+    for gradle in iter_manifest_files(
+        root, ["build.gradle", "build.gradle.kts"], frozenset({".git", "build"})
+    ):
         text = _read(gradle)
         if text is None:
             continue
         for match in _GRADLE_COORD_RE.finditer(text):
             for package in packages:
                 wanted_group, wanted_artifact = _maven_key(package)
-                if (wanted_artifact and match.group("group") == wanted_group
-                        and match.group("artifact") == wanted_artifact) or (
-                    not wanted_artifact and match.group("artifact") == wanted_group
-                ):
+                if (
+                    wanted_artifact
+                    and match.group("group") == wanted_group
+                    and match.group("artifact") == wanted_artifact
+                ) or (not wanted_artifact and match.group("artifact") == wanted_group):
                     note(package, gradle, match.group("version"))
     return list(out.values())
 
@@ -387,7 +436,11 @@ def scan_nuget_dependencies(root: Path, packages: list[str]) -> list[DependencyD
     wanted = {p.lower() for p in packages}
     display = {p.lower(): p for p in packages}
     out: dict[str, DependencyDeclaration] = {}
-    for csproj in iter_manifest_files(root, ["*.csproj", "packages.config", "Directory.Packages.props"], frozenset({".git", "bin", "obj"})):
+    for csproj in iter_manifest_files(
+        root,
+        ["*.csproj", "packages.config", "Directory.Packages.props"],
+        frozenset({".git", "bin", "obj"}),
+    ):
         text = _read(csproj)
         if text is None:
             continue
@@ -397,11 +450,16 @@ def scan_nuget_dependencies(root: Path, packages: list[str]) -> list[DependencyD
             if include is None or include.group("name").lower() not in wanted:
                 continue
             version = _CSPROJ_VERSION_RE.search(tag)
-            out.setdefault(include.group("name").lower(), DependencyDeclaration(
-                package=display[include.group("name").lower()], manifest_path=str(csproj),
-                declared_version=version.group("version") if version else None,
-                resolved_version=None, source="manifest",
-            ))
+            out.setdefault(
+                include.group("name").lower(),
+                DependencyDeclaration(
+                    package=display[include.group("name").lower()],
+                    manifest_path=str(csproj),
+                    declared_version=version.group("version") if version else None,
+                    resolved_version=None,
+                    source="manifest",
+                ),
+            )
     return list(out.values())
 
 
@@ -424,20 +482,29 @@ def scan_swift_dependencies(root: Path, packages: list[str]) -> list[DependencyD
             url_tail = match.group("url").rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
             for package in packages:
                 if url_tail.lower() == package.lower():
-                    out.setdefault(package, DependencyDeclaration(
-                        package=package, manifest_path=str(manifest),
-                        declared_version=match.group("version") or match.group("exact"),
-                        resolved_version=None, source="manifest",
-                    ))
-    resolved = _read_json(root / "Package.resolved") if (root / "Package.resolved").is_file() else None
-    for pin in ((resolved or {}).get("pins") or (resolved or {}).get("object", {}).get("pins") or []):
+                    out.setdefault(
+                        package,
+                        DependencyDeclaration(
+                            package=package,
+                            manifest_path=str(manifest),
+                            declared_version=match.group("version") or match.group("exact"),
+                            resolved_version=None,
+                            source="manifest",
+                        ),
+                    )
+    resolved = (
+        _read_json(root / "Package.resolved") if (root / "Package.resolved").is_file() else None
+    )
+    for pin in (resolved or {}).get("pins") or (resolved or {}).get("object", {}).get("pins") or []:
         identity = str(pin.get("identity") or pin.get("package") or "").lower()
         version = (pin.get("state") or {}).get("version")
         if identity in {p.lower() for p in out} and version:
             entry = out[next(p for p in out if p.lower() == identity)]
             out[entry.package] = DependencyDeclaration(
-                package=entry.package, manifest_path=entry.manifest_path,
+                package=entry.package,
+                manifest_path=entry.manifest_path,
                 declared_version=entry.declared_version,
-                resolved_version=str(version), source="lockfile",
+                resolved_version=str(version),
+                source="lockfile",
             )
     return list(out.values())

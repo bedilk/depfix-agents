@@ -30,8 +30,10 @@ class RubyFixValidator:
     def validate(self, original_code: str, fixed_code: str, filepath: str) -> ValidationResult:
         if original_code.strip() == fixed_code.strip():
             return ValidationResult(
-                status=ValidationStatus.NO_CHANGES, is_valid=False,
-                syntax_valid=True, changes_detected=False,
+                status=ValidationStatus.NO_CHANGES,
+                is_valid=False,
+                syntax_valid=True,
+                changes_detected=False,
                 error_message="No changes were made to the code",
             )
 
@@ -44,8 +46,10 @@ class RubyFixValidator:
         line_count = max(len(original_code.splitlines()), len(fixed_code.splitlines()))
         if line_count >= _MIN_LINES_FOR_CHANGE_RATIO and change_ratio > 0.5:
             return ValidationResult(
-                status=ValidationStatus.UNEXPECTED_CHANGES, is_valid=False,
-                syntax_valid=True, changes_detected=True,
+                status=ValidationStatus.UNEXPECTED_CHANGES,
+                is_valid=False,
+                syntax_valid=True,
+                changes_detected=True,
                 error_message=f"Too many changes detected ({change_ratio:.0%} of lines changed)",
             )
         return ValidationResult.valid()
@@ -58,8 +62,10 @@ class RubyFixValidator:
             temp_path = handle.name
         try:
             result = subprocess.run(
-                [self._ruby, "-c", temp_path],  # noqa: S603
-                capture_output=True, text=True, timeout=10,
+                [self._ruby, "-c", temp_path],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 return ValidationResult.valid()

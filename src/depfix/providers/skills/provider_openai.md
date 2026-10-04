@@ -22,8 +22,10 @@ const openai = new OpenAIApi(new Configuration(...)); // v3
 
 ### Python
 ```python
-from openai import OpenAI # v1+
-import openai; openai.api_key = ... # v0 legacy
+from openai import OpenAI  # v1+
+import openai
+
+openai.api_key = ...  # v0 legacy
 ```
 
 ## Call sites to look for (v4 canonical)

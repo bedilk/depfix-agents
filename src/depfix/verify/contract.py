@@ -38,7 +38,7 @@ import hashlib
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,9 @@ class ContractReport:
             return "test suite mocks the SDK (no outbound HTTP)"
         if self.identical:
             return "identical shape"
-        return f"request shape changed ({len(self.only_before)} removed, {len(self.only_after)} added)"
+        return (
+            f"request shape changed ({len(self.only_before)} removed, {len(self.only_after)} added)"
+        )
 
 
 def normalise_path(path: str) -> str:
@@ -151,11 +153,7 @@ def parse_shape(entry: dict) -> RequestShape | None:
             return None
 
         path = normalise_path(raw_path)
-        header_keys = (
-            tuple(sorted(k.lower() for k in headers.keys()))
-            if isinstance(headers, dict)
-            else ()
-        )
+        header_keys = tuple(sorted(k.lower() for k in headers)) if isinstance(headers, dict) else ()
         body_keys = extract_body_keys(body)
 
         return RequestShape(

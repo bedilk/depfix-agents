@@ -101,9 +101,7 @@ class SecurityAdvisorySource(ChangeSource):
         if osv_ecosystem is None:
             return FeedPoll.missing(f"OSV has no ecosystem mapping for {self.ecosystem!r}")
 
-        query: dict[str, Any] = {
-            "package": {"name": self.package, "ecosystem": osv_ecosystem}
-        }
+        query: dict[str, Any] = {"package": {"name": self.package, "ecosystem": osv_ecosystem}}
         if self.version:
             query["version"] = self.version
 

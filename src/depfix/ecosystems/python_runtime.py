@@ -74,7 +74,9 @@ def install_argv(root: str | Path) -> list[str] | None:
 
 def has_installable_manifest(root: str | Path) -> bool:
     root = Path(root)
-    return any((root / name).is_file() for name in ("requirements.txt", "pyproject.toml", "setup.py"))
+    return any(
+        (root / name).is_file() for name in ("requirements.txt", "pyproject.toml", "setup.py")
+    )
 
 
 def has_pytest_setup(root: str | Path) -> bool:
@@ -111,7 +113,14 @@ def test_argv(root: str | Path, junit_xml_path: str | Path) -> list[str] | None:
     python = interpreter_for(root)
     if python is None:
         return None
-    return [python, "-m", "pytest", "--quiet", f"--junit-xml={junit_xml_path}", "--continue-on-collection-errors"]
+    return [
+        python,
+        "-m",
+        "pytest",
+        "--quiet",
+        f"--junit-xml={junit_xml_path}",
+        "--continue-on-collection-errors",
+    ]
 
 
 def smoke_argv(root: str | Path, relpath: str) -> list[str] | None:

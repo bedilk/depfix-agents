@@ -28,9 +28,21 @@ class EvidenceKind(enum.StrEnum):
     NONE = "none"
 
 
-_RANK = {Severity.NONE: 0, Severity.LOW: 1, Severity.MEDIUM: 2, Severity.HIGH: 3, Severity.CRITICAL: 4}
-CRITICAL_EVIDENCE = frozenset({EvidenceKind.TEST_FAILURE, EvidenceKind.TYPE_ERROR, EvidenceKind.STRUCTURAL})
+_RANK = {
+    Severity.NONE: 0,
+    Severity.LOW: 1,
+    Severity.MEDIUM: 2,
+    Severity.HIGH: 3,
+    Severity.CRITICAL: 4,
+}
+CRITICAL_EVIDENCE = frozenset(
+    {EvidenceKind.TEST_FAILURE, EvidenceKind.TYPE_ERROR, EvidenceKind.STRUCTURAL}
+)
 
 
 def cap_severity(severity: Severity, evidence: EvidenceKind) -> Severity:
-    return Severity.HIGH if severity is Severity.CRITICAL and evidence not in CRITICAL_EVIDENCE else severity
+    return (
+        Severity.HIGH
+        if severity is Severity.CRITICAL and evidence not in CRITICAL_EVIDENCE
+        else severity
+    )

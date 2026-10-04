@@ -20,8 +20,12 @@ class RubyGemsDistTagSource(ChangeSource):
     kind: ClassVar[SourceKind] = SourceKind.RUBYGEMS_DIST_TAG
 
     def __init__(
-        self, provider_id: str, config: dict[str, Any], client: RubyGemsClient,
-        http: httpx.Client | None = None, github_api_url: str = "",
+        self,
+        provider_id: str,
+        config: dict[str, Any],
+        client: RubyGemsClient,
+        http: httpx.Client | None = None,
+        github_api_url: str = "",
     ) -> None:
         super().__init__(provider_id, config)
         self.gem: str = self._require("gem")
@@ -47,18 +51,24 @@ class RubyGemsDistTagSource(ChangeSource):
             return FeedPoll.baseline(version)
 
         return FeedPoll(
-            changed=True, new_token=version,
-            events=[ChangeEvent(
-                provider_id=self.provider_id, feed_key=self.feed_key, source_kind=self.kind,
-                source_url=f"https://rubygems.org/gems/{self.gem}/versions/{version}",
-                old_token=state.last_token, new_token=version,
-                title=f"{self.gem} {state.last_token} -> {version}",
-                summary="RubyGems latest version moved",
-                severity=(
-                    Severity.BREAKING
-                    if is_major_bump(state.last_token, version)
-                    else Severity.UNKNOWN
-                ),
-                raw={"package": self.gem, "ecosystem": "rubygems"},
-            )],
+            changed=True,
+            new_token=version,
+            events=[
+                ChangeEvent(
+                    provider_id=self.provider_id,
+                    feed_key=self.feed_key,
+                    source_kind=self.kind,
+                    source_url=f"https://rubygems.org/gems/{self.gem}/versions/{version}",
+                    old_token=state.last_token,
+                    new_token=version,
+                    title=f"{self.gem} {state.last_token} -> {version}",
+                    summary="RubyGems latest version moved",
+                    severity=(
+                        Severity.BREAKING
+                        if is_major_bump(state.last_token, version)
+                        else Severity.UNKNOWN
+                    ),
+                    raw={"package": self.gem, "ecosystem": "rubygems"},
+                )
+            ],
         )

@@ -32,13 +32,13 @@ logger = logging.getLogger(__name__)
 
 # Regex patterns for import statements (simplified, not a full parser)
 _JS_IMPORT = re.compile(
-    r'''(?:import\s+.*?\s+from\s+['"]([^'"]+)['"]|'''
-    r'''require\s*\(\s*['"]([^'"]+)['"]\s*\))''',
+    r"""(?:import\s+.*?\s+from\s+['"]([^'"]+)['"]|"""
+    r"""require\s*\(\s*['"]([^'"]+)['"]\s*\))""",
     re.MULTILINE,
 )
 
 _PY_IMPORT = re.compile(
-    r'''(?:^from\s+([\w.]+)\s+import\s+|^import\s+([\w.]+))''',
+    r"""(?:^from\s+([\w.]+)\s+import\s+|^import\s+([\w.]+))""",
     re.MULTILINE,
 )
 
@@ -94,8 +94,7 @@ def select_tests_for_changes(
     """
     abs_root = root.resolve()
     abs_changed = [
-        f.resolve() if f.is_absolute() else (abs_root / f).resolve()
-        for f in changed_files
+        f.resolve() if f.is_absolute() else (abs_root / f).resolve() for f in changed_files
     ]
 
     # Gather all test files

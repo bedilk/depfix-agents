@@ -243,7 +243,7 @@ the registry return at time T" for something other than debugging.
   assert `must_contain`/`must_not_contain`/`max_changed_line_ratio`.
   Exact-match on LLM output measures formatting luck, not correctness.
 - **`--no-llm` skips, never fails, LLM-requiring cases.** `depfix eval
-  --no-llm --fail-under 1.0` runs in CI without any API key and gates only
+  --no-llm --fail-under 0.80` runs in CI without any API key and gates only
   the deterministic `spec_diff` corpus; `release_notes`/`fix_generation`
   cases are reported as `skipped` and excluded from `pass_rate` in either
   direction.

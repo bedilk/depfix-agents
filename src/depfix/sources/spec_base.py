@@ -114,9 +114,8 @@ class StructuredSpecSource(ChangeSource):
             return FeedPoll.failure(str(exc))
 
         version = self.version_of(document, sha)
-        cache_path = self._write_cache(sha, document)
-
         previous = self._load_cache(state.last_payload_path)
+        cache_path = self._write_cache(sha, document)
         if previous is None:
             logger.info("%s baseline for %s (%s)", self.spec_label, self.provider_id, version)
             return FeedPoll.baseline(version, sha=sha, path=str(cache_path))

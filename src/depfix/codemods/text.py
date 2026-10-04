@@ -1,4 +1,3 @@
-
 """Comment- and string-aware scanning for JavaScript/TypeScript source.
 
 A codemod must never rewrite text that only *looks* like a call site: a

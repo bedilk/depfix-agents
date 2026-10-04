@@ -10,10 +10,15 @@ from depfix.ecosystems.pypi_manifests import build_pypi_dependency_drift_bumps
 
 def _drift(package: str, old: str, new: str) -> BreakingChange:
     return BreakingChange(
-        package=package, old_version=old, new_version=new,
-        old_api=f"{package}@{old}", new_api=f"{package}@{new}",
-        description="Registry version drift", migration_guide="",
-        kind=ChangeKind.DEPENDENCY_VERSION_BUMP, source=ClassificationSource.REGISTRY,
+        package=package,
+        old_version=old,
+        new_version=new,
+        old_api=f"{package}@{old}",
+        new_api=f"{package}@{new}",
+        description="Registry version drift",
+        migration_guide="",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
+        source=ClassificationSource.REGISTRY,
     )
 
 
@@ -33,9 +38,7 @@ def test_bumps_an_exact_requirements_pin(tmp_path: Path) -> None:
 
 
 def test_preserves_extras_and_environment_marker(tmp_path: Path) -> None:
-    (tmp_path / "requirements.txt").write_text(
-        'openai[datalib]>=1.0 ; python_version >= "3.9"\n'
-    )
+    (tmp_path / "requirements.txt").write_text('openai[datalib]>=1.0 ; python_version >= "3.9"\n')
 
     bump = _only(build_pypi_dependency_drift_bumps(tmp_path, _drift("openai", "1.0.0", "1.4.3")))
 
@@ -46,7 +49,9 @@ def test_normalizes_package_name_per_pep503(tmp_path: Path) -> None:
     (tmp_path / "requirements.txt").write_text("Google_Cloud.Storage==1.0.0\n")
 
     bump = _only(
-        build_pypi_dependency_drift_bumps(tmp_path, _drift("google-cloud-storage", "1.0.0", "1.1.0"))
+        build_pypi_dependency_drift_bumps(
+            tmp_path, _drift("google-cloud-storage", "1.0.0", "1.1.0")
+        )
     )
 
     assert bump.fixed_content == "Google_Cloud.Storage==1.1.0\n"

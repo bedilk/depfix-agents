@@ -8,7 +8,7 @@ documented API changes onto symbols the repository actually calls.
 Properties that keep it cheap and safe:
 
 * One call per ``(provider, commit)``, not per change.
-* ~1–2K tokens — no source code, just symbol lists. Around $0.002.
+* ~1-2K tokens -- no source code, just symbol lists. Around $0.002.
 * Verifiable: any ``observed`` value not in the input list is dropped.
 * Cacheable on ``sha256(provider | sorted(observed) | sorted(change_keys))``.
 * ``certain: false`` caps the site at MEDIUM confidence.
@@ -51,6 +51,7 @@ Rules:
 @dataclass(frozen=True)
 class AlignmentResult:
     """One resolved mapping from a documented change to observed symbols."""
+
     old_api: str
     observed: tuple[str, ...]
     why: str
@@ -58,11 +59,14 @@ class AlignmentResult:
 
 
 def _cache_key(provider_id: str, observed: list[str], change_keys: list[str]) -> str:
-    blob = json.dumps({
-        "provider": provider_id,
-        "observed": sorted(observed),
-        "changes": sorted(change_keys),
-    }, sort_keys=True)
+    blob = json.dumps(
+        {
+            "provider": provider_id,
+            "observed": sorted(observed),
+            "changes": sorted(change_keys),
+        },
+        sort_keys=True,
+    )
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -91,11 +95,17 @@ def _load_cached(path: Path) -> list[AlignmentResult] | None:
 def _save_cached(path: Path, results: list[AlignmentResult]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps([
-            {"old_api": r.old_api, "observed": list(r.observed),
-             "why": r.why, "certain": r.certain}
-            for r in results
-        ]),
+        json.dumps(
+            [
+                {
+                    "old_api": r.old_api,
+                    "observed": list(r.observed),
+                    "why": r.why,
+                    "certain": r.certain,
+                }
+                for r in results
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -109,11 +119,12 @@ def build_alignment_prompt(
     changes: list[BreakingChange],
 ) -> str:
     """Build the alignment prompt from two symbol lists and a change list."""
-    surface = "\n".join(f"  {s}" for s in sorted(surface_symbols)[:200]) or "  (no surface available)"
+    surface = (
+        "\n".join(f"  {s}" for s in sorted(surface_symbols)[:200]) or "  (no surface available)"
+    )
     observed = "\n".join(f"  {s}" for s in sorted(observed_symbols)[:200]) or "  (none)"
     change_lines = "\n".join(
-        f"  - old_api: {c.old_api!r}, evidence: {(c.evidence or '')[:200]!r}"
-        for c in changes[:30]
+        f"  - old_api: {c.old_api!r}, evidence: {(c.evidence or '')[:200]!r}" for c in changes[:30]
     )
     return _ALIGN_PROMPT.format(
         package=package,
@@ -149,12 +160,14 @@ def parse_alignment_response(
         if not isinstance(raw_observed, list):
             continue
         filtered = tuple(s for s in raw_observed if isinstance(s, str) and s in valid_observed)
-        results.append(AlignmentResult(
-            old_api=old_api,
-            observed=filtered,
-            why=str(entry.get("why", "")),
-            certain=bool(entry.get("certain", False)),
-        ))
+        results.append(
+            AlignmentResult(
+                old_api=old_api,
+                observed=filtered,
+                why=str(entry.get("why", "")),
+                certain=bool(entry.get("certain", False)),
+            )
+        )
     return results
 
 
@@ -203,11 +216,12 @@ def align_symbols(
         return []
 
     if ledger is not None:
+        import contextlib
+
         from depfix.obs.cost import CostStage
-        try:
+
+        with contextlib.suppress(Exception):
             ledger.record(CostStage.SYMBOL_ALIGNMENT, getattr(response, "cost_usd", 0.0))  # type: ignore[attr-defined]
-        except Exception:
-            pass
 
     raw_text = getattr(response, "text", str(response))
     valid_observed = frozenset(observed_symbols)
@@ -218,6 +232,8 @@ def align_symbols(
 
     logger.info(
         "alignment: %s → %d mappings (%d with matches)",
-        provider_id, len(results), sum(1 for r in results if r.observed),
+        provider_id,
+        len(results),
+        sum(1 for r in results if r.observed),
     )
     return results

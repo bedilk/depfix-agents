@@ -16,7 +16,9 @@ from depfix.codemods.lockfile import dependency_drift_policy
 from depfix.core.models import BreakingChange
 from depfix.ecosystems.manifests import _normalize_pypi
 
-_SKIP = frozenset({"node_modules", ".git", "dist", "build", ".venv", "venv", ".depfix-venv", "__pycache__"})
+_SKIP = frozenset(
+    {"node_modules", ".git", "dist", "build", ".venv", "venv", ".depfix-venv", "__pycache__"}
+)
 _REQUIREMENT_FILES = ("requirements.txt", "requirements-dev.txt")
 _SPECIFIER = r"(?:===|==|~=|>=|<=|!=|<|>)"
 _REQ_LINE_RE = re.compile(
@@ -73,7 +75,7 @@ def _bump_requirements_text(text: str, package: str, new_version: str) -> tuple[
             continue
         matched_spec = match.group("spec")
         old_spec = old_spec or matched_spec.strip()
-        separator = matched_spec[len(matched_spec.rstrip()):]
+        separator = matched_spec[len(matched_spec.rstrip()) :]
         rewritten.append(
             f"{match.group('prefix')}=={new_version}{separator}{match.group('marker') or ''}"
             f"{match.group('comment') or ''}{match.group('newline') or ''}"
@@ -104,10 +106,16 @@ def build_pypi_dependency_drift_bumps(root: Path, change: BreakingChange) -> lis
         ):
             continue
         if old_spec is not None and fixed != original:
-            bumps.append(PypiManifestBump(
-                path.relative_to(root).as_posix(), original, fixed, change.package,
-                old_spec, f"=={new_version}",
-            ))
+            bumps.append(
+                PypiManifestBump(
+                    path.relative_to(root).as_posix(),
+                    original,
+                    fixed,
+                    change.package,
+                    old_spec,
+                    f"=={new_version}",
+                )
+            )
 
     for path in _iter_files(root, ("pyproject.toml",)):
         bump = _bump_pyproject(root, path, change.package, new_version)
@@ -116,7 +124,9 @@ def build_pypi_dependency_drift_bumps(root: Path, change: BreakingChange) -> lis
     return bumps
 
 
-def _bump_pyproject(root: Path, path: Path, package: str, new_version: str) -> PypiManifestBump | None:
+def _bump_pyproject(
+    root: Path, path: Path, package: str, new_version: str
+) -> PypiManifestBump | None:
     """Make a minimal text edit rather than reserializing a TOML document."""
     try:
         original = path.read_text(encoding="utf-8")
@@ -166,5 +176,10 @@ def _bump_pyproject(root: Path, path: Path, package: str, new_version: str) -> P
     ):
         return None
     return PypiManifestBump(
-        path.relative_to(root).as_posix(), original, fixed, package, old_spec, f"=={new_version}",
+        path.relative_to(root).as_posix(),
+        original,
+        fixed,
+        package,
+        old_spec,
+        f"=={new_version}",
     )

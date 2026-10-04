@@ -7,9 +7,7 @@ from depfix.scanners.matching import ScanChangeAssessment
 from depfix.scanners.models import RepoScanResult
 
 
-def render_scan_report(
-    result: RepoScanResult, assessments: list[ScanChangeAssessment]
-) -> str:
+def render_scan_report(result: RepoScanResult, assessments: list[ScanChangeAssessment]) -> str:
     """Render a compact, self-contained report without exposing source snippets."""
     lines = [
         "# Depfix scan report",
@@ -34,7 +32,9 @@ def render_scan_report(
             for row in rows
         )
     else:
-        lines.append("| — | — | — | no provider SDK manifest found | No version comparison available. |")
+        lines.append(
+            "| — | — | — | no provider SDK manifest found | No version comparison available. |"
+        )
 
     lines.extend(
         [

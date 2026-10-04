@@ -206,8 +206,8 @@ def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> N
     monkeypatch.setattr(
         cli,
         "scan_path",
-        lambda *_args, **_kwargs: phases.append("scan") or RepoScanResult(
-            repo_full_name="local", commit_sha="test"
+        lambda *_args, **_kwargs: (
+            phases.append("scan") or RepoScanResult(repo_full_name="local", commit_sha="test")
         ),
     )
     monkeypatch.setattr(cli, "_cmd_eval", lambda _args: phases.append("evaluate") or 0)
@@ -228,10 +228,16 @@ def test_scan_derives_feed_candidate_only_from_observed_api_usage(monkeypatch, t
     checkout = tmp_path / "checkout"
     checkout.mkdir()
     candidate = BreakingChange(
-        package="openai", old_version="3.0.0", new_version="4.0.0",
-        old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
-        description="migration", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
-        source=ClassificationSource.LLM_SYNTHESIS, provider_id="openai",
+        package="openai",
+        old_version="3.0.0",
+        new_version="4.0.0",
+        old_api="openai.createChatCompletion",
+        new_api="openai.chat.completions.create",
+        description="migration",
+        migration_guide="",
+        kind=ChangeKind.METHOD_RENAMED,
+        source=ClassificationSource.LLM_SYNTHESIS,
+        provider_id="openai",
     )
     settings = Settings(providers_file=str(providers_file), llm_provider="ollama")
     args = build_parser().parse_args(
@@ -268,10 +274,14 @@ def test_scan_derives_feed_candidate_only_from_observed_api_usage(monkeypatch, t
             commit_sha="test",
             call_sites=[
                 CallSite(
-                    filepath="src/openai.js", line_number=1, column=0,
+                    filepath="src/openai.js",
+                    line_number=1,
+                    column=0,
                     line_content="openai.createChatCompletion({})",
-                    kind=CallSiteKind.METHOD_CALL, confidence=MatchConfidence.HIGH,
-                    symbol="openai.createChatCompletion", provider_id="openai",
+                    kind=CallSiteKind.METHOD_CALL,
+                    confidence=MatchConfidence.HIGH,
+                    symbol="openai.createChatCompletion",
+                    provider_id="openai",
                 )
             ],
         ),
@@ -296,16 +306,20 @@ def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_pat
     checkout = tmp_path / "checkout"
     checkout.mkdir()
     candidate = BreakingChange(
-        package="openai", old_version="3.0.0", new_version="4.0.0",
-        old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
-        description="migration", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
-        source=ClassificationSource.LLM_SYNTHESIS, provider_id="openai",
+        package="openai",
+        old_version="3.0.0",
+        new_version="4.0.0",
+        old_api="openai.createChatCompletion",
+        new_api="openai.chat.completions.create",
+        description="migration",
+        migration_guide="",
+        kind=ChangeKind.METHOD_RENAMED,
+        source=ClassificationSource.LLM_SYNTHESIS,
+        provider_id="openai",
         evidence="release note says use openai.chat.completions.create",
     )
     settings = Settings(providers_file=str(providers_file), llm_provider="ollama")
-    args = build_parser().parse_args(
-        ["scan", "--path", str(checkout), "--provider", "openai"]
-    )
+    args = build_parser().parse_args(["scan", "--path", str(checkout), "--provider", "openai"])
     learned: dict[str, object] = {}
 
     monkeypatch.setattr(cli, "get_settings", lambda: settings)
@@ -320,6 +334,7 @@ def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "init_schema", lambda: None)
     monkeypatch.setattr(cli, "record_scan", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(cli, "record_scan_assessments", lambda *_args, **_kwargs: [])
+
     @contextmanager
     def fake_session_scope():
         yield object()
@@ -330,17 +345,22 @@ def test_scan_records_resolved_usage_in_the_managed_catalog(monkeypatch, tmp_pat
         cli,
         "scan_path",
         lambda *_args, **_kwargs: RepoScanResult(
-            repo_full_name="local", commit_sha="observed-sha",
+            repo_full_name="local",
+            commit_sha="observed-sha",
             dependencies=[
                 DeclaredDependency("openai", "package-lock.json", "^3", "3.3.0", "lockfile"),
                 DeclaredDependency("unrelated", "package-lock.json", "^1", "1.0.0", "lockfile"),
             ],
             call_sites=[
                 CallSite(
-                    filepath="src/openai.js", line_number=1, column=0,
+                    filepath="src/openai.js",
+                    line_number=1,
+                    column=0,
                     line_content="openai.createChatCompletion({})",
-                    kind=CallSiteKind.METHOD_CALL, confidence=MatchConfidence.HIGH,
-                    symbol="openai.createChatCompletion", provider_id="openai",
+                    kind=CallSiteKind.METHOD_CALL,
+                    confidence=MatchConfidence.HIGH,
+                    symbol="openai.createChatCompletion",
+                    provider_id="openai",
                 )
             ],
         ),

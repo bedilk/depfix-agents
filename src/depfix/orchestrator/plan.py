@@ -61,7 +61,7 @@ def plan_path_for(
 
 
 def plan_archive_path_for(
-    change: "BreakingChange", created_at_iso: str = "", directory: str | Path = DEFAULT_PLAN_DIR
+    change: BreakingChange, created_at_iso: str = "", directory: str | Path = DEFAULT_PLAN_DIR
 ) -> Path:
     """Provider/date archive path, kept alongside the canonical per-repo file.
 
@@ -69,7 +69,7 @@ def plan_archive_path_for(
     a durable, human-browsable record, distinct from the canonical
     per-(repo, change) file that ``apply`` reads.
     """
-    date = (created_at_iso[:10] if created_at_iso else datetime.now(tz=UTC).date().isoformat())
+    date = created_at_iso[:10] if created_at_iso else datetime.now(tz=UTC).date().isoformat()
     provider = change.provider_id or "unknown"
     return Path(directory) / "archive" / provider / date
 
@@ -101,7 +101,7 @@ class PlanArtifact:
     upgrade_package: str = ""
     upgrade_from: str = ""
     upgrade_to: str = ""
-    steps: tuple = ()          # tuple[UpgradeStep, ...]
+    steps: tuple = ()  # tuple[UpgradeStep, ...]
     member_dedupe_keys: tuple = ()
     notes: tuple = ()
     # "patch-minor", "major", "multi-major", or "" (not a drift artifact)
@@ -171,8 +171,7 @@ class PlanArtifact:
         default (KEPT only) silently dropped SUSPECT/APPLIED drift edits,
         producing an artifact ``apply`` could replay into nothing."""
         source = (
-            edits if edits is not None
-            else [e for e in result.edits if e.verdict.value == "kept"]
+            edits if edits is not None else [e for e in result.edits if e.verdict.value == "kept"]
         )
         return cls(
             repo_full_name=repo,
@@ -180,7 +179,12 @@ class PlanArtifact:
             change=result.breaking_change,
             edits=tuple(
                 PlannedEdit(
-                    e.relpath, e.original_content, e.fixed_content, e.diff, e.confidence, e.usages_fixed
+                    e.relpath,
+                    e.original_content,
+                    e.fixed_content,
+                    e.diff,
+                    e.confidence,
+                    e.usages_fixed,
                 )
                 for e in source
             ),
@@ -198,10 +202,10 @@ class PlanArtifact:
         cls,
         repo: str,
         base_sha: str,
-        change: "BreakingChange",
+        change: BreakingChange,
         *,
         drift_risk: str,
-    ) -> "PlanArtifact":
+    ) -> PlanArtifact:
         """Artifact for a version-drift-only change: no code edits, just a record
         that the installed version is behind and how risky that gap is."""
         return cls(
@@ -214,15 +218,24 @@ class PlanArtifact:
         )
 
     @classmethod
-    def from_upgrade(cls, repo: str, base_sha: str, result, *, scan_source: str = "") -> "PlanArtifact":
-        from depfix.core.upgrade import UpgradeStep
+    def from_upgrade(
+        cls, repo: str, base_sha: str, result, *, scan_source: str = ""
+    ) -> PlanArtifact:
         plan = result.plan
         carrier = plan.drift_change or plan.migrations[0]
         return cls(
-            repo_full_name=repo, base_sha=base_sha, change=carrier,
+            repo_full_name=repo,
+            base_sha=base_sha,
+            change=carrier,
             edits=tuple(
-                PlannedEdit(e.relpath, e.original_content, e.fixed_content,
-                            e.diff, e.confidence, e.usages_fixed)
+                PlannedEdit(
+                    e.relpath,
+                    e.original_content,
+                    e.fixed_content,
+                    e.diff,
+                    e.confidence,
+                    e.usages_fixed,
+                )
                 for e in result.committable
             ),
             confidence=result.confidence.value,
@@ -272,6 +285,7 @@ class PlanArtifact:
     @classmethod
     def read(cls, path: str | Path) -> PlanArtifact:
         from depfix.core.upgrade import UpgradeStep
+
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         version = raw.get("version")
         if version not in (2, 3, 4, ARTIFACT_VERSION):

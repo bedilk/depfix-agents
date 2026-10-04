@@ -199,7 +199,9 @@ def decide_with_detail(**kwargs: object) -> SkipDetail | None:
     elif reason is SkipReason.ALREADY_TERMINAL and attempt is not None:
         message = f"ledger status is {attempt.status}; use --force to retry"
     elif reason is SkipReason.MAX_ATTEMPTS_REACHED and attempt is not None:
-        message = f"{attempt.attempts_used}/{settings.pipeline_max_attempts} attempts used; use --force"
+        message = (
+            f"{attempt.attempts_used}/{settings.pipeline_max_attempts} attempts used; use --force"
+        )
     elif reason is SkipReason.MAX_OPEN_PRS_REACHED:
         message = "merge or close an existing depfix PR, or use --force"
     elif reason is SkipReason.NO_CALL_SITES_UNCHANGED:

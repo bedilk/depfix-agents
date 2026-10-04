@@ -170,8 +170,9 @@ def test_422_names_the_permissions_requested_for_a_write_token(
         return_value=httpx.Response(422, text="Validation Failed")
     )
 
-    with _auth(private_key_pem) as auth, pytest.raises(
-        GitHubAppError, match=r"contents=write, pull_requests=write"
+    with (
+        _auth(private_key_pem) as auth,
+        pytest.raises(GitHubAppError, match=r"contents=write, pull_requests=write"),
     ):
         auth.installation_token(
             1,

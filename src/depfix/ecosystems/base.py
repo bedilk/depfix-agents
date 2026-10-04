@@ -34,8 +34,22 @@ from pathlib import Path
 #: ``skip_dirs`` so a polyglot monorepo doesn't rescan another ecosystem's
 #: dependency tree.
 COMMON_SKIP_DIRS = frozenset(
-    {".git", "dist", "build", "coverage", ".next", "node_modules", "__pycache__",
-     ".venv", "venv", ".depfix-venv", "vendor", "target", ".tox", ".mypy_cache"}
+    {
+        ".git",
+        "dist",
+        "build",
+        "coverage",
+        ".next",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".depfix-venv",
+        "vendor",
+        "target",
+        ".tox",
+        ".mypy_cache",
+    }
 )
 
 #: Credit for a monorepo with no root manifest but depth-1 or depth-2 manifests
@@ -118,8 +132,7 @@ class EcosystemSpec:
         score = sum(
             weight
             for marker, weight in self.markers
-            if (self._glob_hit(root, marker, skip) if "*" in marker
-                else (root / marker).exists())
+            if (self._glob_hit(root, marker, skip) if "*" in marker else (root / marker).exists())
         )
         return score + self._nested_manifest_score(root, skip)
 

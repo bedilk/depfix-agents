@@ -1,6 +1,8 @@
 """Compose one upgrade into one verified, committable edit set."""
+
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import logging
 from dataclasses import dataclass
@@ -24,7 +26,7 @@ class UpgradeResult:
     edits: list[FileEdit]
     steps: list[UpgradeStep]
     committable: list[FileEdit]
-    confidence: object   # ConfidenceTier or equivalent
+    confidence: object  # ConfidenceTier or equivalent
     confidence_reason: str = ""
     verification: object | None = None
     notes: list[str] = dataclasses.field(default_factory=list)
@@ -61,77 +63,121 @@ def run_upgrade(
             continue
         fixer = fixer_factory()
         pipeline = build_fix_pipeline(
-            settings=settings, repo_config=repo_config, fixer=fixer,
-            editor=editor, max_retries=settings.retry_max_rounds,
+            settings=settings,
+            repo_config=repo_config,
+            fixer=fixer,
+            editor=editor,
+            max_retries=settings.retry_max_rounds,
             ecosystem=plan.ecosystem,
         )
         # Disable per-migration verification; we verify the whole tree once below
-        if hasattr(pipeline, '_verifier'):
+        if hasattr(pipeline, "_verifier"):
             pipeline._verifier = None
-        if hasattr(pipeline, '_retry_loop'):
+        if hasattr(pipeline, "_retry_loop"):
             pipeline._retry_loop = None
         result = pipeline.run(scoped, change, editor)
         cost += result.total_cost
         tokens += result.total_tokens
         if ledger is not None:
             from depfix.obs.cost import CostStage
-            ledger.record(CostStage.FIX_GENERATION, result.total_cost,
-                          input_tokens=0, output_tokens=result.total_tokens)
+
+            ledger.record(
+                CostStage.FIX_GENERATION,
+                result.total_cost,
+                input_tokens=0,
+                output_tokens=result.total_tokens,
+            )
         notes.extend(result.codemod_notes)
-        member = [e for e in result.edits if getattr(e, 'is_on_disk', bool(e.fixed_content))]
+        member = [e for e in result.edits if getattr(e, "is_on_disk", bool(e.fixed_content))]
         edits.extend(member)
         if member:
             origins = {e.origin for e in member}
-            codemod_id = next((e.codemod_id for e in member if getattr(e, 'codemod_id', None)), None)
-            steps.append(UpgradeStep(
-                kind=StepKind.SOURCE, dedupe_key=change.dedupe_key,
-                summary=f"{change.old_api} → {getattr(change, 'replacement', change.new_api)}",
-                relpaths=tuple(e.relpath for e in member),
-                origin=(f"codemod:{codemod_id}" if origins == {EditOrigin.CODEMOD} and codemod_id
-                        else f"llm:{getattr(fixer, 'model', 'unknown')}"),
-            ))
+            codemod_id = next(
+                (e.codemod_id for e in member if getattr(e, "codemod_id", None)), None
+            )
+            steps.append(
+                UpgradeStep(
+                    kind=StepKind.SOURCE,
+                    dedupe_key=change.dedupe_key,
+                    summary=f"{change.old_api} → {getattr(change, 'replacement', change.new_api)}",
+                    relpaths=tuple(e.relpath for e in member),
+                    origin=(
+                        f"codemod:{codemod_id}"
+                        if origins == {EditOrigin.CODEMOD} and codemod_id
+                        else f"llm:{getattr(fixer, 'model', 'unknown')}"
+                    ),
+                )
+            )
         else:
             notes.append(f"{change.old_api}: produced no on-disk edit")
 
     if plan.has_source_work and not any(s.kind == StepKind.SOURCE for s in steps):
-        return UpgradeResult(plan, [], [], [], ConfidenceTier.NONE,
-                             notes=notes, total_cost=cost, total_tokens=int(tokens),
-                             rejected_reason="no source migration produced an edit")
+        return UpgradeResult(
+            plan,
+            [],
+            [],
+            [],
+            ConfidenceTier.NONE,
+            notes=notes,
+            total_cost=cost,
+            total_tokens=int(tokens),
+            rejected_reason="no source migration produced an edit",
+        )
 
     # 2. One manifest bump to exact target version
     from depfix.codemods.lockfile import build_upgrade_manifest_bumps
+
     manifest_plan = build_upgrade_manifest_bumps(checkout.path, plan.package, plan.target_version)
     notes.extend(manifest_plan.declines)
 
     for bump in manifest_plan.bumps:
         edit = editor.write_fix(
-            bump.manifest_relpath, bump.fixed_content, confidence=1.0,
-            origin=EditOrigin.CODEMOD, codemod_id="manifest.upgrade")
+            bump.manifest_relpath,
+            bump.fixed_content,
+            confidence=1.0,
+            origin=EditOrigin.CODEMOD,
+            codemod_id="manifest.upgrade",
+        )
         if not edit.changed:
             notes.append(f"manifest bump not written: {bump.manifest_relpath}")
             continue
         edits.append(edit)
-        steps.append(UpgradeStep(
-            kind=StepKind.MANIFEST, origin="deterministic",
-            summary=f"{bump.package} {bump.old_range} → {bump.new_range}",
-            relpaths=(bump.manifest_relpath,)))
+        steps.append(
+            UpgradeStep(
+                kind=StepKind.MANIFEST,
+                origin="deterministic",
+                summary=f"{bump.package} {bump.old_range} → {bump.new_range}",
+                relpaths=(bump.manifest_relpath,),
+            )
+        )
 
     if not manifest_plan.bumps:
-        return UpgradeResult(plan, [], [], [], ConfidenceTier.NONE,
-                             notes=notes, total_cost=cost, total_tokens=int(tokens),
-                             rejected_reason=(
-                                 f"no manifest declares {plan.package} in a form "
-                                 "depfix can rewrite"))
+        return UpgradeResult(
+            plan,
+            [],
+            [],
+            [],
+            ConfidenceTier.NONE,
+            notes=notes,
+            total_cost=cost,
+            total_tokens=int(tokens),
+            rejected_reason=(f"no manifest declares {plan.package} in a form depfix can rewrite"),
+        )
 
     # 3. Lockfile refresh once
-    if getattr(settings, 'lockfile_regenerate', True) and checkout.is_temporary:
+    if getattr(settings, "lockfile_regenerate", True) and checkout.is_temporary:
         lock_edits, message = _refresh_lockfile(checkout, editor, plan, settings)
         notes.append(message)
         edits.extend(lock_edits)
         if lock_edits:
-            steps.append(UpgradeStep(
-                kind=StepKind.LOCKFILE, origin="deterministic", summary=message,
-                relpaths=tuple(e.relpath for e in lock_edits)))
+            steps.append(
+                UpgradeStep(
+                    kind=StepKind.LOCKFILE,
+                    origin="deterministic",
+                    summary=message,
+                    relpaths=tuple(e.relpath for e in lock_edits),
+                )
+            )
 
     # 4. One verification of the whole tree
     verification = None
@@ -148,11 +194,11 @@ def run_upgrade(
             typecheck_enabled=settings.verify_typecheck_enabled,
             typecheck_timeout=settings.verify_typecheck_timeout,
             ecosystem=plan.ecosystem,
-            coverage_enabled=getattr(settings, 'verify_coverage_enabled', False),
-            contract_enabled=getattr(settings, 'verify_contract_enabled', False),
-            flake_retries=getattr(settings, 'verify_flake_retries', 1),
-            static_check_enabled=getattr(settings, 'verify_static_check_enabled', False),
-            static_check_timeout=getattr(settings, 'verify_static_check_timeout', 30),
+            coverage_enabled=getattr(settings, "verify_coverage_enabled", False),
+            contract_enabled=getattr(settings, "verify_contract_enabled", False),
+            flake_retries=getattr(settings, "verify_flake_retries", 1),
+            static_check_enabled=getattr(settings, "verify_static_check_enabled", False),
+            static_check_timeout=getattr(settings, "verify_static_check_timeout", 30),
             selective_tests=False,
             frozen_install=False,
         )
@@ -162,38 +208,55 @@ def run_upgrade(
         confidence, reason = verification.tier, verification.tier_reason
 
         # 5. All-or-nothing rejection
-        rejected = [e for e in edits
-                    if e.verdict in (EditVerdict.REVERTED, EditVerdict.SUSPECT)]
+        rejected = [e for e in edits if e.verdict in (EditVerdict.REVERTED, EditVerdict.SUSPECT)]
         if rejected:
             for edit in edits:
-                if getattr(edit, 'is_on_disk', False):
-                    try:
+                if getattr(edit, "is_on_disk", False):
+                    with contextlib.suppress(Exception):
                         editor.revert(edit.relpath)
-                    except Exception:
-                        pass
             return UpgradeResult(
-                plan, edits, steps, [], confidence, reason, verification, notes,
-                cost, int(tokens),
+                plan,
+                edits,
+                steps,
+                [],
+                confidence,
+                reason,
+                verification,
+                notes,
+                cost,
+                int(tokens),
                 rejected_reason=(
                     "upgrade rejected as a unit: "
-                    + "; ".join(f"{e.relpath} ({e.verdict.value})" for e in rejected[:5])))
+                    + "; ".join(f"{e.relpath} ({e.verdict.value})" for e in rejected[:5])
+                ),
+            )
 
     floor = ConfidenceTier(settings.apply_min_confidence)
     if not confidence.at_least(floor):
-        return UpgradeResult(plan, edits, steps, [], confidence, reason, verification,
-                             notes, cost, int(tokens),
-                             rejected_reason=f"confidence {confidence.value} below "
-                                             f"apply_min_confidence {floor.value}")
+        return UpgradeResult(
+            plan,
+            edits,
+            steps,
+            [],
+            confidence,
+            reason,
+            verification,
+            notes,
+            cost,
+            int(tokens),
+            rejected_reason=f"confidence {confidence.value} below "
+            f"apply_min_confidence {floor.value}",
+        )
 
-    committable = [e for e in edits
-                   if e.verdict in (EditVerdict.KEPT, EditVerdict.APPLIED)]
-    return UpgradeResult(plan, edits, steps, committable, confidence, reason,
-                         verification, notes, cost, int(tokens))
+    committable = [e for e in edits if e.verdict in (EditVerdict.KEPT, EditVerdict.APPLIED)]
+    return UpgradeResult(
+        plan, edits, steps, committable, confidence, reason, verification, notes, cost, int(tokens)
+    )
 
 
 def _refresh_lockfile(checkout, editor, plan: UpgradePlan, settings) -> tuple[list, str]:
     """Refresh lockfile after manifest bump. Returns (edits, message)."""
-    from depfix.codemods.lockfile import try_refresh_javascript_lockfile, lockfile_paths
+    from depfix.codemods.lockfile import lockfile_paths, try_refresh_javascript_lockfile
 
     if plan.ecosystem == "javascript":
         ok, message = try_refresh_javascript_lockfile(
@@ -208,9 +271,15 @@ def _refresh_lockfile(checkout, editor, plan: UpgradePlan, settings) -> tuple[li
             relpath = lp.relative_to(checkout.path).as_posix()
             try:
                 new_content = lp.read_text(encoding="utf-8")
-                lock_edits.append(editor.write_fix(
-                    relpath, new_content, confidence=1.0,
-                    origin=EditOrigin.CODEMOD, codemod_id="lockfile.upgrade"))
+                lock_edits.append(
+                    editor.write_fix(
+                        relpath,
+                        new_content,
+                        confidence=1.0,
+                        origin=EditOrigin.CODEMOD,
+                        codemod_id="lockfile.upgrade",
+                    )
+                )
             except OSError:
                 pass
         return lock_edits, message

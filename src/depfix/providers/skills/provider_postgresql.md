@@ -32,6 +32,7 @@ grep for `<binding>.` once you know the local name.
 ```python
 import psycopg  # v3
 import psycopg2  # v2
+
 psycopg.connect(...)
 conn.cursor()
 cursor.execute(...)

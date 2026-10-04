@@ -21,9 +21,15 @@ def _client() -> PypiRegistryClient:
 
 @respx.mock(base_url=_BASE)
 def test_get_package_metadata_parses_info_and_releases(respx_mock: respx.Router) -> None:
-    respx_mock.get("/pypi/openai/json").mock(return_value=httpx.Response(
-        200, json={"info": {"name": "openai", "version": "1.4.3"}, "releases": {"1.4.2": [], "1.4.3": []}},
-    ))
+    respx_mock.get("/pypi/openai/json").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "info": {"name": "openai", "version": "1.4.3"},
+                "releases": {"1.4.2": [], "1.4.3": []},
+            },
+        )
+    )
 
     with _client() as client:
         metadata = client.get_package_metadata("openai")

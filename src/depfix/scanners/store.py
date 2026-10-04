@@ -180,8 +180,7 @@ def load_scan_result(scan_row: RepoScanRow) -> RepoScanResult:
         call_sites=call_sites,
         manifest_matches=list(scan_row.manifest_matches),
         dependencies=[
-            DeclaredDependency(**d) for d in (scan_row.dependencies or [])
-            if isinstance(d, dict)
+            DeclaredDependency(**d) for d in (scan_row.dependencies or []) if isinstance(d, dict)
         ],
         files_scanned=scan_row.files_scanned,
         errors=list(scan_row.errors),
@@ -189,7 +188,11 @@ def load_scan_result(scan_row: RepoScanRow) -> RepoScanResult:
 
 
 def reusable_scan_for_provider(
-    session: Session, repo_full_name: str, provider_id: str, *, commit_sha: str,
+    session: Session,
+    repo_full_name: str,
+    provider_id: str,
+    *,
+    commit_sha: str,
 ) -> RepoScanRow | None:
     """The newest scan plan may safely reuse. Three correctness conditions:
 
@@ -247,9 +250,7 @@ def record_scan_assessments(
             status=assessment.status.value,
             reason=assessment.reason,
             matched_call_site_count=len(assessment.matched_sites),
-            matched_symbols=list(
-                dict.fromkeys(site.symbol for site in assessment.matched_sites)
-            ),
+            matched_symbols=list(dict.fromkeys(site.symbol for site in assessment.matched_sites)),
         )
         scan.change_matches.append(match)
         matches.append(match)

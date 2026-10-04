@@ -87,7 +87,8 @@ def assess_scan_change(
     # Only symbols that differ from the old API can prove a migration happened;
     # for a same-method param/field change they prove nothing.
     replacement_symbols = tuple(
-        s for s in symbols_for_api(provider_id or change.provider_id, change.new_api)
+        s
+        for s in symbols_for_api(provider_id or change.provider_id, change.new_api)
         if s not in symbols
     )
     if replacement_symbols and any(
@@ -112,16 +113,13 @@ def assess_scan_changes(
     provider_id: str | None = None,
 ) -> list[ScanChangeAssessment]:
     """Assess every currently classified change for one provider scan."""
-    return [
-        assess_scan_change(result, change, provider_id=provider_id) for change in changes
-    ]
+    return [assess_scan_change(result, change, provider_id=provider_id) for change in changes]
 
 
 def _site_matches_exact(site: CallSite, wanted_symbols: tuple[str, ...]) -> bool:
     """Exact or prefix match: wanted is a prefix of observed."""
     return any(
-        site.symbol == wanted or site.symbol.startswith(f"{wanted}.")
-        for wanted in wanted_symbols
+        site.symbol == wanted or site.symbol.startswith(f"{wanted}.") for wanted in wanted_symbols
     )
 
 
@@ -143,7 +141,7 @@ def _member_suffix_matches(observed: str, wanted: str) -> bool:
         return False
     wanted_member = wanted_parts[1:]
     observed_member = observed_parts[1:]
-    return observed_member[-len(wanted_member):] == wanted_member
+    return observed_member[-len(wanted_member) :] == wanted_member
 
 
 def _site_matches_suffix(site: CallSite, wanted_symbols: tuple[str, ...]) -> bool:

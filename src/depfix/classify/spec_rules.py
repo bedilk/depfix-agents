@@ -193,11 +193,13 @@ def classify_spec_changes(
         details = [m.detail for m in members if m.detail]
         hint = sdk_path_hints(bucket.subject)
         description = "; ".join(dict.fromkeys(details)) or bucket.subject
-        if bucket.kind in (ChangeKind.METHOD_REMOVED, ChangeKind.METHOD_RENAMED):
+        if (
+            bucket.kind in (ChangeKind.METHOD_REMOVED, ChangeKind.METHOD_RENAMED)
+            and " " in bucket.subject
+        ):
             # old_api is now a dotted symbol, so the HTTP endpoint it came from
             # must survive somewhere a reviewer will read it.
-            if " " in bucket.subject:
-                description = f"{description} ({bucket.subject})"
+            description = f"{description} ({bucket.subject})"
 
         out.append(
             BreakingChange(

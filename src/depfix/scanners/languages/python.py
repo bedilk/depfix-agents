@@ -13,7 +13,10 @@ import re
 from pathlib import Path
 
 from depfix.scanners.language import (
-    Anchor, BindingKind, ImportBinding, LanguageScanResult, SymbolUse,
+    BindingKind,
+    ImportBinding,
+    LanguageScanResult,
+    SymbolUse,
 )
 from depfix.scanners.masking import PYTHON_RULES, mask_source
 
@@ -22,8 +25,16 @@ logger = logging.getLogger(__name__)
 _PY_EXTENSIONS = {".py", ".pyi"}
 _MAX_FILE_BYTES = 2_000_000
 _SKIP_DIRS = {
-    ".venv", "venv", "env", "__pycache__", ".tox",
-    "build", "dist", ".eggs", "site-packages", "node_modules",
+    ".venv",
+    "venv",
+    "env",
+    "__pycache__",
+    ".tox",
+    "build",
+    "dist",
+    ".eggs",
+    "site-packages",
+    "node_modules",
 }
 
 
@@ -78,12 +89,16 @@ class PythonScanner:
                     if not self._is_sdk(root_mod):
                         continue
                     local = alias.asname or root_mod
-                    out.append(ImportBinding(
-                        package=self._canonical(root_mod), local_name=local,
-                        filepath=relpath, line_number=node.lineno,
-                        line_content=self._line(lines, node.lineno),
-                        kind=BindingKind.ALIASED if alias.asname else BindingKind.DIRECT,
-                    ))
+                    out.append(
+                        ImportBinding(
+                            package=self._canonical(root_mod),
+                            local_name=local,
+                            filepath=relpath,
+                            line_number=node.lineno,
+                            line_content=self._line(lines, node.lineno),
+                            kind=BindingKind.ALIASED if alias.asname else BindingKind.DIRECT,
+                        )
+                    )
             elif isinstance(node, ast.ImportFrom):
                 if node.module is None:
                     continue
@@ -93,20 +108,29 @@ class PythonScanner:
                 pkg = self._canonical(root_mod)
                 for alias in node.names:
                     if alias.name == "*":
-                        out.append(ImportBinding(
-                            package=pkg, local_name="*", filepath=relpath,
-                            line_number=node.lineno,
-                            line_content=self._line(lines, node.lineno),
-                            kind=BindingKind.WILDCARD,
-                        ))
+                        out.append(
+                            ImportBinding(
+                                package=pkg,
+                                local_name="*",
+                                filepath=relpath,
+                                line_number=node.lineno,
+                                line_content=self._line(lines, node.lineno),
+                                kind=BindingKind.WILDCARD,
+                            )
+                        )
                         continue
                     local = alias.asname or alias.name
-                    out.append(ImportBinding(
-                        package=pkg, local_name=local, filepath=relpath,
-                        line_number=node.lineno,
-                        line_content=self._line(lines, node.lineno),
-                        kind=BindingKind.NAMED, bound_symbol=alias.name,
-                    ))
+                    out.append(
+                        ImportBinding(
+                            package=pkg,
+                            local_name=local,
+                            filepath=relpath,
+                            line_number=node.lineno,
+                            line_content=self._line(lines, node.lineno),
+                            kind=BindingKind.NAMED,
+                            bound_symbol=alias.name,
+                        )
+                    )
         return out
 
     def _extract_bindings_regex(self, source: str, relpath: str) -> list[ImportBinding]:
@@ -118,13 +142,16 @@ class PythonScanner:
             if m:
                 root = m.group(1).split(".", 1)[0]
                 if self._is_sdk(root):
-                    out.append(ImportBinding(
-                        package=self._canonical(root),
-                        local_name=m.group(2) or root,
-                        filepath=relpath, line_number=i,
-                        line_content=src_lines[i - 1] if i - 1 < len(src_lines) else "",
-                        kind=BindingKind.ALIASED if m.group(2) else BindingKind.DIRECT,
-                    ))
+                    out.append(
+                        ImportBinding(
+                            package=self._canonical(root),
+                            local_name=m.group(2) or root,
+                            filepath=relpath,
+                            line_number=i,
+                            line_content=src_lines[i - 1] if i - 1 < len(src_lines) else "",
+                            kind=BindingKind.ALIASED if m.group(2) else BindingKind.DIRECT,
+                        )
+                    )
                 continue
             m = re.match(r"\s*from\s+([\w.]+)\s+import\s+(.+)", line)
             if m:
@@ -137,41 +164,61 @@ class PythonScanner:
                     if not part:
                         continue
                     if part == "*":
-                        out.append(ImportBinding(
-                            package=pkg, local_name="*", filepath=relpath, line_number=i,
-                            line_content=src_lines[i - 1] if i - 1 < len(src_lines) else "",
-                            kind=BindingKind.WILDCARD,
-                        ))
+                        out.append(
+                            ImportBinding(
+                                package=pkg,
+                                local_name="*",
+                                filepath=relpath,
+                                line_number=i,
+                                line_content=src_lines[i - 1] if i - 1 < len(src_lines) else "",
+                                kind=BindingKind.WILDCARD,
+                            )
+                        )
                         continue
                     m2 = re.match(r"(\w+)(?:\s+as\s+(\w+))?", part)
                     if m2:
-                        out.append(ImportBinding(
-                            package=pkg, local_name=m2.group(2) or m2.group(1),
-                            filepath=relpath, line_number=i,
-                            line_content=src_lines[i - 1] if i - 1 < len(src_lines) else "",
-                            kind=BindingKind.NAMED, bound_symbol=m2.group(1),
-                        ))
+                        out.append(
+                            ImportBinding(
+                                package=pkg,
+                                local_name=m2.group(2) or m2.group(1),
+                                filepath=relpath,
+                                line_number=i,
+                                line_content=src_lines[i - 1] if i - 1 < len(src_lines) else "",
+                                kind=BindingKind.NAMED,
+                                bound_symbol=m2.group(1),
+                            )
+                        )
         return out
 
     def _collect_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         names = {b.local_name for b in bindings if b.local_name != "*"}
         if not names:
             return []
         pattern = re.compile(
-            r"\b(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")((?:\.\w+)*)"
+            r"\b("
+            + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+            + r")((?:\.\w+)*)"
         )
         uses: list[SymbolUse] = []
         for i, line in enumerate(masked.splitlines(), start=1):
             if re.match(r"\s*(import|from)\s", line):
                 continue
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses
 
     @staticmethod

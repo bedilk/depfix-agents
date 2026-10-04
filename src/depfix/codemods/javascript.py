@@ -1,4 +1,3 @@
-
 """JavaScript/TypeScript codemods.
 
 Every rule here verifies its own completeness before returning a rewrite,
@@ -193,9 +192,7 @@ class OpenAIV4ConstructorCodemod:
     _NEW_CONFIG = re.compile(
         rf"(?P<decl>const|let|var)\s+(?P<name>{_IDENT})\s*=\s*new\s+Configuration\s*\("
     )
-    _NEW_CLIENT = re.compile(
-        rf"new\s+OpenAIApi\s*\(\s*(?P<arg>{_IDENT})\s*\)"
-    )
+    _NEW_CLIENT = re.compile(rf"new\s+OpenAIApi\s*\(\s*(?P<arg>{_IDENT})\s*\)")
 
     def claims(self, change: BreakingChange) -> bool:
         if change.package.strip().lower() != "openai":
@@ -216,7 +213,10 @@ class OpenAIV4ConstructorCodemod:
         if import_match is None:
             return CodemodResult.unchanged(self.id, "no v3-style openai import in this file")
 
-        names = {n.strip() for n in source[import_match.start("names") : import_match.end("names")].split(",")}
+        names = {
+            n.strip()
+            for n in source[import_match.start("names") : import_match.end("names")].split(",")
+        }
         names.discard("")
         if not {"Configuration", "OpenAIApi"} & names:
             return CodemodResult.unchanged(
@@ -353,9 +353,7 @@ def _unwrap_variable_data(source: str, new_path: str) -> tuple[str, int, set[str
     """
     call_re = _method_call_re(new_path)
     mask = mask_code(source)
-    assign_re = re.compile(
-        rf"(?:const|let|var)\s+(?P<name>{_IDENT})\s*=\s*(?:await\s+)?$"
-    )
+    assign_re = re.compile(rf"(?:const|let|var)\s+(?P<name>{_IDENT})\s*=\s*(?:await\s+)?$")
     spans: list[tuple[int, int, str]] = []
     aliased: set[str] = set()
 

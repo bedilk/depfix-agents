@@ -15,7 +15,10 @@ import re
 from pathlib import Path
 
 from depfix.scanners.language import (
-    BindingKind, ImportBinding, LanguageScanResult, SymbolUse,
+    BindingKind,
+    ImportBinding,
+    LanguageScanResult,
+    SymbolUse,
 )
 from depfix.scanners.masking import GO_RULES, mask_source
 
@@ -23,9 +26,7 @@ logger = logging.getLogger(__name__)
 
 _SKIP_DIRS = {"vendor", ".git", "node_modules", ".idea", "testdata"}
 _VERSION_SEG = re.compile(r"^v\d+$")
-_IMPORT_BODY = re.compile(
-    r"""^\s*(?:(?P<alias>[\w.]+)\s+)?"(?P<path>[^"]+)"\s*(?://.*)?$"""
-)
+_IMPORT_BODY = re.compile(r"""^\s*(?:(?P<alias>[\w.]+)\s+)?"(?P<path>[^"]+)"\s*(?://.*)?$""")
 
 
 class GoScanner:
@@ -67,11 +68,14 @@ class GoScanner:
 
             # Single-line import not followed by (
             if re.match(r"\bimport\b", stripped) and "(" not in stripped:
-                m = re.search(r'import\s+(.*)', stripped)
+                m = re.search(r"import\s+(.*)", stripped)
                 if m:
                     self._parse_body(
-                        m.group(1).strip(), relpath, i + 1,
-                        orig_lines[i] if i < len(orig_lines) else "", out,
+                        m.group(1).strip(),
+                        relpath,
+                        i + 1,
+                        orig_lines[i] if i < len(orig_lines) else "",
+                        out,
                     )
                 i += 1
                 continue
@@ -85,8 +89,11 @@ class GoScanner:
                         break
                     if inner.strip() and not inner.strip().startswith("//"):
                         self._parse_body(
-                            inner.strip(), relpath, j + 1,
-                            orig_lines[j] if j < len(orig_lines) else inner, out,
+                            inner.strip(),
+                            relpath,
+                            j + 1,
+                            orig_lines[j] if j < len(orig_lines) else inner,
+                            out,
                         )
                     j += 1
                 i = j + 1
@@ -96,7 +103,11 @@ class GoScanner:
         return out
 
     def _parse_body(
-        self, body: str, relpath: str, lineno: int, line_content: str,
+        self,
+        body: str,
+        relpath: str,
+        lineno: int,
+        line_content: str,
         out: list[ImportBinding],
     ) -> None:
         m = _IMPORT_BODY.match(body)
@@ -109,29 +120,41 @@ class GoScanner:
         alias = m.group("alias") or ""
 
         if alias == "_":
-            out.append(ImportBinding(
-                package=canonical, local_name="_",
-                filepath=relpath, line_number=lineno,
-                line_content=line_content.rstrip("\n"),
-                kind=BindingKind.SIDE_EFFECT,
-            ))
+            out.append(
+                ImportBinding(
+                    package=canonical,
+                    local_name="_",
+                    filepath=relpath,
+                    line_number=lineno,
+                    line_content=line_content.rstrip("\n"),
+                    kind=BindingKind.SIDE_EFFECT,
+                )
+            )
             return
         if alias == ".":
-            out.append(ImportBinding(
-                package=canonical, local_name=".",
-                filepath=relpath, line_number=lineno,
-                line_content=line_content.rstrip("\n"),
-                kind=BindingKind.DOT,
-            ))
+            out.append(
+                ImportBinding(
+                    package=canonical,
+                    local_name=".",
+                    filepath=relpath,
+                    line_number=lineno,
+                    line_content=line_content.rstrip("\n"),
+                    kind=BindingKind.DOT,
+                )
+            )
             return
 
         local = alias if alias else self._default_alias(path)
-        out.append(ImportBinding(
-            package=canonical, local_name=local,
-            filepath=relpath, line_number=lineno,
-            line_content=line_content.rstrip("\n"),
-            kind=BindingKind.ALIASED if alias else BindingKind.DIRECT,
-        ))
+        out.append(
+            ImportBinding(
+                package=canonical,
+                local_name=local,
+                filepath=relpath,
+                line_number=lineno,
+                line_content=line_content.rstrip("\n"),
+                kind=BindingKind.ALIASED if alias else BindingKind.DIRECT,
+            )
+        )
 
     @staticmethod
     def _default_alias(path: str) -> str:
@@ -150,25 +173,36 @@ class GoScanner:
         return path
 
     def _collect_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         aliases = {
-            b.local_name for b in bindings
+            b.local_name
+            for b in bindings
             if b.kind not in (BindingKind.DOT, BindingKind.SIDE_EFFECT)
         }
         if not aliases:
             return []
         pattern = re.compile(
-            r"\b(" + "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True)) + r")((?:\.\w+)*)"
+            r"\b("
+            + "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True))
+            + r")((?:\.\w+)*)"
         )
         uses: list[SymbolUse] = []
         for i, line in enumerate(masked.splitlines(), start=1):
             if re.match(r"\s*import\b", line):
                 continue
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses

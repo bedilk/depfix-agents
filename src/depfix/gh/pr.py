@@ -29,8 +29,12 @@ def pr_title_for(change: BreakingChange) -> str:
 
 
 def build_pr_body(
-    change: BreakingChange, result: FixPipelineResult, *, edits: list[FileEdit] | None = None,
-    escalated: bool = False, plan_digest: str = "",
+    change: BreakingChange,
+    result: FixPipelineResult,
+    *,
+    edits: list[FileEdit] | None = None,
+    escalated: bool = False,
+    plan_digest: str = "",
     grouped_members: list | None = None,
     plan_impact_summary: str = "",
     drift_review: bool | None = None,
@@ -72,9 +76,7 @@ def build_pr_body(
             f"This PR addresses a known vulnerability ({change.description.split(':')[0] if ':' in change.description else 'see description'}). "
             "Review the advisory references and upgrade guidance before merging.",
         ]
-    needs_review = (
-        drift_review if drift_review is not None else _is_major_dependency_review(change)
-    )
+    needs_review = drift_review if drift_review is not None else _is_major_dependency_review(change)
     if needs_review:
         from depfix.codemods.lockfile import describe_drift
 
@@ -88,9 +90,17 @@ def build_pr_body(
             "before merging.",
         ]
 
-    lines += ["", "### Files changed", "", "| File | Verdict | Author | Usages fixed |", "| --- | --- | --- | --- |"]
+    lines += [
+        "",
+        "### Files changed",
+        "",
+        "| File | Verdict | Author | Usages fixed |",
+        "| --- | --- | --- | --- |",
+    ]
     for edit in edits:
-        lines.append(f"| `{edit.relpath}` | {edit.verdict.value} | {_author_label(edit)} | {edit.usages_fixed} |")
+        lines.append(
+            f"| `{edit.relpath}` | {edit.verdict.value} | {_author_label(edit)} | {edit.usages_fixed} |"
+        )
     if any(edit.derivation_trace for edit in edits):
         lines += ["", "### How each fix was derived", ""]
         for edit in edits:
@@ -112,7 +122,9 @@ def build_pr_body(
     else:
         lines.append(f"New test failures introduced: {verification.new_failure_count}.")
     if verification is not None and verification.typechecked:
-        lines.append(f"`tsc --noEmit` introduced {len(verification.new_diagnostics)} new diagnostic(s).")
+        lines.append(
+            f"`tsc --noEmit` introduced {len(verification.new_diagnostics)} new diagnostic(s)."
+        )
     if verification is not None and verification.static_after is not None:
         tool = verification.static_after.tool or "static check"
         added = len(verification.new_static_diagnostics)
@@ -132,10 +144,9 @@ def build_pr_body(
     # Skipped stages are visible here so reviewers know WHY a stage didn't run.
     if verification is not None and getattr(verification, "stage_results", ()):
         from depfix.verify.models import StageStatus
+
         stage_lines = [sr.as_pr_line() for sr in verification.stage_results]
-        has_skips = any(
-            sr.status == StageStatus.SKIPPED for sr in verification.stage_results
-        )
+        has_skips = any(sr.status == StageStatus.SKIPPED for sr in verification.stage_results)
         lines += ["", "### Verification stages", ""]
         lines.extend(stage_lines)
         if has_skips:
@@ -150,17 +161,24 @@ def build_pr_body(
     if result.codemod_notes:
         lines += ["", "### Codemod notes", *[f"- {note}" for note in result.codemod_notes[:20]]]
     if grouped_members:
-        lines += ["", "### Grouped changes", "",
-                  "| Change | Confidence | Files |", "| --- | --- | --- |"]
+        lines += [
+            "",
+            "### Grouped changes",
+            "",
+            "| Change | Confidence | Files |",
+            "| --- | --- | --- |",
+        ]
         for member_change, member_result, member_edits in grouped_members:
             lines.append(
                 f"| {member_change.package}: `{member_change.old_api}` → "
                 f"`{member_change.replacement}` "
                 f"| `{member_result.confidence.value}` | {len(member_edits)} |"
             )
-        lines += ["",
-                  "_This PR groups several related changes. Each row's confidence "
-                  "tier is independent; review lower-confidence rows carefully._"]
+        lines += [
+            "",
+            "_This PR groups several related changes. Each row's confidence "
+            "tier is independent; review lower-confidence rows carefully._",
+        ]
 
     removal_section = _removal_lines(removals or [])
     if removal_section:
@@ -183,7 +201,7 @@ def _removal_lines(removals) -> list[str]:
         return []
     label = {
         "breaks_on_upgrade": "❌ breaks with this upgrade",
-        "already_removed":   "❌ already gone in the installed version",
+        "already_removed": "❌ already gone in the installed version",
     }
     lines = ["", "### ⚠️ Removed APIs still called by this repository", ""]
     if blocking:
@@ -196,7 +214,8 @@ def _removal_lines(removals) -> list[str]:
         ]
         for r in blocking:
             sites = ", ".join(f"`{s}`" for s in r.sites[:5]) + (
-                f" (+{len(r.sites)-5} more)" if len(r.sites) > 5 else "")
+                f" (+{len(r.sites) - 5} more)" if len(r.sites) > 5 else ""
+            )
             match_note = " _(suffix match)_" if r.match == "suffix" else ""
             guidance = (r.guidance or "—").replace("|", "\\|")[:160]
             lines.append(
@@ -209,8 +228,9 @@ def _removal_lines(removals) -> list[str]:
             f"<details><summary>Scheduled removals in later versions ({len(upcoming)})</summary>",
             "",
         ]
-        lines += [f"- `{r.old_api}` removed in {r.removed_in}: {', '.join(r.sites[:3])}"
-                  for r in upcoming]
+        lines += [
+            f"- `{r.old_api}` removed in {r.removed_in}: {', '.join(r.sites[:3])}" for r in upcoming
+        ]
         lines += ["", "</details>"]
     return lines
 
@@ -234,7 +254,13 @@ def build_upgrade_pr_body(
     ]
 
     if artifact.steps:
-        lines += ["", "### Steps", "", "| # | Kind | Summary | Files |", "| --- | --- | --- | --- |"]
+        lines += [
+            "",
+            "### Steps",
+            "",
+            "| # | Kind | Summary | Files |",
+            "| --- | --- | --- | --- |",
+        ]
         for i, step in enumerate(artifact.steps, 1):
             relpaths = ", ".join(f"`{r}`" for r in step.relpaths[:5])
             if len(step.relpaths) > 5:
@@ -242,13 +268,21 @@ def build_upgrade_pr_body(
             lines.append(f"| {i} | {step.kind} | {step.summary} | {relpaths} |")
 
     if artifact.edits:
-        lines += ["", "### Files changed", "", "| File | Confidence | Usages fixed |", "| --- | --- | --- |"]
+        lines += [
+            "",
+            "### Files changed",
+            "",
+            "| File | Confidence | Usages fixed |",
+            "| --- | --- | --- |",
+        ]
         for edit in artifact.edits:
             lines.append(f"| `{edit.relpath}` | {edit.confidence:.0%} | {edit.usages_fixed} |")
 
     if artifact.member_dedupe_keys:
         lines += [
-            "", f"### Bundled migrations ({len(artifact.member_dedupe_keys)})", "",
+            "",
+            f"### Bundled migrations ({len(artifact.member_dedupe_keys)})",
+            "",
             "This PR bundles the version bump with API migrations that fall inside "
             f"the {span} window. Each migration was verified as part of the upgrade unit.",
         ]
@@ -267,7 +301,10 @@ def build_upgrade_pr_body(
         lines.append("_A fallback model was used after the primary produced no committable edits._")
     if plan_digest:
         lines.append(f"_Applied from plan artifact `{plan_digest}`._")
-    lines += ["", f"<!-- depfix:v1 upgrade={plan_pkg} from={artifact.upgrade_from or '?'} to={artifact.upgrade_to} confidence={artifact.confidence} -->"]
+    lines += [
+        "",
+        f"<!-- depfix:v1 upgrade={plan_pkg} from={artifact.upgrade_from or '?'} to={artifact.upgrade_to} confidence={artifact.confidence} -->",
+    ]
     return "\n".join(lines)
 
 
@@ -290,8 +327,15 @@ def _is_major_dependency_review(change: BreakingChange) -> bool:
 _PR_TRAILER_PREFIX = "<!-- depfix:v1"
 
 
-def _pr_state_trailer(*, change: BreakingChange, result: FixPipelineResult, plan_digest: str) -> str:
-    parts = [_PR_TRAILER_PREFIX, f"change={change.dedupe_key[:16]}", f"provider={change.provider_id}", f"confidence={result.confidence.value}"]
+def _pr_state_trailer(
+    *, change: BreakingChange, result: FixPipelineResult, plan_digest: str
+) -> str:
+    parts = [
+        _PR_TRAILER_PREFIX,
+        f"change={change.dedupe_key[:16]}",
+        f"provider={change.provider_id}",
+        f"confidence={result.confidence.value}",
+    ]
     if plan_digest:
         parts.append(f"plan={plan_digest}")
     return " ".join([*parts, "-->"])
@@ -301,8 +345,13 @@ def parse_pr_state_trailer(body: str) -> dict[str, str] | None:
     for line in reversed(body.splitlines()):
         line = line.strip()
         if line.startswith(_PR_TRAILER_PREFIX):
-            fields = line[len(_PR_TRAILER_PREFIX):].removesuffix("-->").strip().split()
-            parsed = {key: value for token in fields if "=" in token for key, _, value in [token.partition("=")]}
+            fields = line[len(_PR_TRAILER_PREFIX) :].removesuffix("-->").strip().split()
+            parsed = {
+                key: value
+                for token in fields
+                if "=" in token
+                for key, _, value in [token.partition("=")]
+            }
             return parsed or None
     return None
 
@@ -314,7 +363,9 @@ def kept_edits(result: FixPipelineResult) -> list[FileEdit]:
 
 
 def committable_edits(
-    result: FixPipelineResult, *, allow_unverified: bool = False,
+    result: FixPipelineResult,
+    *,
+    allow_unverified: bool = False,
     allow_review_suspects: bool = False,
 ) -> list[FileEdit]:
     """Edits safe to push to a branch.
@@ -335,7 +386,8 @@ def committable_edits(
         # only when syntax validation itself succeeded/was unnecessary; this
         # covers unavailable verification tooling, never malformed source.
         edits.extend(
-            edit for edit in result.edits
+            edit
+            for edit in result.edits
             if edit.verdict is EditVerdict.SUSPECT
             and (edit.validation is None or edit.validation.is_valid)
         )
@@ -442,7 +494,12 @@ def apply_pr_labels(
         if response.status_code >= 400:
             logger.warning(
                 "failed to apply labels %s to %s/%s#%d: %d %s",
-                labels, owner, repo, pr_number, response.status_code, response.text[:200],
+                labels,
+                owner,
+                repo,
+                pr_number,
+                response.status_code,
+                response.text[:200],
             )
     except httpx.HTTPError as exc:
         logger.warning("label call to %s/%s#%d failed: %s", owner, repo, pr_number, exc)
@@ -459,6 +516,8 @@ def _raise_for_status(resp: httpx.Response) -> None:
     if resp.status_code == 404:
         raise GitHubAppError(f"GitHub resource not found: {resp.request.url}")
     if resp.status_code == 422:
-        raise GitHubAppError(f"GitHub rejected the request as unprocessable (422): {resp.text[:300]}")
+        raise GitHubAppError(
+            f"GitHub rejected the request as unprocessable (422): {resp.text[:300]}"
+        )
     if resp.status_code >= 400:
         raise GitHubAppError(f"GitHub API error {resp.status_code}: {resp.text[:300]}")

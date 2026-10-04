@@ -23,7 +23,9 @@ def upgrade() -> None:
         "change_attempt",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column(
-            "repo_id", sa.String(length=255), sa.ForeignKey("repo.id", ondelete="CASCADE"),
+            "repo_id",
+            sa.String(length=255),
+            sa.ForeignKey("repo.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("dedupe_key", sa.String(length=64), nullable=False),

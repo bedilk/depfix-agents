@@ -16,7 +16,9 @@ def test_no_supported_lockfile_reports_reason(tmp_path: Path) -> None:
     assert "no supported Python lockfile" in reason
 
 
-def test_missing_tool_and_successful_relock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_tool_and_successful_relock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     (tmp_path / "poetry.lock").write_text("")
     monkeypatch.setattr(python_lockfile.shutil, "which", lambda _: None)
     ok, reason = python_lockfile.try_refresh_python_lockfile(tmp_path)
@@ -25,7 +27,8 @@ def test_missing_tool_and_successful_relock(tmp_path: Path, monkeypatch: pytest.
 
     monkeypatch.setattr(python_lockfile.shutil, "which", lambda _: "/usr/bin/poetry")
     monkeypatch.setattr(
-        python_lockfile, "run_sandboxed",
+        python_lockfile,
+        "run_sandboxed",
         lambda argv, **kw: SandboxResult(tuple(argv), 0, "", "", 1.0),
     )
     ok, message = python_lockfile.try_refresh_python_lockfile(tmp_path)

@@ -120,8 +120,9 @@ class Watcher:
                 if not provider.enabled:
                     for feed in provider.feeds:
                         outcome.reports.append(
-                            FeedReport(provider.id, "—", feed.kind.value, "skipped",
-                                       "provider disabled")
+                            FeedReport(
+                                provider.id, "—", feed.kind.value, "skipped", "provider disabled"
+                            )
                         )
                     continue
 
@@ -159,7 +160,10 @@ class Watcher:
     ) -> FeedReport:
         at = f"; at {state.last_token}" if state.last_token else ""
         return FeedReport(
-            provider_id, feed_key, kind, "cached",
+            provider_id,
+            feed_key,
+            kind,
+            "cached",
             f"polled {age:.0f}s ago (ttl={self._ttl}s){at}",
         )
 
@@ -185,7 +189,8 @@ class Watcher:
             return
 
         state = (
-            None if self._dry_run
+            None
+            if self._dry_run
             else self._get_or_create_state(session, provider.id, source.feed_key, source.kind.value)
         )
 
@@ -212,8 +217,9 @@ class Watcher:
         except Exception as exc:
             logger.exception("source %s raised", source.feed_key)
             outcome.reports.append(
-                FeedReport(provider.id, source.feed_key, feed.kind.value, "failed",
-                           f"unhandled: {exc}")
+                FeedReport(
+                    provider.id, source.feed_key, feed.kind.value, "failed", f"unhandled: {exc}"
+                )
             )
             if state is not None:
                 state.last_error = f"unhandled: {exc}"
@@ -257,7 +263,10 @@ class Watcher:
         if not poll.changed:
             outcome.reports.append(
                 FeedReport(
-                    provider.id, source.feed_key, kind, "unchanged",
+                    provider.id,
+                    source.feed_key,
+                    kind,
+                    "unchanged",
                     f"at {poll.new_token}" if poll.new_token else "",
                 )
             )
@@ -273,7 +282,10 @@ class Watcher:
         if not poll.events:
             outcome.reports.append(
                 FeedReport(
-                    provider.id, source.feed_key, kind, "baseline",
+                    provider.id,
+                    source.feed_key,
+                    kind,
+                    "baseline",
                     poll.note or f"recorded {poll.new_token}",
                 )
             )
@@ -292,7 +304,10 @@ class Watcher:
         first = poll.events[0]
         outcome.reports.append(
             FeedReport(
-                provider.id, source.feed_key, kind, "changed",
+                provider.id,
+                source.feed_key,
+                kind,
+                "changed",
                 f"{first.old_token or '(new)'} → {poll.new_token}",
                 event_count=persisted,
             )
@@ -305,8 +320,10 @@ class Watcher:
         if row is None:
             session.add(
                 Provider(
-                    id=provider.id, name=provider.name,
-                    enabled=provider.enabled, api_version_scheme=provider.api_version_scheme,
+                    id=provider.id,
+                    name=provider.name,
+                    enabled=provider.enabled,
+                    api_version_scheme=provider.api_version_scheme,
                 )
             )
             session.flush()
@@ -343,11 +360,18 @@ class Watcher:
     @staticmethod
     def _persist_event_static(session: Session, event: ChangeEvent) -> None:
         row = ChangeEventRow(
-            provider_id=event.provider_id, feed_key=event.feed_key,
-            source_kind=event.source_kind.value, source_url=event.source_url,
-            old_token=event.old_token, new_token=event.new_token, title=event.title,
-            summary=event.summary, body=event.body, body_url=event.body_url,
-            severity=event.severity.value, dedupe_key=event.dedupe_key,
+            provider_id=event.provider_id,
+            feed_key=event.feed_key,
+            source_kind=event.source_kind.value,
+            source_url=event.source_url,
+            old_token=event.old_token,
+            new_token=event.new_token,
+            title=event.title,
+            summary=event.summary,
+            body=event.body,
+            body_url=event.body_url,
+            severity=event.severity.value,
+            dedupe_key=event.dedupe_key,
             detected_at=event.detected_at,
         )
         session.add(row)
@@ -355,10 +379,15 @@ class Watcher:
         for change in event.spec_changes:
             session.add(
                 SpecChangeRow(
-                    change_event_id=row.id, kind=change.kind.value,
-                    severity=change.severity.value, direction=change.direction,
-                    subject=change.subject, pointer=change.pointer,
-                    detail=change.detail or None, before=change.before, after=change.after,
+                    change_event_id=row.id,
+                    kind=change.kind.value,
+                    severity=change.severity.value,
+                    direction=change.direction,
+                    subject=change.subject,
+                    pointer=change.pointer,
+                    detail=change.detail or None,
+                    before=change.before,
+                    after=change.after,
                 )
             )
         session.flush()
@@ -376,14 +405,20 @@ class Watcher:
         self._agent_ran.add(marker)
 
         if self._completer is None:
-            outcome.reports.append(FeedReport(
-                provider.id, marker, "agent", "failed",
-                "agent strategy requires an LLM but none is configured",
-            ))
+            outcome.reports.append(
+                FeedReport(
+                    provider.id,
+                    marker,
+                    "agent",
+                    "failed",
+                    "agent strategy requires an LLM but none is configured",
+                )
+            )
             return
 
         state = (
-            None if self._dry_run
+            None
+            if self._dry_run
             else self._get_or_create_state(session, provider.id, marker, "agent")
         )
         age = self._cache_age(state)
@@ -396,8 +431,11 @@ class Watcher:
         from depfix.agent.scan_tools import ScanToolset
 
         toolset = ScanToolset(
-            checkout_root=None, http=self._deps.http, npm=self._deps.npm,
-            pypi=self._deps.pypi, github_api_url=self._deps.github_api_url,
+            checkout_root=None,
+            http=self._deps.http,
+            npm=self._deps.npm,
+            pypi=self._deps.pypi,
+            github_api_url=self._deps.github_api_url,
         )
         now = datetime.now(tz=UTC)
         try:
@@ -428,9 +466,13 @@ class Watcher:
             self._persist_event(session, event)
             outcome.events.append(event)
 
-        outcome.reports.append(FeedReport(
-            provider.id, marker, "agent",
-            "changed" if events else "unchanged",
-            f"agent found {len(events)} event(s)",
-            event_count=len(events),
-        ))
+        outcome.reports.append(
+            FeedReport(
+                provider.id,
+                marker,
+                "agent",
+                "changed" if events else "unchanged",
+                f"agent found {len(events)} event(s)",
+                event_count=len(events),
+            )
+        )

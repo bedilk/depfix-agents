@@ -55,9 +55,7 @@ def _smithy(ops: dict) -> dict:
 def test_smithy_detects_a_removed_operation(tmp_path: Path) -> None:
     old = _smithy({"PutObject": {}, "GetObject": {}})
     new = _smithy({"GetObject": {}})
-    source = SmithySpecSource(
-        "aws-s3", {"url": f"{_BASE}/s3.json"}, _http(), tmp_path, 10_000_000
-    )
+    source = SmithySpecSource("aws-s3", {"url": f"{_BASE}/s3.json"}, _http(), tmp_path, 10_000_000)
     respx.get(f"{_BASE}/s3.json").mock(
         return_value=httpx.Response(200, content=json.dumps(new).encode())
     )
@@ -73,18 +71,14 @@ def test_smithy_detects_a_removed_operation(tmp_path: Path) -> None:
 @respx.mock
 def test_smithy_detects_a_removed_input_member(tmp_path: Path) -> None:
     def model(members: list[str]) -> dict:
-        doc = _smithy(
-            {"PutObject": {"input": {"target": "com.amazonaws.s3#PutObjectRequest"}}}
-        )
+        doc = _smithy({"PutObject": {"input": {"target": "com.amazonaws.s3#PutObjectRequest"}}})
         doc["shapes"]["com.amazonaws.s3#PutObjectRequest"] = {
             "type": "structure",
             "members": {m: {"target": "smithy.api#String"} for m in members},
         }
         return doc
 
-    source = SmithySpecSource(
-        "aws-s3", {"url": f"{_BASE}/s3.json"}, _http(), tmp_path, 10_000_000
-    )
+    source = SmithySpecSource("aws-s3", {"url": f"{_BASE}/s3.json"}, _http(), tmp_path, 10_000_000)
     respx.get(f"{_BASE}/s3.json").mock(
         return_value=httpx.Response(200, content=json.dumps(model(["Bucket"])).encode())
     )
@@ -96,9 +90,7 @@ def test_smithy_detects_a_removed_input_member(tmp_path: Path) -> None:
 
 
 def test_smithy_rejects_a_model_without_shapes(tmp_path: Path) -> None:
-    source = SmithySpecSource(
-        "aws-s3", {"url": "http://x/s3.json"}, _http(), tmp_path, 1000
-    )
+    source = SmithySpecSource("aws-s3", {"url": "http://x/s3.json"}, _http(), tmp_path, 1000)
     with pytest.raises(ValueError, match="shapes"):
         source.parse(b'{"smithy": "2.0"}')
 
@@ -119,9 +111,7 @@ def _asyncapi(channels: list[str], *, operations: list[str] | None = None) -> di
 
 @respx.mock
 def test_asyncapi_detects_a_removed_channel(tmp_path: Path) -> None:
-    source = AsyncApiSpecSource(
-        "kafka", {"url": f"{_BASE}/a.yaml"}, _http(), tmp_path, 10_000_000
-    )
+    source = AsyncApiSpecSource("kafka", {"url": f"{_BASE}/a.yaml"}, _http(), tmp_path, 10_000_000)
     new = _asyncapi(["orders"])
     respx.get(f"{_BASE}/a.yaml").mock(
         return_value=httpx.Response(200, content=json.dumps(new).encode())
@@ -135,18 +125,14 @@ def test_asyncapi_detects_a_removed_channel(tmp_path: Path) -> None:
 
 @respx.mock
 def test_asyncapi_detects_a_removed_v3_operation(tmp_path: Path) -> None:
-    source = AsyncApiSpecSource(
-        "kafka", {"url": f"{_BASE}/a.yaml"}, _http(), tmp_path, 10_000_000
-    )
+    source = AsyncApiSpecSource("kafka", {"url": f"{_BASE}/a.yaml"}, _http(), tmp_path, 10_000_000)
     new = _asyncapi(["orders"], operations=["sendOrder"])
     respx.get(f"{_BASE}/a.yaml").mock(
         return_value=httpx.Response(200, content=json.dumps(new).encode())
     )
 
     result = source.poll(
-        _state_for(
-            source, tmp_path, _asyncapi(["orders"], operations=["sendOrder", "cancelOrder"])
-        )
+        _state_for(source, tmp_path, _asyncapi(["orders"], operations=["sendOrder", "cancelOrder"]))
     )
 
     changes = result.events[0].spec_changes
@@ -154,9 +140,7 @@ def test_asyncapi_detects_a_removed_v3_operation(tmp_path: Path) -> None:
 
 
 def test_asyncapi_rejects_a_non_asyncapi_document(tmp_path: Path) -> None:
-    source = AsyncApiSpecSource(
-        "kafka", {"url": "http://x/a.yaml"}, _http(), tmp_path, 1000
-    )
+    source = AsyncApiSpecSource("kafka", {"url": "http://x/a.yaml"}, _http(), tmp_path, 1000)
     with pytest.raises(ValueError, match="asyncapi"):
         source.parse(b"openapi: 3.0.0")
 
@@ -166,11 +150,9 @@ def test_asyncapi_rejects_a_non_asyncapi_document(tmp_path: Path) -> None:
 
 @respx.mock
 def test_redis_detects_a_removed_command(tmp_path: Path) -> None:
-    source = RedisCommandsSource(
-        "redis", {"url": f"{_BASE}/c.json"}, _http(), tmp_path, 10_000_000
-    )
+    source = RedisCommandsSource("redis", {"url": f"{_BASE}/c.json"}, _http(), tmp_path, 10_000_000)
     new_cmds = {"GET": {"arguments": [{}]}}
-    old = {"commands": {"GET": {"arguments": [{}]}, "SUBSTR": {"arguments": [{}]}}}
+    old = {"GET": {"arguments": [{}]}, "SUBSTR": {"arguments": [{}]}}
     respx.get(f"{_BASE}/c.json").mock(
         return_value=httpx.Response(200, content=json.dumps(new_cmds).encode())
     )
@@ -178,18 +160,14 @@ def test_redis_detects_a_removed_command(tmp_path: Path) -> None:
     result = source.poll(_state_for(source, tmp_path, old))
 
     changes = result.events[0].spec_changes
-    assert any(
-        c.kind is SpecChangeKind.COMMAND_REMOVED and c.subject == "SUBSTR" for c in changes
-    )
+    assert any(c.kind is SpecChangeKind.COMMAND_REMOVED and c.subject == "SUBSTR" for c in changes)
 
 
 @respx.mock
 def test_redis_detects_an_arity_change(tmp_path: Path) -> None:
-    source = RedisCommandsSource(
-        "redis", {"url": f"{_BASE}/c.json"}, _http(), tmp_path, 10_000_000
-    )
+    source = RedisCommandsSource("redis", {"url": f"{_BASE}/c.json"}, _http(), tmp_path, 10_000_000)
     new_cmds = {"SET": {"arguments": [{}, {}, {}]}}
-    old = {"commands": {"SET": {"arguments": [{}, {}]}}}
+    old = {"SET": {"arguments": [{}, {}]}}
     respx.get(f"{_BASE}/c.json").mock(
         return_value=httpx.Response(200, content=json.dumps(new_cmds).encode())
     )
@@ -201,9 +179,7 @@ def test_redis_detects_an_arity_change(tmp_path: Path) -> None:
 
 
 def test_redis_rejects_an_empty_map(tmp_path: Path) -> None:
-    source = RedisCommandsSource(
-        "redis", {"url": "http://x/c.json"}, _http(), tmp_path, 1000
-    )
+    source = RedisCommandsSource("redis", {"url": "http://x/c.json"}, _http(), tmp_path, 1000)
     with pytest.raises(ValueError, match="command map"):
         source.parse(b"{}")
 
@@ -213,9 +189,7 @@ def test_redis_rejects_an_empty_map(tmp_path: Path) -> None:
 
 @respx.mock
 def test_first_sight_is_a_baseline_with_no_event(tmp_path: Path) -> None:
-    source = RedisCommandsSource(
-        "redis", {"url": f"{_BASE}/c.json"}, _http(), tmp_path, 10_000_000
-    )
+    source = RedisCommandsSource("redis", {"url": f"{_BASE}/c.json"}, _http(), tmp_path, 10_000_000)
     respx.get(f"{_BASE}/c.json").mock(
         return_value=httpx.Response(200, content=json.dumps({"GET": {}}).encode())
     )
@@ -241,8 +215,13 @@ def test_names_in_dts_extracts_every_export_form() -> None:
     """
     names = _names_in_dts(dts)
     assert {
-        "generateText", "StreamText", "Message", "Role",
-        "convertToModelMessages", "toolHelper", "Client",
+        "generateText",
+        "StreamText",
+        "Message",
+        "Role",
+        "convertToModelMessages",
+        "toolHelper",
+        "Client",
     } <= names
 
 
@@ -286,8 +265,7 @@ def test_ts_exports_detects_a_removed_export(tmp_path: Path) -> None:
     assert result.changed
     changes = result.events[0].spec_changes
     assert any(
-        c.kind is SpecChangeKind.EXPORT_REMOVED and c.subject == "vercel-ai.bar"
-        for c in changes
+        c.kind is SpecChangeKind.EXPORT_REMOVED and c.subject == "vercel-ai.bar" for c in changes
     )
 
 

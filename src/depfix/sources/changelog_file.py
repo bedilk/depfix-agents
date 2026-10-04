@@ -20,7 +20,7 @@ from typing import Any, ClassVar
 import httpx
 
 from depfix.sources.base import ChangeSource
-from depfix.sources.http import MAX_FEED_BYTES, read_capped
+from depfix.sources.http import read_capped
 from depfix.sources.models import (
     ChangeEvent,
     FeedPoll,

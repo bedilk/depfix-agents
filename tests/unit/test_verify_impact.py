@@ -75,9 +75,12 @@ def _failed(name: str, file: str = "a.test.js") -> TestCase:
 
 def _write_package_json(root: Path, package: str, spec: str) -> str:
     """Write a manifest pinning ``package`` at ``spec`` and return its text."""
-    content = json.dumps(
-        {"name": "demo", "scripts": {"test": "jest"}, "dependencies": {package: spec}}, indent=2
-    ) + "\n"
+    content = (
+        json.dumps(
+            {"name": "demo", "scripts": {"test": "jest"}, "dependencies": {package: spec}}, indent=2
+        )
+        + "\n"
+    )
     (root / "package.json").write_text(content, encoding="utf-8")
     return content
 
@@ -89,9 +92,7 @@ def _patch_runners(
     install=None,
     run=None,
 ) -> None:
-    monkeypatch.setattr(
-        f"{IMPACT}.has_test_script", lambda root, ecosystem="javascript": has_tests
-    )
+    monkeypatch.setattr(f"{IMPACT}.has_test_script", lambda root, ecosystem="javascript": has_tests)
     monkeypatch.setattr(f"{IMPACT}._regenerate_js_lockfile", lambda *a, **kw: None)
     if install is not None:
         monkeypatch.setattr(f"{IMPACT}.install_dependencies", install)
@@ -100,9 +101,7 @@ def _patch_runners(
 
 
 def _check(checkout: Checkout, change: BreakingChange, **kwargs) -> ImpactReport:
-    return run_impact_check(
-        checkout, change, install_timeout=60.0, test_timeout=60.0, **kwargs
-    )
+    return run_impact_check(checkout, change, install_timeout=60.0, test_timeout=60.0, **kwargs)
 
 
 # -- refusal / skip branches -------------------------------------------------------
@@ -117,10 +116,10 @@ def test_impact_check_refuses_a_non_disposable_checkout(tmp_path: Path) -> None:
 
 
 def test_impact_check_skips_unsupported_ecosystem(tmp_path: Path) -> None:
-    report = _check(_checkout(tmp_path), _change(), ecosystem="go")
+    report = _check(_checkout(tmp_path), _change(), ecosystem="rust")
 
     assert report.ran is False
-    assert report.skipped_reason == "no impact runner for go"
+    assert report.skipped_reason == "no impact runner for rust"
 
 
 def test_impact_check_skips_when_repo_has_no_test_setup(
@@ -200,9 +199,7 @@ def test_impact_check_confirms_breaking_and_reverts_manifest(
         cases = [pre_existing] if calls["n"] == 1 else [pre_existing, regression]
         return _run(cases)
 
-    _patch_runners(
-        monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests
-    )
+    _patch_runners(monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests)
 
     report = _check(_checkout(tmp_path), _change())
 
@@ -256,9 +253,7 @@ def test_impact_check_treats_a_crash_only_on_the_new_version_as_breaking(
             return _run([])
         return _run([], timed_out=True)
 
-    _patch_runners(
-        monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests
-    )
+    _patch_runners(monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests)
 
     report = _check(_checkout(tmp_path), _change())
 
@@ -281,9 +276,7 @@ def test_impact_check_degraded_parser_with_more_failures_reports_aggregate_incre
             cases.append(_failed("<aggregate failed #1>", file=""))
         return _run(cases, used_fallback_parser=True)
 
-    _patch_runners(
-        monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests
-    )
+    _patch_runners(monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests)
 
     report = _check(_checkout(tmp_path), _change())
 
@@ -307,9 +300,7 @@ def test_impact_check_degraded_parser_without_increase_confirms_nothing(
         # whole comparison to aggregate counts.
         return _run([], used_fallback_parser=calls["n"] == 1)
 
-    _patch_runners(
-        monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests
-    )
+    _patch_runners(monkeypatch, install=lambda root, **kwargs: _ok_install(), run=fake_run_tests)
 
     report = _check(_checkout(tmp_path), _change())
 

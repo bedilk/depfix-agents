@@ -14,7 +14,9 @@ def validate_ruby_syntax(path: Path, *, timeout: float = 10.0) -> tuple[bool, st
     try:
         result = subprocess.run(
             [ruby, "-c", str(path)],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired:
         return True, "syntax check timed out; treating as valid"

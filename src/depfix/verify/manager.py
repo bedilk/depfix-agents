@@ -33,7 +33,9 @@ _LOCKFILE_MANAGERS: tuple[tuple[str, str], ...] = (
 
 DEFAULT_PACKAGE_MANAGER = "npm"
 _SUPPORTED_MANAGED_CLIENTS = frozenset({"yarn", "pnpm"})
-_PACKAGE_MANAGER_SPEC = re.compile(r"^(?P<name>yarn|pnpm)@(?P<version>\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?)$")
+_PACKAGE_MANAGER_SPEC = re.compile(
+    r"^(?P<name>yarn|pnpm)@(?P<version>\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?)$"
+)
 
 
 @dataclass(frozen=True)
@@ -149,13 +151,23 @@ def prepare_package_manager(
     package = _runtime_package(manager, version)
 
     argv = [
-        "npm", "install", "--ignore-scripts", "--prefix", str(prefix),
-        "--no-save", f"{package}@{version}",
+        "npm",
+        "install",
+        "--ignore-scripts",
+        "--prefix",
+        str(prefix),
+        "--no-save",
+        f"{package}@{version}",
     ]
     # Package-manager bootstrap must reach npm's registry.
-    net_allowlist = frozenset({"http_proxy", "https_proxy", "no_proxy", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"})
+    net_allowlist = frozenset(
+        {"http_proxy", "https_proxy", "no_proxy", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"}
+    )
     result = run_sandboxed(
-        argv, cwd=workspace, timeout=timeout, max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES,
+        argv,
+        cwd=workspace,
+        timeout=timeout,
+        max_output_bytes=DEFAULT_MAX_OUTPUT_BYTES,
         extra_allowlist=net_allowlist,
     )
     if not result.ok:
@@ -214,11 +226,17 @@ def _is_yarn_berry(version: str) -> bool:
 
 
 def _install_argv(
-    package_manager: str, root: Path, *, ignore_scripts: bool, version: str = "",
+    package_manager: str,
+    root: Path,
+    *,
+    ignore_scripts: bool,
+    version: str = "",
     frozen: bool = True,
 ) -> list[str]:
     has_lockfile = frozen and any(
-        (root / lockfile).is_file() for lockfile, mgr in _LOCKFILE_MANAGERS if mgr == package_manager
+        (root / lockfile).is_file()
+        for lockfile, mgr in _LOCKFILE_MANAGERS
+        if mgr == package_manager
     )
     yarn_berry = package_manager == "yarn" and _is_yarn_berry(version)
 
@@ -249,7 +267,10 @@ def _install_argv(
 
 
 def build_install_argv(
-    root: str | Path, *, ignore_scripts: bool, package_manager: str | None = None,
+    root: str | Path,
+    *,
+    ignore_scripts: bool,
+    package_manager: str | None = None,
     frozen: bool = True,
 ) -> list[str]:
     """Public entry point for the install command :func:`install_dependencies`
@@ -290,9 +311,7 @@ def install_dependencies(
     """
     root = Path(root)
     if ecosystem == "go":
-        return _install_go_dependencies(
-            root, timeout=timeout, max_output_bytes=max_output_bytes
-        )
+        return _install_go_dependencies(root, timeout=timeout, max_output_bytes=max_output_bytes)
     if ecosystem == "python":
         return _install_python_dependencies(
             root, timeout=timeout, max_output_bytes=max_output_bytes
@@ -306,6 +325,7 @@ def install_dependencies(
         return InstallResult(package_manager="none", skipped_reason="no package.json found")
 
     from depfix.scanners.workspace import find_workspace_root
+
     install_root = find_workspace_root(root)
     manager = package_manager or detect_package_manager(install_root)
     prepared = prepare_package_manager(
@@ -327,7 +347,9 @@ def install_dependencies(
         argv[0] = str(prepared.executable)
 
     logger.info("installing dependencies: %s (cwd=%s)", " ".join(argv), install_root)
-    result = run_sandboxed(argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes)
+    result = run_sandboxed(
+        argv, cwd=install_root, timeout=timeout, max_output_bytes=max_output_bytes
+    )
     return InstallResult(package_manager=manager, sandbox=result)
 
 
@@ -374,7 +396,10 @@ def _install_python_dependencies(
     venv_argv = create_venv_argv(root)
     if venv_argv is not None:
         venv_result = run_sandboxed(
-            venv_argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+            venv_argv,
+            cwd=root,
+            timeout=timeout,
+            max_output_bytes=max_output_bytes,
             extra_allowlist=PYTHON.env_allowlist_extra,
         )
         if not venv_result.ok:
@@ -384,7 +409,10 @@ def _install_python_dependencies(
     if argv is None:
         return InstallResult(package_manager="pip", skipped_reason="python3 not found on PATH")
     result = run_sandboxed(
-        argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+        argv,
+        cwd=root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
         extra_allowlist=PYTHON.env_allowlist_extra,
     )
     return InstallResult(package_manager="pip", sandbox=result)
@@ -397,7 +425,10 @@ def _python_has_manifest(root: Path) -> bool:
 
 
 def _install_ruby_dependencies(
-    root: Path, *, timeout: float, max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    root: Path,
+    *,
+    timeout: float,
+    max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
     frozen: bool = True,
 ) -> InstallResult:
     from depfix.ecosystems.ruby_runtime import build_ruby_install_argv, bundler
@@ -408,8 +439,12 @@ def _install_ruby_dependencies(
         return InstallResult(package_manager="bundler", skipped_reason="no Gemfile found")
     argv = build_ruby_install_argv(root, frozen=frozen)
     from depfix.ecosystems.specs import RUBY
+
     result = run_sandboxed(
-        argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+        argv,
+        cwd=root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
         extra_allowlist=RUBY.env_allowlist_extra,
     )
     return InstallResult(package_manager="bundler", sandbox=result)

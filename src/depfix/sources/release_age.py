@@ -54,7 +54,9 @@ def pypi_version_published_at(
     """Publish time of one PyPI version, from the release file upload times."""
     from urllib.parse import quote
 
-    url = f"{registry_url.rstrip('/')}/pypi/{quote(package, safe='')}/{quote(version, safe='')}/json"
+    url = (
+        f"{registry_url.rstrip('/')}/pypi/{quote(package, safe='')}/{quote(version, safe='')}/json"
+    )
     try:
         response = http.get(url)
         response.raise_for_status()

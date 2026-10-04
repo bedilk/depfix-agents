@@ -42,7 +42,9 @@ class Settings(BaseSettings):
         default="gemini", description="Which LLM backend to use for `depfix run`"
     )
     google_api_key: str = Field(default="", description="Google Generative AI API key")
-    gemini_model: str = Field(default="gemini-2.5-flash", description="Gemini model ID for heavy tasks")
+    gemini_model: str = Field(
+        default="gemini-2.5-flash", description="Gemini model ID for heavy tasks"
+    )
     gemini_light_model: str = Field(
         default="gemini-2.0-flash-lite",
         description="Gemini model ID for lightweight tasks. Empty means use gemini_model for everything.",
@@ -257,7 +259,9 @@ class Settings(BaseSettings):
         "for a later local verification. Yarn and pnpm are cached under ~/.depfix, never globally.",
     )
     package_manager_install_timeout: float = Field(
-        default=90.0, ge=1.0, le=600.0,
+        default=90.0,
+        ge=1.0,
+        le=600.0,
         description="Wall-clock cap for installing a repository-pinned package-manager runtime.",
     )
 
@@ -420,11 +424,15 @@ class Settings(BaseSettings):
         "back silently.",
     )
     scan_agent_max_steps: int = Field(
-        default=25, ge=1, le=100,
+        default=25,
+        ge=1,
+        le=100,
         description="Maximum read-only tool calls per agent invocation.",
     )
     scan_agent_judge_cap: int = Field(
-        default=20, ge=1, le=100,
+        default=20,
+        ge=1,
+        le=100,
         description="Maximum LOW-confidence sites the CallSiteJudgeAgent will "
         "review per repo scan in hybrid mode. Sites beyond the cap keep their "
         "original LOW confidence without LLM review.",
@@ -557,11 +565,14 @@ class Settings(BaseSettings):
     upgrade_plans_enabled: bool = Field(
         default=True,
         description="Compose a registry drift and the API migrations inside its version "
-        "window into one verified PR. False restores one PR per classified change.")
+        "window into one verified PR. False restores one PR per classified change.",
+    )
     upgrade_max_migrations: int = Field(
-        default=8, ge=1,
+        default=8,
+        ge=1,
         description="Refuse an upgrade whose window contains more applicable migrations "
-        "than this; a very wide window is a review job, not an automated PR.")
+        "than this; a very wide window is a review job, not an automated PR.",
+    )
 
     # --- Observability --------------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

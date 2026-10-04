@@ -83,7 +83,8 @@ def explain_edit(edit: FileEdit, result: FixPipelineResult) -> RejectionExplanat
                     edit.verdict,
                     "this fix introduced a new test failure and was rolled back",
                     evidence=tuple(
-                        f"failing: {c.identity}" + (f" -- {c.message.splitlines()[0]}" if c.message else "")
+                        f"failing: {c.identity}"
+                        + (f" -- {c.message.splitlines()[0]}" if c.message else "")
                         for c in cases[:5]
                     ),
                     hint="re-run with --max-retries 2 to feed the failure back to the model",

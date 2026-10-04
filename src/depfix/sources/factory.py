@@ -12,23 +12,23 @@ from depfix.config import get_settings
 from depfix.registry.client import NpmRegistryClient
 from depfix.registry.pypi_client import PypiRegistryClient
 from depfix.registry.rubygems_client import RubyGemsClient
+from depfix.sources.asyncapi_spec import AsyncApiSpecSource
 from depfix.sources.base import ChangeSource, UnsupportedSourceKind
 from depfix.sources.changelog_file import ChangelogFileSource
 from depfix.sources.changelog_html import ChangelogHtmlSource
-from depfix.sources.rss import RssSource
 from depfix.sources.fixture_change import FixtureChangeSource
 from depfix.sources.github_release import GitHubReleaseSource
 from depfix.sources.http import build_http_client
 from depfix.sources.models import SourceKind
 from depfix.sources.npm_dist_tag import NpmDistTagSource
-from depfix.sources.asyncapi_spec import AsyncApiSpecSource
 from depfix.sources.openapi_spec import OpenApiSpecSource
 from depfix.sources.pypi_dist_tag import PypiDistTagSource
 from depfix.sources.redis_commands import RedisCommandsSource
-from depfix.sources.smithy_spec import SmithySpecSource
-from depfix.sources.ts_exports import TsExportsSource
+from depfix.sources.rss import RssSource
 from depfix.sources.rubygems_dist_tag import RubyGemsDistTagSource
 from depfix.sources.security_advisory import SecurityAdvisorySource
+from depfix.sources.smithy_spec import SmithySpecSource
+from depfix.sources.ts_exports import TsExportsSource
 
 
 class FeedLike(Protocol):
@@ -143,6 +143,4 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
         return ChangelogFileSource(provider_id, feed.config, deps.http)
     if feed.kind is SourceKind.RSS:
         return RssSource(provider_id, feed.config, deps.http)
-    raise UnsupportedSourceKind(
-        f"feed kind '{feed.kind.value}' is not implemented"
-    )
+    raise UnsupportedSourceKind(f"feed kind '{feed.kind.value}' is not implemented")

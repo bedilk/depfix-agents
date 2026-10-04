@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Fast pre-filter: registry events whose body contains none of these keywords
 # are almost certainly additive releases and don't warrant an LLM call.
 _BREAKING_MARKERS_RE = re.compile(
-    r'\b(breaking|removed?|deprecated?|renamed?|migration|major)\b', re.IGNORECASE
+    r"\b(breaking|removed?|deprecated?|renamed?|migration|major)\b", re.IGNORECASE
 )
 
 _VALID_KINDS = {k.value for k in ChangeKind}

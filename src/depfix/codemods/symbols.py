@@ -1,4 +1,3 @@
-
 """Parsing the ``old_api`` / ``new_api`` fields of a breaking change.
 
 These fields come from changelogs, release notes and model extraction, so
@@ -61,7 +60,7 @@ def normalize_api(raw: str, *, provider_id: str = "") -> str | None:
     if provider_id and candidate == provider_id:
         return candidate
     if provider_id and candidate.startswith(f"{provider_id}."):
-        member = candidate[len(provider_id) + 1:]
+        member = candidate[len(provider_id) + 1 :]
         return candidate if _MEMBER_PATH.match(member) else None
 
     return candidate if _MEMBER_PATH.match(candidate) else None

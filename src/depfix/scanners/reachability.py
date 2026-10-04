@@ -77,8 +77,7 @@ def assess_reachability(
         )
     also_new = symbols_for_api(provider_id, change.new_api)
     if also_new and any(
-        site.symbol == n or site.symbol.startswith(f"{n}.")
-        for site in actionable for n in also_new
+        site.symbol == n or site.symbol.startswith(f"{n}.") for site in actionable for n in also_new
     ):
         return ReachabilityVerdict(
             Reachability.UNREACHABLE,

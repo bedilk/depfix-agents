@@ -13,13 +13,13 @@ from enum import StrEnum
 
 
 class BindingKind(StrEnum):
-    DIRECT = "direct"           # `import stripe` / `require('stripe')`
-    ALIASED = "aliased"         # `import stripe as S` / `alias "pkg"`
-    NAMED = "named"             # `from stripe import Client`
-    WILDCARD = "wildcard"       # `from stripe import *` / `import x.y.*;`
-    DOT = "dot"                 # Go `import . "pkg"` — symbols land in file scope
-    SIDE_EFFECT = "side_effect" # Go `import _ "pkg"` — no bindings
-    RE_EXPORT = "re_export"     # local wrapper re-exports the SDK
+    DIRECT = "direct"  # `import stripe` / `require('stripe')`
+    ALIASED = "aliased"  # `import stripe as S` / `alias "pkg"`
+    NAMED = "named"  # `from stripe import Client`
+    WILDCARD = "wildcard"  # `from stripe import *` / `import x.y.*;`
+    DOT = "dot"  # Go `import . "pkg"` — symbols land in file scope
+    SIDE_EFFECT = "side_effect"  # Go `import _ "pkg"` — no bindings
+    RE_EXPORT = "re_export"  # local wrapper re-exports the SDK
 
 
 @dataclass(frozen=True)

@@ -114,7 +114,7 @@ def test_scan_python_dependencies_reads_pep621_project_dependencies(tmp_path: Pa
 def test_scan_python_dependencies_reads_poetry_dependency_table(tmp_path: Path) -> None:
     _write(
         tmp_path / "pyproject.toml",
-        "[tool.poetry.dependencies]\npython = \"^3.12\"\nopenai = \"^1.2.0\"\n",
+        '[tool.poetry.dependencies]\npython = "^3.12"\nopenai = "^1.2.0"\n',
     )
 
     declaration = _only(scan_python_dependencies(tmp_path, ["openai"]))
@@ -228,10 +228,10 @@ def test_scan_go_dependencies_ignores_unreadable_gomod(tmp_path: Path) -> None:
 def test_scan_rust_dependencies_reads_string_and_table_constraints(tmp_path: Path) -> None:
     _write(
         tmp_path / "Cargo.toml",
-        "[package]\nname = \"app\"\n\n"
+        '[package]\nname = "app"\n\n'
         "[dependencies]\n"
-        "async-openai = \"0.18\"\n"
-        "reqwest = { version = \"0.11\", features = [\"json\"] }\n",
+        'async-openai = "0.18"\n'
+        'reqwest = { version = "0.11", features = ["json"] }\n',
     )
 
     declarations = scan_rust_dependencies(tmp_path, ["async-openai", "reqwest"])
@@ -282,7 +282,10 @@ def test_scan_rust_dependencies_ignores_invalid_cargo_toml(tmp_path: Path) -> No
 
 
 def test_scan_ruby_dependencies_reads_gemfile_constraint(tmp_path: Path) -> None:
-    _write(tmp_path / "Gemfile", 'source "https://rubygems.org"\n\ngem "stripe", "~> 5.0"\ngem "rails"\n')
+    _write(
+        tmp_path / "Gemfile",
+        'source "https://rubygems.org"\n\ngem "stripe", "~> 5.0"\ngem "rails"\n',
+    )
 
     declaration = _only(scan_ruby_dependencies(tmp_path, ["stripe"]))
 
@@ -547,10 +550,12 @@ def test_scan_swift_dependencies_resolves_v2_package_resolved_pins(tmp_path: Pat
     _write(tmp_path / "Package.swift", _PACKAGE_SWIFT)
     _write(
         tmp_path / "Package.resolved",
-        json.dumps({
-            "version": 2,
-            "pins": [{"identity": "stripe-ios", "state": {"version": "23.21.1"}}],
-        }),
+        json.dumps(
+            {
+                "version": 2,
+                "pins": [{"identity": "stripe-ios", "state": {"version": "23.21.1"}}],
+            }
+        ),
     )
 
     declaration = _only(scan_swift_dependencies(tmp_path, ["stripe-ios"]))
@@ -563,10 +568,12 @@ def test_scan_swift_dependencies_resolves_v1_object_pins(tmp_path: Path) -> None
     _write(tmp_path / "Package.swift", _PACKAGE_SWIFT)
     _write(
         tmp_path / "Package.resolved",
-        json.dumps({
-            "version": 1,
-            "object": {"pins": [{"package": "stripe-ios", "state": {"version": "23.20.0"}}]},
-        }),
+        json.dumps(
+            {
+                "version": 1,
+                "object": {"pins": [{"package": "stripe-ios", "state": {"version": "23.20.0"}}]},
+            }
+        ),
     )
 
     declaration = _only(scan_swift_dependencies(tmp_path, ["stripe-ios"]))

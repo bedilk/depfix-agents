@@ -139,7 +139,11 @@ class EvalRunner:
         outcome = self._classifier.classify(event)
         if outcome.errors:
             return CaseResult(
-                case.id, case.category, False, case.verified, "; ".join(outcome.errors),
+                case.id,
+                case.category,
+                False,
+                case.verified,
+                "; ".join(outcome.errors),
                 cost=outcome.cost,
             )
         passed, detail = score_classification(case.expected_changes, outcome.changes)

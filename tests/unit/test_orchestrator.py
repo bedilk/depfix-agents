@@ -51,7 +51,9 @@ def test_plan_artifact_paths_are_unique_per_repo_change(tmp_path: Path) -> None:
     assert plan_path_for("acme/widgets", change_a.dedupe_key, tmp_path) != plan_path_for(
         "acme/widgets", change_b.dedupe_key, tmp_path
     )
-    assert {plan.change_dedupe_key for plan in PlanArtifact.plans_for_repo("acme/widgets", tmp_path)} == {
+    assert {
+        plan.change_dedupe_key for plan in PlanArtifact.plans_for_repo("acme/widgets", tmp_path)
+    } == {
         change_a.dedupe_key,
         change_b.dedupe_key,
     }
@@ -161,7 +163,13 @@ class _FakeCloneService:
         self.clone_calls: list[tuple[str, str]] = []
 
     def clone(
-        self, owner: str, repo: str, *, ref: str | None = None, token: str | None = None
+        self,
+        owner: str,
+        repo: str,
+        *,
+        ref: str | None = None,
+        token: str | None = None,
+        max_repo_mb: int | None = None,
     ) -> Checkout:
         self.clone_calls.append((owner, repo))
         return self._real.copy_local(self._source)
@@ -519,7 +527,9 @@ def test_paths_filter_excludes_before_the_fix_pipeline_runs(in_memory_db: Any) -
     ``suppressed_call_sites``, distinct from "no call sites found at
     all"."""
     change = _change()
-    gh_auth = _FakeGhAuth(config_text="version: 1\nverify: false\npaths:\n  exclude:\n    - 'src/chat.js'\n")
+    gh_auth = _FakeGhAuth(
+        config_text="version: 1\nverify: false\npaths:\n  exclude:\n    - 'src/chat.js'\n"
+    )
     clone_service = _FakeCloneService(FIXTURE)
     orchestrator = _orchestrator(gh_auth, clone_service)
 
@@ -568,7 +578,9 @@ def test_dry_run_makes_no_db_writes_or_pr(respx_mock: respx.Router, in_memory_db
         assert row is None
 
 
-def test_lock_not_acquired_skips_the_whole_run(in_memory_db: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lock_not_acquired_skips_the_whole_run(
+    in_memory_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """If another orchestrator process already holds the advisory lock,
     this run must do nothing at all, not even attempt the first repo."""
     import depfix.orchestrator.runner as runner_module

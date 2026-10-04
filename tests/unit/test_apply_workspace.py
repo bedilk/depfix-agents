@@ -15,7 +15,7 @@ import pytest
 
 from depfix.apply.models import EditVerdict
 from depfix.apply.workspace import WorkspaceEditor
-from depfix.clone.service import CloneError, Checkout
+from depfix.clone.service import Checkout, CloneError
 from depfix.core.models import ValidationResult, ValidationStatus
 
 

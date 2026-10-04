@@ -17,7 +17,10 @@ import re
 from pathlib import Path
 
 from depfix.scanners.language import (
-    BindingKind, ImportBinding, LanguageScanResult, SymbolUse,
+    BindingKind,
+    ImportBinding,
+    LanguageScanResult,
+    SymbolUse,
 )
 from depfix.scanners.masking import JAVA_RULES, mask_source  # same comment/string rules
 
@@ -25,9 +28,7 @@ _KT_EXTS = {".kt", ".kts"}
 _SKIP_DIRS = {"build", ".gradle", ".idea", "target", "node_modules", ".git", "generated"}
 
 # Kotlin import: `import com.stripe.Stripe` or `import com.stripe.Stripe as S`
-_IMPORT = re.compile(
-    r"^\s*import\s+(?P<fqn>[\w.*]+)(?:\s+as\s+(?P<alias>\w+))?\s*$"
-)
+_IMPORT = re.compile(r"^\s*import\s+(?P<fqn>[\w.*]+)(?:\s+as\s+(?P<alias>\w+))?\s*$")
 
 
 class KotlinScanner:
@@ -75,45 +76,69 @@ class KotlinScanner:
             alias = m.group("alias")
 
             if fqn.endswith(".*"):
-                out.append(ImportBinding(
-                    package=canonical, local_name="*",
-                    filepath=relpath, line_number=i, line_content=line,
-                    kind=BindingKind.WILDCARD, bound_symbol=fqn,
-                ))
+                out.append(
+                    ImportBinding(
+                        package=canonical,
+                        local_name="*",
+                        filepath=relpath,
+                        line_number=i,
+                        line_content=line,
+                        kind=BindingKind.WILDCARD,
+                        bound_symbol=fqn,
+                    )
+                )
                 continue
 
             last = fqn.rsplit(".", 1)[-1]
-            out.append(ImportBinding(
-                package=canonical, local_name=alias or last,
-                filepath=relpath, line_number=i, line_content=line,
-                kind=BindingKind.ALIASED if alias else BindingKind.NAMED,
-                bound_symbol=fqn,
-            ))
+            out.append(
+                ImportBinding(
+                    package=canonical,
+                    local_name=alias or last,
+                    filepath=relpath,
+                    line_number=i,
+                    line_content=line,
+                    kind=BindingKind.ALIASED if alias else BindingKind.NAMED,
+                    bound_symbol=fqn,
+                )
+            )
         return out
 
     def _collect_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         names = {b.local_name for b in bindings if b.local_name != "*"}
         if not names:
             return []
         pattern = re.compile(
-            r"\b(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")((?:\.\w+)*)"
+            r"\b("
+            + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+            + r")((?:\.\w+)*)"
         )
         uses: list[SymbolUse] = []
         for i, line in enumerate(masked.splitlines(), start=1):
             if line.lstrip().startswith("import "):
                 continue
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses
 
     def _collect_extension_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         """Kotlin extension functions: `fun Stripe.foo()` — LOW confidence."""
         names = {b.local_name for b in bindings if b.local_name != "*"}
@@ -121,16 +146,23 @@ class KotlinScanner:
             return []
         # Match `fun <SDK_TYPE>.<method>(` — extension function definition
         pattern = re.compile(
-            r"\bfun\s+(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")((?:\.\w+)+)\s*\("
+            r"\bfun\s+("
+            + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+            + r")((?:\.\w+)+)\s*\("
         )
         uses: list[SymbolUse] = []
         for i, line in enumerate(masked.splitlines(), start=1):
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses
 
     def _matches(self, fqn: str) -> bool:

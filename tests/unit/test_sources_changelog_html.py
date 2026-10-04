@@ -51,9 +51,7 @@ def test_poll_flags_new_dated_version_as_changed(respx_mock: respx.Router) -> No
 
 @respx.mock(base_url=_BASE)
 def test_poll_is_unchanged_when_newest_token_matches(respx_mock: respx.Router) -> None:
-    respx_mock.get("/changes").mock(
-        return_value=httpx.Response(200, text="<p>2026-01-15</p>")
-    )
+    respx_mock.get("/changes").mock(return_value=httpx.Response(200, text="<p>2026-01-15</p>"))
 
     source = _source(httpx.Client(base_url=_BASE))
     result = source.poll(FeedStateSnapshot(last_token="2026-01-15"))

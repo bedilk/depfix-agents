@@ -12,7 +12,10 @@ import re
 from pathlib import Path
 
 from depfix.scanners.language import (
-    BindingKind, ImportBinding, LanguageScanResult, SymbolUse,
+    BindingKind,
+    ImportBinding,
+    LanguageScanResult,
+    SymbolUse,
 )
 from depfix.scanners.masking import RUBY_RULES, mask_source
 
@@ -57,7 +60,10 @@ class RubyScanner:
         return result
 
     def _extract_bindings(
-        self, masked: str, original: str, relpath: str,
+        self,
+        masked: str,
+        original: str,
+        relpath: str,
     ) -> list[ImportBinding]:
         out: list[ImportBinding] = []
         orig_lines = original.splitlines()
@@ -74,11 +80,16 @@ class RubyScanner:
                 continue
             module_name = self._modules.get(gem, self._default_module(gem))
             orig_line = orig_lines[i - 1] if i - 1 < len(orig_lines) else line
-            out.append(ImportBinding(
-                package=gem, local_name=module_name,
-                filepath=relpath, line_number=i, line_content=orig_line,
-                kind=BindingKind.DIRECT,
-            ))
+            out.append(
+                ImportBinding(
+                    package=gem,
+                    local_name=module_name,
+                    filepath=relpath,
+                    line_number=i,
+                    line_content=orig_line,
+                    kind=BindingKind.DIRECT,
+                )
+            )
         return out
 
     @staticmethod
@@ -87,23 +98,33 @@ class RubyScanner:
         return "".join(p[:1].upper() + p[1:] for p in re.split(r"[-_]", gem) if p)
 
     def _collect_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         names = {b.local_name for b in bindings}
         if not names:
             return []
         # Ruby uses Foo.method AND Foo::Bar.method
         pattern = re.compile(
-            r"\b(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")((?:(?:\.|::)\w+)*)"
+            r"\b("
+            + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+            + r")((?:(?:\.|::)\w+)*)"
         )
         uses: list[SymbolUse] = []
         for i, line in enumerate(masked.splitlines(), start=1):
             if re.match(r"\s*require\b", line):
                 continue
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses

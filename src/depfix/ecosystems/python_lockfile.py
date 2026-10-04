@@ -44,13 +44,15 @@ def python_lockfile_paths(root: Path) -> list[Path]:
 def uses_pip_tools(root: Path) -> bool:
     """Return whether a project has pip-tools source input outside ``.venv``."""
     return any(
-        path.is_file() and ".venv" not in path.parts
-        for path in root.rglob("requirements.in")
+        path.is_file() and ".venv" not in path.parts for path in root.rglob("requirements.in")
     )
 
 
 def try_refresh_python_lockfile(
-    root: Path, *, timeout: float = 120.0, max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    root: Path,
+    *,
+    timeout: float = 120.0,
+    max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
 ) -> tuple[bool, str]:
     """Refresh the first configured Python lockfile, without installing it."""
     for refresher in _REFRESHERS:
@@ -61,7 +63,10 @@ def try_refresh_python_lockfile(
                 f"{refresher.argv[0]} not on PATH; regenerate {refresher.lockfile} before merging"
             )
         result = run_sandboxed(
-            refresher.argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+            refresher.argv,
+            cwd=root,
+            timeout=timeout,
+            max_output_bytes=max_output_bytes,
             extra_allowlist=PYTHON.env_allowlist_extra,
         )
         if result.ok:

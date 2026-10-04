@@ -83,9 +83,7 @@ def declares_module(root: Path, package: str) -> bool:
     )
 
 
-def build_go_dependency_drift_bumps(
-    root: Path, change: BreakingChange
-) -> list[GoModuleBump]:
+def build_go_dependency_drift_bumps(root: Path, change: BreakingChange) -> list[GoModuleBump]:
     """Safe ``go.mod`` edits for a same-major Go module drift."""
     if dependency_drift_policy(change) != "automatic":
         return []
@@ -147,9 +145,7 @@ def _same_module(declared: str, wanted: str) -> bool:
     if declared == wanted:
         return True
     for base, other in ((declared, wanted), (wanted, declared)):
-        if other.startswith(f"{base}/") and _MAJOR_SUFFIX_RE.fullmatch(
-            other[len(base) + 1 :]
-        ):
+        if other.startswith(f"{base}/") and _MAJOR_SUFFIX_RE.fullmatch(other[len(base) + 1 :]):
             return True
     return False
 
@@ -165,7 +161,7 @@ def _iter_require_lines(text: str):
     in_block = False
     for index, raw in enumerate(lines):
         line = raw.rstrip("\n").rstrip("\r")
-        newline = raw[len(line):]
+        newline = raw[len(line) :]
         stripped = line.strip()
         if in_block:
             if stripped.startswith(")"):

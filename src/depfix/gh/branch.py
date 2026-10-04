@@ -184,6 +184,8 @@ def _raise_for_status(resp: httpx.Response) -> None:
     if resp.status_code == 404:
         raise GitHubAppError(f"GitHub resource not found: {resp.request.url}")
     if resp.status_code == 422:
-        raise GitHubAppError(f"GitHub rejected the request as unprocessable (422): {resp.text[:300]}")
+        raise GitHubAppError(
+            f"GitHub rejected the request as unprocessable (422): {resp.text[:300]}"
+        )
     if resp.status_code >= 400:
         raise GitHubAppError(f"GitHub API error {resp.status_code}: {resp.text[:300]}")

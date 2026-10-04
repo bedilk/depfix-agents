@@ -143,7 +143,9 @@ def capture_repository_dependency_drift(
     ``completer`` is forwarded to :func:`classify_pending` so that
     body-bearing drift events run the LLM notes path.
     """
-    relevant = [dependency for dependency in dependencies if dependency.package in package_ecosystems]
+    relevant = [
+        dependency for dependency in dependencies if dependency.package in package_ecosystems
+    ]
     if not relevant:
         return 0
 
@@ -194,8 +196,7 @@ def capture_repository_dependency_drift(
                 new_token=latest.last_token,
                 title=f"{dependency.package} {installed} → {latest.last_token}",
                 summary=(
-                    "Repository lockfile version differs from the latest provider feed "
-                    "snapshot"
+                    "Repository lockfile version differs from the latest provider feed snapshot"
                 ),
                 body=body,
                 body_url=body_url,
@@ -205,9 +206,12 @@ def capture_repository_dependency_drift(
                     else Severity.UNKNOWN
                 ),
             )
-            if session.scalar(
-                select(ChangeEventRow.id).where(ChangeEventRow.dedupe_key == event.dedupe_key)
-            ) is not None:
+            if (
+                session.scalar(
+                    select(ChangeEventRow.id).where(ChangeEventRow.dedupe_key == event.dedupe_key)
+                )
+                is not None
+            ):
                 continue
             session.add(
                 ChangeEventRow(
@@ -303,7 +307,9 @@ def _auto_persist_catalog(provider_id: str, changes: list[BreakingChange]) -> No
     if written:
         logger.info(
             "learned catalog: recorded %d migration(s) for %s in %s",
-            written, provider_id, path,
+            written,
+            provider_id,
+            path,
         )
 
 
@@ -329,17 +335,22 @@ def _import_learned_catalog(provider_id: str) -> int:
             session.add(Provider(id=provider_id, name=provider_id))
             session.flush()
         keys = [m.change.dedupe_key for m in learned]
-        existing = set(session.scalars(
-            select(BreakingChangeRow.dedupe_key).where(BreakingChangeRow.dedupe_key.in_(keys))
-        ))
+        existing = set(
+            session.scalars(
+                select(BreakingChangeRow.dedupe_key).where(BreakingChangeRow.dedupe_key.in_(keys))
+            )
+        )
         for migration in learned:
             change = migration.change
             if change.dedupe_key in existing:
                 continue
             event_key = hashlib.sha256(f"learned|{change.dedupe_key}".encode()).hexdigest()
-            if session.scalar(
-                select(ChangeEventRow.id).where(ChangeEventRow.dedupe_key == event_key)
-            ) is not None:
+            if (
+                session.scalar(
+                    select(ChangeEventRow.id).where(ChangeEventRow.dedupe_key == event_key)
+                )
+                is not None
+            ):
                 continue
             event = ChangeEventRow(
                 provider_id=provider_id,
@@ -375,9 +386,12 @@ def _ecosystem_for_dependency(
     choices = (configured,) if isinstance(configured, str) else tuple(configured)
     name = Path(dependency.manifest_path).name
     preferred = (
-        "npm" if name == "package.json"
-        else "pypi" if name in {"pyproject.toml", "requirements.txt", "Pipfile"}
-        else "rubygems" if name in {"Gemfile", "*.gemspec"}
+        "npm"
+        if name == "package.json"
+        else "pypi"
+        if name in {"pyproject.toml", "requirements.txt", "Pipfile"}
+        else "rubygems"
+        if name in {"Gemfile", "*.gemspec"}
         else None
     )
     if preferred in choices:
@@ -388,10 +402,22 @@ def _ecosystem_for_dependency(
 def _registry_feed_details(package: str, ecosystem: str) -> tuple[str, SourceKind, str]:
     """Return the canonical feed-state key for a supported registry SDK."""
     if ecosystem == "pypi":
-        return (f"pypi:{package}", SourceKind.PYPI_DIST_TAG, "https://pypi.org/project/{package}/{version}/")
+        return (
+            f"pypi:{package}",
+            SourceKind.PYPI_DIST_TAG,
+            "https://pypi.org/project/{package}/{version}/",
+        )
     if ecosystem in ("rubygems", "gem"):
-        return (f"rubygems:{package}", SourceKind.RUBYGEMS_DIST_TAG, "https://rubygems.org/gems/{package}/versions/{version}")
-    return (f"npm:{package}:latest", SourceKind.NPM_DIST_TAG, "https://www.npmjs.com/package/{package}/v/{version}")
+        return (
+            f"rubygems:{package}",
+            SourceKind.RUBYGEMS_DIST_TAG,
+            "https://rubygems.org/gems/{package}/versions/{version}",
+        )
+    return (
+        f"npm:{package}:latest",
+        SourceKind.NPM_DIST_TAG,
+        "https://www.npmjs.com/package/{package}/v/{version}",
+    )
 
 
 _EXACT_SEMVER = re.compile(r"^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")

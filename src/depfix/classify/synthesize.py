@@ -46,7 +46,9 @@ def _kind_for(new_api: str | None, changes: list[SpecChange]) -> ChangeKind:
         SpecChangeKind.PROPERTY_REMOVED: ChangeKind.FIELD_REMOVED,
         SpecChangeKind.PARAM_REMOVED: ChangeKind.PARAM_REMOVED,
     }
-    return next((mapping[change.kind] for change in changes if change.kind in mapping), ChangeKind.UNKNOWN)
+    return next(
+        (mapping[change.kind] for change in changes if change.kind in mapping), ChangeKind.UNKNOWN
+    )
 
 
 class MigrationSynthesizer:
@@ -57,7 +59,9 @@ class MigrationSynthesizer:
 
     def synthesize(self, event: ChangeEvent, *, package: str) -> SynthesisResult:
         source_text = "\n\n".join(
-            part for part in (event.body, *(change.one_line() for change in event.spec_changes)) if part
+            part
+            for part in (event.body, *(change.one_line() for change in event.spec_changes))
+            if part
         )
         if not source_text.strip():
             return SynthesisResult(reason="no source text")
@@ -69,10 +73,14 @@ class MigrationSynthesizer:
         )
         payload = _parse_response(response.text)
         if payload is None:
-            return SynthesisResult(reason="LLM response was not JSON", cost_usd=response.cost_estimate)
+            return SynthesisResult(
+                reason="LLM response was not JSON", cost_usd=response.cost_estimate
+            )
         evidence = str(payload.get("evidence") or "")
         if not _quote_present(evidence, source_text):
-            return SynthesisResult(reason="evidence is not verbatim", cost_usd=response.cost_estimate)
+            return SynthesisResult(
+                reason="evidence is not verbatim", cost_usd=response.cost_estimate
+            )
         old_api = normalize_api(str(payload.get("old_api") or ""))
         new_api = normalize_api(str(payload.get("new_api") or ""))
         if old_api is None:
@@ -82,8 +90,12 @@ class MigrationSynthesizer:
             return SynthesisResult(reason="no actionable old_api", cost_usd=response.cost_estimate)
         kind = _kind_for(new_api, event.spec_changes)
         if new_api is None and kind not in REMOVAL_KINDS:
-            return SynthesisResult(reason="no replacement for non-removal", cost_usd=response.cost_estimate)
-        hints = [str(h).strip() for h in payload.get("call_site_hints", []) if isinstance(h, str)][:5]
+            return SynthesisResult(
+                reason="no replacement for non-removal", cost_usd=response.cost_estimate
+            )
+        hints = [str(h).strip() for h in payload.get("call_site_hints", []) if isinstance(h, str)][
+            :5
+        ]
         change = BreakingChange(
             package=package,
             old_version=event.old_token or "",

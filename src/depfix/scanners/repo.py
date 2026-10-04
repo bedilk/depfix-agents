@@ -26,8 +26,12 @@ from depfix.providers.models import ProviderSpec
 from depfix.scanners.callsites import CallSiteScanner
 from depfix.scanners.manifest import scan_manifests
 from depfix.scanners.models import (
-    CallSite, CallSiteKind, DeclaredDependency, MatchConfidence,
-    RepoScanResult, ScanTarget, dedupe_call_sites,
+    CallSite,
+    CallSiteKind,
+    DeclaredDependency,
+    MatchConfidence,
+    RepoScanResult,
+    ScanTarget,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,8 +91,10 @@ def feed_symbols_for_changes(
     for change in changes:
         if change.provider_id and change.provider_id != provider_id:
             continue
-        for symbol in (*symbols_for_change(provider_id, change),
-                       *symbols_for_api(provider_id, change.new_api)):
+        for symbol in (
+            *symbols_for_change(provider_id, change),
+            *symbols_for_api(provider_id, change.new_api),
+        ):
             if symbol not in out:
                 out.append(symbol)
     return tuple(out)
@@ -174,7 +180,7 @@ def _qualify_symbol(provider_id: str, raw: str, *, allow_bare_identifier: bool) 
 
     # Already provider-qualified with a hyphenated or normal head.
     if provider_id and text.startswith(f"{provider_id}."):
-        member = text[len(provider_id) + 1:]
+        member = text[len(provider_id) + 1 :]
         if _looks_like_member_path(member) or _BARE_IDENTIFIER_RE.fullmatch(member):
             return text
         return None
@@ -331,33 +337,49 @@ def scan_checkout(
             # hybrid with no LLM configured: fall back gracefully to deterministic
             logger.info(
                 "SCAN_STRATEGY=hybrid but no LLM available for %s — "
-                "using deterministic scanner only", repo_full_name or "local"
+                "using deterministic scanner only",
+                repo_full_name or "local",
             )
         else:
             if strategy == "hybrid":
                 # HYBRID: run deterministic first (free, O(n)), then augment
                 baseline = _scan_checkout_deterministic(
-                    checkout, target, repo_full_name=repo_full_name, scanner=scanner,
-                    change=change, judge=None,  # judge is now the agent's job
+                    checkout,
+                    target,
+                    repo_full_name=repo_full_name,
+                    scanner=scanner,
+                    change=change,
+                    judge=None,  # judge is now the agent's job
                     prepare_package_manager_runtime=prepare_package_manager_runtime,
                     package_manager_timeout=package_manager_timeout,
                     max_data_bytes=max_data_bytes,
                 )
                 return _scan_checkout_agent_augment(
-                    baseline, provider, agent_completer,
-                    checkout_path=checkout.path, ledger=ledger,
+                    baseline,
+                    provider,
+                    agent_completer,
+                    checkout_path=checkout.path,
+                    ledger=ledger,
                 )
             else:
                 # PURE AGENT: skip deterministic entirely
                 return _scan_checkout_agent(
-                    checkout, target, provider, agent_completer,
-                    repo_full_name=repo_full_name, ledger=ledger,
+                    checkout,
+                    target,
+                    provider,
+                    agent_completer,
+                    repo_full_name=repo_full_name,
+                    ledger=ledger,
                 )
 
     # Deterministic path
     return _scan_checkout_deterministic(
-        checkout, target, repo_full_name=repo_full_name, scanner=scanner,
-        change=change, judge=judge,
+        checkout,
+        target,
+        repo_full_name=repo_full_name,
+        scanner=scanner,
+        change=change,
+        judge=judge,
         prepare_package_manager_runtime=prepare_package_manager_runtime,
         package_manager_timeout=package_manager_timeout,
         max_data_bytes=max_data_bytes,
@@ -383,7 +405,12 @@ def scan_path(
     """Scan a local directory directly, with no clone/GitHub App involved."""
     checkout = CloneService().local(path)
     return scan_checkout(
-        checkout, target, repo_full_name=repo_full_name, scanner=scanner, change=change, judge=judge,
+        checkout,
+        target,
+        repo_full_name=repo_full_name,
+        scanner=scanner,
+        change=change,
+        judge=judge,
         prepare_package_manager_runtime=prepare_package_manager_runtime,
         package_manager_timeout=package_manager_timeout,
         strategy=strategy,
@@ -422,11 +449,17 @@ def scan_repo(
     token = gh_auth.installation_token(installation.id, repositories=(repo,))
     resolved_ref = ref or gh_auth.default_ref(owner, repo)
 
-    checkout = clone_service.clone(owner, repo, ref=resolved_ref, token=token.token,
-                                   max_repo_mb=max_repo_mb)
+    checkout = clone_service.clone(
+        owner, repo, ref=resolved_ref, token=token.token, max_repo_mb=max_repo_mb
+    )
     try:
         return scan_checkout(
-            checkout, target, repo_full_name=f"{owner}/{repo}", scanner=scanner, change=change, judge=judge,
+            checkout,
+            target,
+            repo_full_name=f"{owner}/{repo}",
+            scanner=scanner,
+            change=change,
+            judge=judge,
             prepare_package_manager_runtime=prepare_package_manager_runtime,
             package_manager_timeout=package_manager_timeout,
             strategy=strategy,
@@ -487,6 +520,7 @@ def _scan_checkout_deterministic(
 
     if prepare_package_manager_runtime and (spec is None or spec.id == "javascript"):
         from depfix.verify.manager import prepare_package_manager
+
         preparation = prepare_package_manager(checkout.path, timeout=package_manager_timeout)
 
     # --- JS/TS path (binding-aware, unchanged) --------------------------------
@@ -510,7 +544,10 @@ def _scan_checkout_deterministic(
     # --- Non-JS ecosystem path (existing generic scanner) ---------------------
     elif spec is not None:
         from depfix.ecosystems.callsites import GenericImportScanner, packages_for_spec
-        call_site_result = GenericImportScanner(spec, max_data_bytes=max_data_bytes).scan(checkout.path, target)
+
+        call_site_result = GenericImportScanner(spec, max_data_bytes=max_data_bytes).scan(
+            checkout.path, target
+        )
         all_call_sites.extend(call_site_result.call_sites)
         total_files_scanned += call_site_result.files_scanned
         errors.extend(call_site_result.errors)
@@ -535,18 +572,23 @@ def _scan_checkout_deterministic(
 
     # --- Type-resolved call sites (TS/Python, deterministic, HIGH confidence) ---
     from depfix.config import get_settings as _get_settings
+
     _scan_settings = _get_settings()
     if _scan_settings.scan_type_resolve:
         from depfix.scanners.typeresolve import resolve_ts_call_sites
+
         npm_pkgs = _npm_package_names(target)
         if npm_pkgs and (spec is None or spec.id == "javascript"):
             type_sites = resolve_ts_call_sites(
-                checkout.path, npm_pkgs, provider_id=target.provider_id,
+                checkout.path,
+                npm_pkgs,
+                provider_id=target.provider_id,
             )
             if type_sites:
                 logger.info(
                     "typeresolve: %d type-resolved call site(s) for %s",
-                    len(type_sites), repo_full_name or "local",
+                    len(type_sites),
+                    repo_full_name or "local",
                 )
                 all_call_sites.extend(type_sites)
 
@@ -572,7 +614,8 @@ def _scan_checkout_deterministic(
 
 
 def _run_language_scanners(
-    checkout_root: Path, target: ScanTarget,
+    checkout_root: Path,
+    target: ScanTarget,
 ) -> tuple[list[CallSite], int, list[str]]:
     """Run binding-aware scanners for Python/Go/Java/Ruby and return
     (call_sites, files_scanned, errors). Returns empty lists when the
@@ -582,7 +625,6 @@ def _run_language_scanners(
     only covers the non-JS registry entries.
     """
     from depfix.scanners.registry import scanner_registry
-    from depfix.scanners.language import BindingKind
 
     # Build ecosystem → package list from sdk_package_refs
     ecosystem_packages: dict[str, list[str]] = {}
@@ -625,9 +667,7 @@ def _run_language_scanners(
 
         total_files += lang_result.files_scanned
         errors.extend(lang_result.errors)
-        all_sites.extend(
-            _resolve_call_sites(lang_result, target)
-        )
+        all_sites.extend(_resolve_call_sites(lang_result, target))
 
     return all_sites, total_files, errors
 
@@ -656,8 +696,7 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
 
     for use in lang_result.uses:
         if narrowing and not any(
-            use.attribute_path.startswith(s) or use.attribute_path == s
-            for s in narrowing
+            use.attribute_path.startswith(s) or use.attribute_path == s for s in narrowing
         ):
             continue
 
@@ -670,9 +709,7 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
                 confidence = MatchConfidence.MEDIUM
             else:
                 confidence = MatchConfidence.HIGH
-            evidence = (
-                f"{binding.kind.value} import at {binding.filepath}:{binding.line_number}"
-            )
+            evidence = f"{binding.kind.value} import at {binding.filepath}:{binding.line_number}"
             package = binding.package
         elif use.local_name in all_local_names:
             # Binding exists in a different file (re-export). Distance does
@@ -680,9 +717,7 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
             confidence = MatchConfidence.HIGH
             evidence = "binding found via cross-file re-export"
             # Find the package from any binding with this name
-            pkg_b = next(
-                (b for b in lang_result.bindings if b.local_name == use.local_name), None
-            )
+            pkg_b = next((b for b in lang_result.bindings if b.local_name == use.local_name), None)
             package = pkg_b.package if pkg_b else target.provider_id
         else:
             confidence = MatchConfidence.LOW
@@ -696,20 +731,22 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
             kind = CallSiteKind.BARE_SYMBOL
 
         # Derive the symbol name: package + attribute chain after local_name
-        attr_suffix = use.attribute_path[len(use.local_name):]
+        attr_suffix = use.attribute_path[len(use.local_name) :]
         symbol = package + attr_suffix if attr_suffix else package
 
-        sites.append(CallSite(
-            filepath=use.filepath,
-            line_number=use.line_number,
-            column=use.column,
-            line_content=use.line_content,
-            kind=kind,
-            confidence=confidence,
-            symbol=symbol,
-            provider_id=target.provider_id,
-            evidence=evidence,
-        ))
+        sites.append(
+            CallSite(
+                filepath=use.filepath,
+                line_number=use.line_number,
+                column=use.column,
+                line_content=use.line_content,
+                kind=kind,
+                confidence=confidence,
+                symbol=symbol,
+                provider_id=target.provider_id,
+                evidence=evidence,
+            )
+        )
 
     return sites
 
@@ -743,17 +780,22 @@ def _scan_checkout_agent_augment(
         agent = ScanAgent(completer, ledger=ledger)
         target = ScanTarget(provider_id=provider.id)
         augmented = agent.augment_baseline(
-            provider, target, toolset, baseline,
+            provider,
+            target,
+            toolset,
+            baseline,
             repo_full_name=baseline.repo_full_name,
         )
         low_before = sum(1 for s in baseline.call_sites if not s.is_actionable)
         low_after = sum(1 for s in augmented.call_sites if not s.is_actionable)
         logger.info(
-            "hybrid augment %s/%s: %d actionable before → %d after "
-            "(low sites %d → %d)",
-            baseline.repo_full_name, provider.id,
-            len(baseline.actionable_sites), len(augmented.actionable_sites),
-            low_before, low_after,
+            "hybrid augment %s/%s: %d actionable before → %d after (low sites %d → %d)",
+            baseline.repo_full_name,
+            provider.id,
+            len(baseline.actionable_sites),
+            len(augmented.actionable_sites),
+            low_before,
+            low_after,
         )
         return augmented
 
@@ -787,11 +829,15 @@ def _scan_checkout_agent(
         )
         logger.info(
             "agent scan %s: %d step(s), %d tool call(s), stopped=%s, anchors=%d",
-            provider.id, transcript.steps_used, len(transcript.tool_calls),
-            transcript.stopped_reason or "final", len(transcript.discovered_anchors),
+            provider.id,
+            transcript.steps_used,
+            len(transcript.tool_calls),
+            transcript.stopped_reason or "final",
+            len(transcript.discovered_anchors),
         )
         if transcript.discovered_anchors or transcript.api_mapping:
             from dataclasses import replace as _replace
+
             result = _replace(
                 result,
                 discovered_anchors=transcript.discovered_anchors,

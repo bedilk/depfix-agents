@@ -7,10 +7,16 @@ from depfix.scanners.models import DeclaredDependency
 
 def _change() -> BreakingChange:
     return BreakingChange(
-        package="openai", old_version="7.17.0", new_version="7.19.0",
-        old_api="openai@7.17.0", new_api="openai@7.19.0", description="d",
-        migration_guide="", kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
-        source=ClassificationSource.REGISTRY, provider_id="openai",
+        package="openai",
+        old_version="7.17.0",
+        new_version="7.19.0",
+        old_api="openai@7.17.0",
+        new_api="openai@7.19.0",
+        description="d",
+        migration_guide="",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
+        source=ClassificationSource.REGISTRY,
+        provider_id="openai",
     )
 
 

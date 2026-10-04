@@ -116,12 +116,7 @@ def _newest_entry(root: ElementTree.Element) -> tuple[str, str, str, str] | None
     """
     item = root.find(".//item")
     if item is not None:
-        token = (
-            _text(item, "guid")
-            or _text(item, "link")
-            or _text(item, "title")
-            or ""
-        )
+        token = _text(item, "guid") or _text(item, "link") or _text(item, "title") or ""
         body = _text(item, "description") or _text(
             item, "{http://purl.org/rss/1.0/modules/content/}encoded"
         )

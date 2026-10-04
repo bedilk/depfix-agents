@@ -19,9 +19,7 @@ def _engine_with_tables(
 ) -> MagicMock:
     inspector = MagicMock()
     inspector.get_table_names.return_value = tables
-    inspector.get_columns.return_value = [
-        {"name": name} for name in (change_event_columns or [])
-    ]
+    inspector.get_columns.return_value = [{"name": name} for name in (change_event_columns or [])]
     monkeypatch.setattr(db, "inspect", lambda _engine: inspector)
     return MagicMock()
 

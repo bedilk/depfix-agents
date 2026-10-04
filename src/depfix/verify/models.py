@@ -11,10 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-
 # ---------------------------------------------------------------------------
 # Stage-level status (characterization, smoke, typecheck, …)
 # ---------------------------------------------------------------------------
+
 
 class StageStatus(StrEnum):
     PASSED = "passed"
@@ -28,10 +28,10 @@ class StageStatus(StrEnum):
 
 @dataclass
 class StageResult:
-    stage: str                          # 'characterization' | 'smoke' | 'typecheck' | …
+    stage: str  # 'characterization' | 'smoke' | 'typecheck' | …
     status: StageStatus
     duration_seconds: float = 0.0
-    skip_reason: str | None = None      # set when status == SKIPPED
+    skip_reason: str | None = None  # set when status == SKIPPED
     detail: str | None = None
     artifacts: list[str] = field(default_factory=list)
 
@@ -44,7 +44,7 @@ class StageResult:
             StageStatus.PASSED: "✅",
             StageStatus.FAILED: "❌",
             StageStatus.SKIPPED: "⚠️",
-            StageStatus.DISABLED: "➖",
+            StageStatus.DISABLED: "➖",  # noqa: RUF001
         }
         line = f"{emoji[self.status]} **{self.stage}**"
         if self.status == StageStatus.SKIPPED and self.skip_reason:
@@ -57,6 +57,7 @@ class StageResult:
 # ---------------------------------------------------------------------------
 # Test-run level status (unchanged from before)
 # ---------------------------------------------------------------------------
+
 
 class TestStatus(StrEnum):
     """Outcome of one test case in one run."""

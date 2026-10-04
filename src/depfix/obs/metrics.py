@@ -42,7 +42,7 @@ class StageOutcomeCounter:
     ) -> None:
         self._counts[_Key(stage=stage, status=status, skip_reason=skip_reason)] += 1
 
-    def record_stage_result(self, result: "object") -> None:
+    def record_stage_result(self, result: object) -> None:
         """Accept a StageResult directly."""
         self.record(
             stage=getattr(result, "stage", "unknown"),

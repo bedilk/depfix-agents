@@ -27,16 +27,16 @@ PLACEHOLDER = "<REDACTED>"
 #: are matched anywhere in the text -- a leaked key is a leaked key whether
 #: it sits in a string literal, a comment, or a committed .env fixture.
 _TOKEN_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),                       # OpenAI
-    re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}"),           # Stripe secret
-    re.compile(r"\brk_(?:live|test)_[A-Za-z0-9]{16,}"),           # Stripe restricted
-    re.compile(r"\bwhsec_[A-Za-z0-9]{16,}"),                      # Stripe webhook
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),                  # GitHub
+    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),  # OpenAI
+    re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}"),  # Stripe secret
+    re.compile(r"\brk_(?:live|test)_[A-Za-z0-9]{16,}"),  # Stripe restricted
+    re.compile(r"\bwhsec_[A-Za-z0-9]{16,}"),  # Stripe webhook
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),  # GitHub
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
-    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),                # Slack
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                          # AWS access key id
+    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),  # Slack
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS access key id
     re.compile(r"\bASIA[0-9A-Z]{16}\b"),
-    re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"),                      # Google API key
+    re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"),  # Google API key
     re.compile(r"\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),  # JWT
     re.compile(
         r"-----BEGIN[^-\n]{0,40}PRIVATE KEY-----.*?-----END[^-\n]{0,40}PRIVATE KEY-----",

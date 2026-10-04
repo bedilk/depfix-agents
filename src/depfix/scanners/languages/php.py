@@ -23,7 +23,10 @@ import re
 from pathlib import Path
 
 from depfix.scanners.language import (
-    BindingKind, ImportBinding, LanguageScanResult, SymbolUse,
+    BindingKind,
+    ImportBinding,
+    LanguageScanResult,
+    SymbolUse,
 )
 from depfix.scanners.masking import MaskingRules, mask_source
 
@@ -98,12 +101,17 @@ class PhpScanner:
                     m2 = re.match(r"(\w+)(?:\s+as\s+(\w+))?", part)
                     if not m2:
                         continue
-                    out.append(ImportBinding(
-                        package=canonical, local_name=m2.group(2) or m2.group(1),
-                        filepath=relpath, line_number=i, line_content=line,
-                        kind=BindingKind.ALIASED if m2.group(2) else BindingKind.NAMED,
-                        bound_symbol=f"{ns}\\{m2.group(1)}",
-                    ))
+                    out.append(
+                        ImportBinding(
+                            package=canonical,
+                            local_name=m2.group(2) or m2.group(1),
+                            filepath=relpath,
+                            line_number=i,
+                            line_content=line,
+                            kind=BindingKind.ALIASED if m2.group(2) else BindingKind.NAMED,
+                            bound_symbol=f"{ns}\\{m2.group(1)}",
+                        )
+                    )
                 continue
 
             # Single: use Namespace\Class [as Alias];
@@ -116,16 +124,24 @@ class PhpScanner:
             canonical = self._canonical(fqn)
             alias = m.group("alias")
             last = fqn.rsplit("\\", 1)[-1]
-            out.append(ImportBinding(
-                package=canonical, local_name=alias or last,
-                filepath=relpath, line_number=i, line_content=line,
-                kind=BindingKind.ALIASED if alias else BindingKind.NAMED,
-                bound_symbol=fqn,
-            ))
+            out.append(
+                ImportBinding(
+                    package=canonical,
+                    local_name=alias or last,
+                    filepath=relpath,
+                    line_number=i,
+                    line_content=line,
+                    kind=BindingKind.ALIASED if alias else BindingKind.NAMED,
+                    bound_symbol=fqn,
+                )
+            )
         return out
 
     def _collect_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         names = {b.local_name for b in bindings if b.local_name != "*"}
         if not names:
@@ -140,11 +156,16 @@ class PhpScanner:
             if re.match(r"\s*use\s", line):
                 continue
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses
 
     def _is_sdk(self, fqn: str) -> bool:

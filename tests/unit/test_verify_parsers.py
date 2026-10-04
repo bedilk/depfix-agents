@@ -143,9 +143,7 @@ def test_parse_mocha_json_passes_and_failures() -> None:
     raw = json.dumps(
         {
             "passes": [{"fullTitle": "a passes", "file": "a.js"}],
-            "failures": [
-                {"fullTitle": "b fails", "file": "b.js", "err": {"message": "boom"}}
-            ],
+            "failures": [{"fullTitle": "b fails", "file": "b.js", "err": {"message": "boom"}}],
             "pending": [],
         }
     )
@@ -297,7 +295,11 @@ def test_parse_fallback_synthetic_names_are_unique_per_index() -> None:
 
 def test_parse_output_dispatches_to_jest_parser_and_reports_no_fallback() -> None:
     raw = json.dumps(
-        {"testResults": [{"name": "f.js", "assertionResults": [{"fullName": "a", "status": "passed"}]}]}
+        {
+            "testResults": [
+                {"name": "f.js", "assertionResults": [{"fullName": "a", "status": "passed"}]}
+            ]
+        }
     )
 
     cases, error, used_fallback = parse_output(TestFramework.JEST, stdout=raw, stderr="")
@@ -309,7 +311,11 @@ def test_parse_output_dispatches_to_jest_parser_and_reports_no_fallback() -> Non
 
 def test_parse_output_prefers_stdout_over_stderr_when_stdout_nonempty() -> None:
     raw = json.dumps(
-        {"testResults": [{"name": "f.js", "assertionResults": [{"fullName": "a", "status": "passed"}]}]}
+        {
+            "testResults": [
+                {"name": "f.js", "assertionResults": [{"fullName": "a", "status": "passed"}]}
+            ]
+        }
     )
 
     cases, _, used_fallback = parse_output(TestFramework.JEST, stdout=raw, stderr="garbage")
@@ -320,7 +326,11 @@ def test_parse_output_prefers_stdout_over_stderr_when_stdout_nonempty() -> None:
 
 def test_parse_output_uses_stderr_when_stdout_blank() -> None:
     raw = json.dumps(
-        {"testResults": [{"name": "f.js", "assertionResults": [{"fullName": "a", "status": "passed"}]}]}
+        {
+            "testResults": [
+                {"name": "f.js", "assertionResults": [{"fullName": "a", "status": "passed"}]}
+            ]
+        }
     )
 
     cases, _, used_fallback = parse_output(TestFramework.JEST, stdout="   ", stderr=raw)
@@ -342,7 +352,7 @@ def test_parse_output_falls_back_on_json_decode_error() -> None:
 def test_parse_output_falls_back_when_structured_parser_yields_no_cases() -> None:
     empty_jest = json.dumps({"testResults": []})
 
-    cases, error, used_fallback = parse_output(
+    cases, _error, used_fallback = parse_output(
         TestFramework.JEST, stdout=empty_jest + "\n5 passing\n", stderr=""
     )
 
@@ -351,7 +361,9 @@ def test_parse_output_falls_back_when_structured_parser_yields_no_cases() -> Non
 
 
 def test_parse_output_reports_no_recognizable_test_output_when_fallback_also_empty() -> None:
-    cases, error, used_fallback = parse_output(TestFramework.UNKNOWN, stdout="nothing useful", stderr="")
+    cases, error, used_fallback = parse_output(
+        TestFramework.UNKNOWN, stdout="nothing useful", stderr=""
+    )
 
     assert cases == []
     assert used_fallback is True
@@ -359,7 +371,9 @@ def test_parse_output_reports_no_recognizable_test_output_when_fallback_also_emp
 
 
 def test_parse_output_unknown_framework_goes_straight_to_fallback() -> None:
-    cases, error, used_fallback = parse_output(TestFramework.UNKNOWN, stdout="2 passing\n", stderr="")
+    cases, _error, used_fallback = parse_output(
+        TestFramework.UNKNOWN, stdout="2 passing\n", stderr=""
+    )
 
     assert used_fallback is True
     assert len(cases) == 2
@@ -368,7 +382,7 @@ def test_parse_output_unknown_framework_goes_straight_to_fallback() -> None:
 def test_parse_output_node_test_uses_tap_parser() -> None:
     raw = "ok 1 - works\n"
 
-    cases, error, used_fallback = parse_output(TestFramework.NODE_TEST, stdout=raw, stderr="")
+    cases, _error, used_fallback = parse_output(TestFramework.NODE_TEST, stdout=raw, stderr="")
 
     assert used_fallback is False
     assert cases[0].name == "works"

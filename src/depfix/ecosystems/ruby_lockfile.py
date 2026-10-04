@@ -17,7 +17,10 @@ def ruby_lockfile_paths(root: Path) -> list[Path]:
 
 
 def try_refresh_ruby_lockfile(
-    root: Path, *, timeout: float = 120.0, max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
+    root: Path,
+    *,
+    timeout: float = 120.0,
+    max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
 ) -> tuple[bool, str]:
     if not (root / "Gemfile").is_file():
         return False, "no Gemfile to lock"

@@ -27,7 +27,9 @@ class CallSiteKind(StrEnum):
     WRAPPER_IMPORT = "wrapper_import"  # local module re-exporting an SDK client/binding
     RAW_HTTP = "raw_http"  # fetch()/axios/etc against a known api_base_url
     API_VERSION_PIN = "api_version_pin"  # apiVersion: "..." / Stripe-Version literal
-    ANCHOR = "anchor"  # legacy: no longer produced (call_site_anchors removed); kept for stored rows
+    ANCHOR = (
+        "anchor"  # legacy: no longer produced (call_site_anchors removed); kept for stored rows
+    )
     BARE_SYMBOL = "bare_symbol"  # destructured import used bare, e.g. createModeration(...)
 
 
@@ -168,9 +170,14 @@ class RepoScanResult:
             return False
         has_raw = any(s.kind == CallSiteKind.RAW_HTTP for s in actionable)
         has_sdk = any(
-            s.kind in (CallSiteKind.SDK_IMPORT, CallSiteKind.METHOD_CALL,
-                       CallSiteKind.BARE_SYMBOL, CallSiteKind.CLIENT_CONSTRUCTION,
-                       CallSiteKind.WRAPPER_IMPORT)
+            s.kind
+            in (
+                CallSiteKind.SDK_IMPORT,
+                CallSiteKind.METHOD_CALL,
+                CallSiteKind.BARE_SYMBOL,
+                CallSiteKind.CLIENT_CONSTRUCTION,
+                CallSiteKind.WRAPPER_IMPORT,
+            )
             for s in actionable
         )
         return has_raw and not has_sdk and not self.dependencies

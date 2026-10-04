@@ -100,7 +100,9 @@ class RetryLoop:
                     fixed_code, confidence, _llm_call = self._fixer.generate_fix(
                         file_usage, breaking_change, feedback=feedback, **kwargs
                     )
-                except Exception as exc:  # a third-party LLM client's failure modes aren't ours to enumerate
+                except (
+                    Exception
+                ) as exc:  # a third-party LLM client's failure modes aren't ours to enumerate
                     logger.error("retry fix generation failed for %s: %s", edit.relpath, exc)
                     continue
 
@@ -117,8 +119,9 @@ class RetryLoop:
                 )
                 new_edit = replace(
                     new_edit,
-                    derivation_trace=(f"Retry round {_ + 1}: LLM regenerated after feedback: "
-                                      f"{feedback[:200]}"),
+                    derivation_trace=(
+                        f"Retry round {_ + 1}: LLM regenerated after feedback: {feedback[:200]}"
+                    ),
                 )
                 current_edits = [
                     new_edit if e.relpath == new_edit.relpath else e for e in current_edits
@@ -135,9 +138,7 @@ class RetryLoop:
         return current_edits, current_verification, rounds_used
 
     @staticmethod
-    def _find_retryable(
-        edits: list[FileEdit], verification: VerificationReport
-    ) -> list[FileEdit]:
+    def _find_retryable(edits: list[FileEdit], verification: VerificationReport) -> list[FileEdit]:
         """Edits worth retrying: a ``SUSPECT`` with a concrete syntax error,
         or a ``REVERTED`` with a test failure attributed to that exact file.
         """

@@ -42,10 +42,14 @@ def install_argv(root: str | Path) -> list[str] | None:
     if bundler() is None or not has_gemfile(root):
         return None
     return [
-        "bundle", "install",
-        "--path", BUNDLE_PATH,
-        "--jobs", "4",
-        "--retry", "1",
+        "bundle",
+        "install",
+        "--path",
+        BUNDLE_PATH,
+        "--jobs",
+        "4",
+        "--retry",
+        "1",
     ]
 
 

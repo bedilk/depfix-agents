@@ -141,9 +141,7 @@ def test_test_argv_shape(tmp_path: Path) -> None:
 def test_run_tests_reads_reporter_output_file_when_written(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _write_package_json(
-        tmp_path, {"devDependencies": {"jest": "^29"}, "scripts": {"test": "jest"}}
-    )
+    _write_package_json(tmp_path, {"devDependencies": {"jest": "^29"}, "scripts": {"test": "jest"}})
 
     def fake_run_sandboxed(argv, *, cwd, timeout, extra_env=None, max_output_bytes=0):
         out_arg = next(a for a in argv if a.startswith("--outputFile="))
@@ -154,9 +152,7 @@ def test_run_tests_reads_reporter_output_file_when_written(
                     "testResults": [
                         {
                             "name": "chat.test.js",
-                            "assertionResults": [
-                                {"fullName": "does a thing", "status": "passed"}
-                            ],
+                            "assertionResults": [{"fullName": "does a thing", "status": "passed"}],
                         }
                     ]
                 }

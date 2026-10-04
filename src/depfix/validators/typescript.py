@@ -60,7 +60,10 @@ def _error(output: str) -> tuple[str, int | None]:
     match = _TSC_ERROR_RE.search(output)
     if match:
         return f"{match.group(2)}: {match.group(3).strip()}", int(match.group(1))
-    line = next((line.strip() for line in output.splitlines() if line.strip()), "TypeScript compilation error")
+    line = next(
+        (line.strip() for line in output.splitlines() if line.strip()),
+        "TypeScript compilation error",
+    )
     return line[:300], None
 
 
@@ -71,7 +74,9 @@ def _validate_with_tsc(code: str, filepath: str, tsc: str) -> ValidationResult:
         source = root / f"check{suffix}"
         source.write_text(code, encoding="utf-8")
         config = root / "tsconfig.json"
-        config.write_text(json.dumps(_tsconfig_for_file(source.name, tsx=suffix == ".tsx")), encoding="utf-8")
+        config.write_text(
+            json.dumps(_tsconfig_for_file(source.name, tsx=suffix == ".tsx")), encoding="utf-8"
+        )
         try:
             result = subprocess.run(
                 [tsc, "--project", str(config)],
@@ -89,7 +94,7 @@ def _validate_with_tsc(code: str, filepath: str, tsc: str) -> ValidationResult:
         return ValidationResult.syntax_error(message, line)
 
 
-_TRANSPILE_SCRIPT = r'''const ts = (() => { try { return require("typescript"); } catch (_) { process.exit(2); } })();
+_TRANSPILE_SCRIPT = r"""const ts = (() => { try { return require("typescript"); } catch (_) { process.exit(2); } })();
 const result = ts.transpileModule(process.argv[1], {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS,
     jsx: process.argv[2] === "1" ? ts.JsxEmit.Preserve : ts.JsxEmit.None },
@@ -102,7 +107,7 @@ if (result.diagnostics && result.diagnostics.length) {
   if (d.file && d.start !== undefined) line = d.file.getLineAndCharacterOfPosition(d.start).line + 1;
   console.error(JSON.stringify({message, line})); process.exit(1);
 }
-'''
+"""
 
 
 def _validate_with_ts_api(code: str, filepath: str) -> ValidationResult | None:
@@ -124,15 +129,25 @@ def _validate_with_ts_api(code: str, filepath: str) -> ValidationResult | None:
         return ValidationResult.valid()
     try:
         payload = json.loads((result.stdout + result.stderr).strip())
-        return ValidationResult.syntax_error(str(payload.get("message", "TypeScript syntax error")), payload.get("line") or None)
+        return ValidationResult.syntax_error(
+            str(payload.get("message", "TypeScript syntax error")), payload.get("line") or None
+        )
     except (json.JSONDecodeError, TypeError, ValueError):
-        return ValidationResult.syntax_error((result.stderr or result.stdout or "TypeScript syntax error")[:300])
+        return ValidationResult.syntax_error(
+            (result.stderr or result.stdout or "TypeScript syntax error")[:300]
+        )
 
 
 class TypeScriptSyntaxValidator:
     """Validate TypeScript syntax without treating it as JavaScript."""
 
-    def __init__(self, checkout_root: str | Path | None = None, *, use_tsc: bool = True, use_ts_api: bool = True) -> None:
+    def __init__(
+        self,
+        checkout_root: str | Path | None = None,
+        *,
+        use_tsc: bool = True,
+        use_ts_api: bool = True,
+    ) -> None:
         self._checkout_root = checkout_root
         self._use_tsc = use_tsc
         self._use_ts_api = use_ts_api

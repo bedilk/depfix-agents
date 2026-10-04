@@ -64,12 +64,19 @@ class PypiDistTagSource(ChangeSource):
             if notes is not None:
                 body, body_url = notes.body, notes.html_url
         event = ChangeEvent(
-            provider_id=self.provider_id, feed_key=self.feed_key, source_kind=self.kind,
+            provider_id=self.provider_id,
+            feed_key=self.feed_key,
+            source_kind=self.kind,
             source_url=f"https://pypi.org/project/{self.package}/{version}/",
-            old_token=state.last_token, new_token=version,
+            old_token=state.last_token,
+            new_token=version,
             title=f"{self.package} {state.last_token} -> {version}",
-            summary="PyPI latest version moved", body=body, body_url=body_url,
-            severity=Severity.BREAKING if is_major_bump(state.last_token, version) else Severity.UNKNOWN,
+            summary="PyPI latest version moved",
+            body=body,
+            body_url=body_url,
+            severity=Severity.BREAKING
+            if is_major_bump(state.last_token, version)
+            else Severity.UNKNOWN,
             raw={"package": self.package, "ecosystem": "pypi"},
         )
         return FeedPoll(changed=True, new_token=version, events=[event])

@@ -72,9 +72,7 @@ class ChangeGroup:
         return min(tiers, key=lambda t: t.rank).value if tiers else ConfidenceTier.NONE.value
 
 
-def group_key_for(
-    change: BreakingChange, strategy: str, *, ecosystem: str = ""
-) -> str:
+def group_key_for(change: BreakingChange, strategy: str, *, ecosystem: str = "") -> str:
     """The grouping key for one change under a strategy.
 
     Strategies:

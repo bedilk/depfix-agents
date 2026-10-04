@@ -126,7 +126,7 @@ def suggest_triage_rule(change: BreakingChange, reachability_reason: str) -> str
     return (
         f"# Suggested -- review before adding. {reachability_reason}\n"
         f"triage_rules:\n"
-        f'  - action: dismiss\n'
+        f"  - action: dismiss\n"
         f'    package: "{change.package}"\n'
         f'    kind: "{change.kind.value}"\n'
         f'    reason: "unreachable: {reachability_reason}"\n'

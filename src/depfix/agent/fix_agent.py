@@ -86,10 +86,14 @@ class FixAgent:
                     return self._proposal(
                         redaction.restore(code), file_usage, breaking_change, call
                     )
-                context.append("The previous response was invalid; return the required JSON object.")
+                context.append(
+                    "The previous response was invalid; return the required JSON object."
+                )
                 continue
             result = self._dispatch(toolset, str(tool), parsed.get("arguments", {}))
-            transcript.tool_calls.append((str(tool), json.dumps(parsed.get("arguments", {}), sort_keys=True)))
+            transcript.tool_calls.append(
+                (str(tool), json.dumps(parsed.get("arguments", {}), sort_keys=True))
+            )
             context.append(
                 f"TOOL {tool} RESULT (ok={result.ok}):\n{redaction.cover(result.content)}"
             )
@@ -197,7 +201,9 @@ class FixAgent:
         *,
         final: bool,
     ) -> str:
-        locations = "\n".join(f"- line {item.line_number}: {item.line_content.strip()}" for item in usage.usages)
+        locations = "\n".join(
+            f"- line {item.line_number}: {item.line_content.strip()}" for item in usage.usages
+        )
         mode = (
             'Return exactly {"tool": null, "code": "COMPLETE FILE"}.'
             if final

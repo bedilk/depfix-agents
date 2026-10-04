@@ -18,9 +18,15 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("file_fix", sa.Column("origin", sa.String(16), nullable=False, server_default="llm"))
-    op.add_column("file_fix", sa.Column("codemod_id", sa.String(64), nullable=False, server_default=""))
-    op.add_column("fix_run", sa.Column("escalated", sa.Boolean(), nullable=False, server_default=sa.false()))
+    op.add_column(
+        "file_fix", sa.Column("origin", sa.String(16), nullable=False, server_default="llm")
+    )
+    op.add_column(
+        "file_fix", sa.Column("codemod_id", sa.String(64), nullable=False, server_default="")
+    )
+    op.add_column(
+        "fix_run", sa.Column("escalated", sa.Boolean(), nullable=False, server_default=sa.false())
+    )
     op.create_index("ix_file_fix_origin", "file_fix", ["origin"])
 
 

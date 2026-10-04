@@ -103,16 +103,28 @@ def test_build_scan_target_ignores_prose_old_api() -> None:
 def test_build_scan_target_for_changes_combines_every_old_symbol() -> None:
     changes = [
         BreakingChange(
-            package="openai", old_version="3.3.0", new_version="4.0.0",
-            old_api="openai.createChatCompletion", new_api="openai.chat.completions.create",
-            description="d", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
-            source=ClassificationSource.MANUAL, provider_id="openai",
+            package="openai",
+            old_version="3.3.0",
+            new_version="4.0.0",
+            old_api="openai.createChatCompletion",
+            new_api="openai.chat.completions.create",
+            description="d",
+            migration_guide="",
+            kind=ChangeKind.METHOD_RENAMED,
+            source=ClassificationSource.MANUAL,
+            provider_id="openai",
         ),
         BreakingChange(
-            package="openai", old_version="3.3.0", new_version="4.0.0",
-            old_api="openai.createEmbedding", new_api="openai.embeddings.create",
-            description="d", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
-            source=ClassificationSource.MANUAL, provider_id="openai",
+            package="openai",
+            old_version="3.3.0",
+            new_version="4.0.0",
+            old_api="openai.createEmbedding",
+            new_api="openai.embeddings.create",
+            description="d",
+            migration_guide="",
+            kind=ChangeKind.METHOD_RENAMED,
+            source=ClassificationSource.MANUAL,
+            provider_id="openai",
         ),
     ]
 
@@ -124,10 +136,16 @@ def test_build_scan_target_for_changes_combines_every_old_symbol() -> None:
 def test_spec_diff_hint_is_qualified_into_the_scanner_namespace() -> None:
     """Provider-less SDK paths from an OpenAPI diff must match scanner output."""
     change = BreakingChange(
-        package="openai", old_version="7.17.0", new_version="7.19.0",
-        old_api="POST /v1/responses (connector_id)", new_api="",
-        description="d", migration_guide="", kind=ChangeKind.FIELD_REMOVED,
-        source=ClassificationSource.SPEC_DIFF, provider_id="openai",
+        package="openai",
+        old_version="7.17.0",
+        new_version="7.19.0",
+        old_api="POST /v1/responses (connector_id)",
+        new_api="",
+        description="d",
+        migration_guide="",
+        kind=ChangeKind.FIELD_REMOVED,
+        source=ClassificationSource.SPEC_DIFF,
+        provider_id="openai",
         call_site_hints=["responses.create"],
     )
 
@@ -203,7 +221,9 @@ def test_scan_prepares_repository_package_manager_when_requested(
     prepared = PackageManagerPreparation(
         package_manager="yarn", executable=tmp_path / "yarn", version="4.18.0", installed=True
     )
-    monkeypatch.setattr("depfix.verify.manager.prepare_package_manager", lambda *_args, **_kwargs: prepared)
+    monkeypatch.setattr(
+        "depfix.verify.manager.prepare_package_manager", lambda *_args, **_kwargs: prepared
+    )
 
     result = scan_path(
         tmp_path,
@@ -222,10 +242,16 @@ def test_spec_diff_narrowed_scan_finds_a_real_call_site(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     change = BreakingChange(
-        package="openai", old_version="7.17.0", new_version="7.19.0",
-        old_api="POST /v1/responses (connector_id)", new_api="openai.responses.create",
-        description="d", migration_guide="", kind=ChangeKind.PARAM_REMOVED,
-        source=ClassificationSource.SPEC_DIFF, provider_id="openai",
+        package="openai",
+        old_version="7.17.0",
+        new_version="7.19.0",
+        old_api="POST /v1/responses (connector_id)",
+        new_api="openai.responses.create",
+        description="d",
+        migration_guide="",
+        kind=ChangeKind.PARAM_REMOVED,
+        source=ClassificationSource.SPEC_DIFF,
+        provider_id="openai",
         call_site_hints=["responses.create"],
     )
 
@@ -308,10 +334,16 @@ def test_record_scan_creates_repo_and_persists_call_sites(db_session: Session) -
 
 def test_record_scan_persists_change_assessment(db_session: Session) -> None:
     change = BreakingChange(
-        package="openai", old_version="3.3.0", new_version="4.0.0",
-        old_api="openai.moderations.create", new_api="openai.moderations.create",
-        description="d", migration_guide="", kind=ChangeKind.METHOD_RENAMED,
-        source=ClassificationSource.MANUAL, provider_id="openai",
+        package="openai",
+        old_version="3.3.0",
+        new_version="4.0.0",
+        old_api="openai.moderations.create",
+        new_api="openai.moderations.create",
+        description="d",
+        migration_guide="",
+        kind=ChangeKind.METHOD_RENAMED,
+        source=ClassificationSource.MANUAL,
+        provider_id="openai",
     )
     provider = Provider(id="openai", name="OpenAI")
     event = ChangeEventRow(

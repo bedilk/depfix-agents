@@ -1,5 +1,7 @@
 """Deterministic 'removed API still called here' findings."""
+
 from __future__ import annotations
+
 import dataclasses
 from dataclasses import dataclass
 from enum import StrEnum
@@ -13,9 +15,9 @@ from depfix.sources.semver import parse_semver
 
 class RemovalImpact(StrEnum):
     BREAKS_ON_UPGRADE = "breaks_on_upgrade"
-    ALREADY_REMOVED   = "already_removed"
-    UPCOMING          = "upcoming"
-    UNREACHABLE       = "unreachable"
+    ALREADY_REMOVED = "already_removed"
+    UPCOMING = "upcoming"
+    UNREACHABLE = "unreachable"
 
 
 @dataclass(frozen=True)
@@ -38,13 +40,15 @@ class RemovalNotice:
     @property
     def blocks_merge(self) -> bool:
         return self.reachable and self.impact in (
-            RemovalImpact.BREAKS_ON_UPGRADE, RemovalImpact.ALREADY_REMOVED)
+            RemovalImpact.BREAKS_ON_UPGRADE,
+            RemovalImpact.ALREADY_REMOVED,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {**dataclasses.asdict(self), "sites": list(self.sites)}
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "RemovalNotice":
+    def from_dict(cls, raw: dict[str, Any]) -> RemovalNotice:
         return cls(**{**raw, "sites": tuple(raw.get("sites", ()))})
 
 
@@ -94,14 +98,22 @@ def collect_removal_notices(
         wanted = symbols_for_change(provider_id or change.provider_id or "", change)
         if not wanted:
             continue
-        exact   = [s for s in result.actionable_sites if _matches_any(s.symbol, wanted)]
-        suffix  = [] if exact else [
-            s for s in result.actionable_sites
-            if any(s.symbol.endswith(f".{w.split('.')[-1]}") for w in wanted)
-        ]
-        sites   = exact or suffix
-        impact  = (_impact(installed, change.new_version or "", target_version)
-                   if sites else RemovalImpact.UNREACHABLE)
+        exact = [s for s in result.actionable_sites if _matches_any(s.symbol, wanted)]
+        suffix = (
+            []
+            if exact
+            else [
+                s
+                for s in result.actionable_sites
+                if any(s.symbol.endswith(f".{w.split('.')[-1]}") for w in wanted)
+            ]
+        )
+        sites = exact or suffix
+        impact = (
+            _impact(installed, change.new_version or "", target_version)
+            if sites
+            else RemovalImpact.UNREACHABLE
+        )
         if impact is RemovalImpact.UNREACHABLE and not include_unreachable:
             continue
         notices[change.dedupe_key] = RemovalNotice(
@@ -125,6 +137,8 @@ def narrow_to_symbols(result: RepoScanResult, symbols: tuple[str, ...]) -> RepoS
     if not symbols:
         return result
     _FILTERED = frozenset({CallSiteKind.METHOD_CALL, CallSiteKind.BARE_SYMBOL})
+
     def keep(site: CallSite) -> bool:
         return site.kind not in _FILTERED or _matches_any(site.symbol, symbols)
+
     return dataclasses.replace(result, call_sites=[s for s in result.call_sites if keep(s)])

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import typing
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -99,7 +100,7 @@ class GeminiCompleter:
 class BedrockCompleter:
     """Calls Claude via AWS Bedrock using the anthropic SDK."""
 
-    PRICING = {
+    PRICING: typing.ClassVar[dict[str, dict[str, float]]] = {
         "us.anthropic.claude-opus-4-6-v1": {"input": 15.0, "output": 75.0},
         "us.anthropic.claude-sonnet-4-5-20250929-v1:0": {"input": 3.0, "output": 15.0},
         "us.anthropic.claude-sonnet-4-5-20250514": {"input": 3.0, "output": 15.0},
@@ -142,7 +143,7 @@ class BedrockCompleter:
         input_tokens = message.usage.input_tokens
         output_tokens = message.usage.output_tokens
         # Fall back to Sonnet-tier rates for unknown Bedrock model IDs rather
-        # than Opus rates, which over-estimate cost by ~5× for most models.
+        # than Opus rates, which over-estimate cost by ~5x for most models.
         pricing = self.PRICING.get(self.model, {"input": 3.0, "output": 15.0})
         cost = (input_tokens / 1_000_000) * pricing["input"] + (
             output_tokens / 1_000_000
@@ -210,7 +211,8 @@ class CostTrackingCompleter:
     def complete(self, prompt: str, *, temperature: float = 0.0) -> LLMResponse:
         response = self._inner.complete(prompt, temperature=temperature)
         self._ledger.record(
-            self._stage, response.cost_estimate,
+            self._stage,
+            response.cost_estimate,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
         )

@@ -31,10 +31,12 @@ def _python_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
     dotted = package.replace("-", ".")
     names = {re.escape(module), re.escape(dotted)}
     alternatives = "|".join(sorted(names))
-    return compile_all([
-        rf"^\s*import\s+(?:{alternatives})\b",
-        rf"^\s*from\s+(?:{alternatives})\b",
-    ])
+    return compile_all(
+        [
+            rf"^\s*import\s+(?:{alternatives})\b",
+            rf"^\s*from\s+(?:{alternatives})\b",
+        ]
+    )
 
 
 def _go_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
@@ -44,11 +46,13 @@ def _go_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
 
 def _rust_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
     crate = package.replace("-", "_")
-    return compile_all([
-        rf"^\s*use\s+{re.escape(crate)}\b",
-        rf"^\s*extern\s+crate\s+{re.escape(crate)}\b",
-        rf"\b{re.escape(crate)}::",
-    ])
+    return compile_all(
+        [
+            rf"^\s*use\s+{re.escape(crate)}\b",
+            rf"^\s*extern\s+crate\s+{re.escape(crate)}\b",
+            rf"\b{re.escape(crate)}::",
+        ]
+    )
 
 
 def _ruby_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
@@ -63,10 +67,12 @@ def _php_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
     for suffix in ("-php", "-sdk"):
         tail = tail.removesuffix(suffix)
     namespace = _studly(tail)
-    return compile_all([
-        rf"^\s*use\s+{re.escape(namespace)}\\",
-        rf"\bnew\s+\\?{re.escape(namespace)}\\",
-    ])
+    return compile_all(
+        [
+            rf"^\s*use\s+{re.escape(namespace)}\\",
+            rf"\bnew\s+\\?{re.escape(namespace)}\\",
+        ]
+    )
 
 
 def _jvm_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
@@ -102,11 +108,21 @@ JAVASCRIPT = EcosystemSpec(
     registry_aliases=("npm",),
     source_extensions=frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}),
     markers=(
-        ("package.json", 10), ("package-lock.json", 5), ("yarn.lock", 5),
-        ("pnpm-lock.yaml", 5), ("bun.lockb", 5), ("tsconfig.json", 8),
+        ("package.json", 10),
+        ("package-lock.json", 5),
+        ("yarn.lock", 5),
+        ("pnpm-lock.yaml", 5),
+        ("bun.lockb", 5),
+        ("tsconfig.json", 8),
     ),
     manifest_names=("package.json",),
-    lockfile_names=("package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb"),
+    lockfile_names=(
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lockb",
+    ),
     fix_supported=True,
     # scanning/manifests/install/test stay with the dedicated npm modules
     # (scanners.manifest, scanners.callsites, verify.manager, verify.runner);
@@ -120,16 +136,27 @@ PYTHON = EcosystemSpec(
     registry_aliases=("pypi", "pip"),
     source_extensions=frozenset({".py"}),
     markers=(
-        ("pyproject.toml", 10), ("setup.py", 8), ("requirements.txt", 5),
-        ("Pipfile", 5), ("poetry.lock", 5), ("uv.lock", 5),
+        ("pyproject.toml", 10),
+        ("setup.py", 8),
+        ("requirements.txt", 5),
+        ("Pipfile", 5),
+        ("poetry.lock", 5),
+        ("uv.lock", 5),
     ),
     manifest_names=("pyproject.toml", "requirements.txt", "setup.py", "Pipfile"),
     lockfile_names=("poetry.lock", "Pipfile.lock", "uv.lock"),
     fix_supported=True,
-    env_allowlist_extra=frozenset({
-        "VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "PIP_CACHE_DIR",
-        "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_DISABLE_PIP_VERSION_CHECK",
-    }),
+    env_allowlist_extra=frozenset(
+        {
+            "VIRTUAL_ENV",
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "PIP_CACHE_DIR",
+            "PIP_INDEX_URL",
+            "PIP_EXTRA_INDEX_URL",
+            "PIP_DISABLE_PIP_VERSION_CHECK",
+        }
+    ),
     line_comments=("#",),
     import_regexes=_python_import_regexes,
     scan_dependencies=manifests.scan_python_dependencies,
@@ -224,9 +251,14 @@ RUBY = EcosystemSpec(
     import_regexes=_ruby_import_regexes,
     scan_dependencies=manifests.scan_ruby_dependencies,
     fix_supported=True,
-    env_allowlist_extra=frozenset({
-        "GEM_HOME", "GEM_PATH", "BUNDLE_PATH", "BUNDLE_GEMFILE",
-    }),
+    env_allowlist_extra=frozenset(
+        {
+            "GEM_HOME",
+            "GEM_PATH",
+            "BUNDLE_PATH",
+            "BUNDLE_GEMFILE",
+        }
+    ),
 )
 
 PHP = EcosystemSpec(
@@ -274,5 +306,14 @@ SWIFT = EcosystemSpec(
 )
 
 ALL_SPECS: tuple[EcosystemSpec, ...] = (
-    JAVASCRIPT, PYTHON, JAVA, KOTLIN, GO, RUST, RUBY, PHP, CSHARP, SWIFT,
+    JAVASCRIPT,
+    PYTHON,
+    JAVA,
+    KOTLIN,
+    GO,
+    RUST,
+    RUBY,
+    PHP,
+    CSHARP,
+    SWIFT,
 )

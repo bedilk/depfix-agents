@@ -55,7 +55,12 @@ _MIN_ENTROPY_BITS = 4.3
 # (pattern, capture group) -- group is the span that gets replaced, so a
 # named assignment redacts only the value, leaving `apiKey:` intact.
 _TOKEN_PATTERNS: tuple[tuple[re.Pattern[str], int], ...] = (
-    (re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----"), 0),
+    (
+        re.compile(
+            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----"
+        ),
+        0,
+    ),
     (re.compile(r"\bsk-(?:ant-[a-z0-9-]*|proj-|svcacct-|admin-)?[A-Za-z0-9_\-]{20,}"), 0),
     (re.compile(r"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"), 0),
     (re.compile(r"\bwhsec_[A-Za-z0-9]{16,}"), 0),
@@ -81,7 +86,7 @@ _TOKEN_PATTERNS: tuple[tuple[re.Pattern[str], int], ...] = (
     ),
 )
 
-_QUOTED_LITERAL_RE = re.compile(r"""["']([A-Za-z0-9+/=_\-]{%d,})["']""" % _MIN_ENTROPY_LENGTH)
+_QUOTED_LITERAL_RE = re.compile(rf"""["']([A-Za-z0-9+/=_\-]{{{_MIN_ENTROPY_LENGTH},}})["']""")
 
 
 class RedactionError(RuntimeError):

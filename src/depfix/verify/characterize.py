@@ -52,8 +52,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from depfix.core.models import BreakingChange
-from depfix.redaction import redact_text
 from depfix.obs.cost import CostLedger, CostStage
+from depfix.redaction import redact_text
 from depfix.verify.sandbox import DEFAULT_MAX_OUTPUT_BYTES, run_sandboxed
 
 logger = logging.getLogger(__name__)
@@ -338,7 +338,8 @@ class Characterizer:
         response = self._completer.complete(prompt, temperature=0.0)
         if self._ledger is not None:
             self._ledger.record(
-                CostStage.CHARACTERIZATION, response.cost_estimate,
+                CostStage.CHARACTERIZATION,
+                response.cost_estimate,
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,
             )
@@ -387,7 +388,9 @@ class Characterizer:
             probe.error = result.error or "harness timed out"
             return probe
         if not out_path.is_file():
-            probe.error = (result.stderr or result.stdout or "harness wrote no result").strip()[:400]
+            probe.error = (result.stderr or result.stdout or "harness wrote no result").strip()[
+                :400
+            ]
             return probe
         try:
             payload = json.loads(out_path.read_text(encoding="utf-8"))

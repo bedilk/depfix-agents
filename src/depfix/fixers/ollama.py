@@ -60,7 +60,9 @@ class OllamaFixGenerator:
         if redaction.redacted:
             logger.info(
                 "Redacted %d secret value(s) in %s before sending to %s",
-                redaction.redacted_count, file_usage.filepath, self.model,
+                redaction.redacted_count,
+                file_usage.filepath,
+                self.model,
             )
         prompt = self._build_prompt(safe_usage, breaking_change, feedback=safe_feedback)
 
@@ -150,7 +152,9 @@ class OllamaFixGenerator:
 
         feedback_section = ""
         if feedback:
-            feedback_section = f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
+            feedback_section = (
+                f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
+            )
 
         return f"""You are a senior developer performing a code migration for a breaking API change.
 

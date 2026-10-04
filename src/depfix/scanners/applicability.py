@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from depfix.core.models import BreakingChange, ChangeKind
-from depfix.scanners.manifest import _parse_semver, affects_version, declared_major, range_allows_major
+from depfix.scanners.manifest import (
+    _parse_semver,
+    affects_version,
+    declared_major,
+    range_allows_major,
+)
 from depfix.scanners.models import DeclaredDependency
 
 
@@ -90,7 +95,9 @@ def _decide_one(dep: DeclaredDependency, change: BreakingChange) -> Applicabilit
             Applicability.UNKNOWN,
             f"{dep.manifest_path} has no resolved lockfile version for {dep.package}",
         )
-    return ApplicabilityVerdict(Applicability.UNKNOWN, f"no usable version evidence for {dep.package}")
+    return ApplicabilityVerdict(
+        Applicability.UNKNOWN, f"no usable version evidence for {dep.package}"
+    )
 
 
 def change_applies(
@@ -101,16 +108,24 @@ def change_applies(
     One applicable workspace is sufficient in a monorepo. Missing or
     unparseable data remains unknown, so it never hides visible call sites.
     """
-    relevant = [dependency for dependency in dependencies if _same_package(dependency.package, change.package)]
+    relevant = [
+        dependency
+        for dependency in dependencies
+        if _same_package(dependency.package, change.package)
+    ]
     if not relevant:
         return ApplicabilityVerdict(
             Applicability.UNKNOWN,
             f"{change.package} is not declared in any manifest depfix scanned",
         )
     verdicts = [_decide_one(dependency, change) for dependency in relevant]
-    applies = next((verdict for verdict in verdicts if verdict.status is Applicability.APPLIES), None)
+    applies = next(
+        (verdict for verdict in verdicts if verdict.status is Applicability.APPLIES), None
+    )
     if applies is not None:
         return applies
     if all(verdict.status is Applicability.NOT_AFFECTED for verdict in verdicts):
-        return ApplicabilityVerdict(Applicability.NOT_AFFECTED, "; ".join(v.reason for v in verdicts))
+        return ApplicabilityVerdict(
+            Applicability.NOT_AFFECTED, "; ".join(v.reason for v in verdicts)
+        )
     return next(verdict for verdict in verdicts if verdict.status is Applicability.UNKNOWN)

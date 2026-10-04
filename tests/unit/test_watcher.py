@@ -6,9 +6,9 @@ scripted ``ChangeSource`` stub, so no network or real filesystem is touched.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -104,8 +104,9 @@ def _watcher(
             raise UnsupportedSourceKind(f"no stub registered for {(provider_id, key)}") from None
 
     # Existing tests poll twice and expect two real polls, so caching is off by default.
-    return Watcher(deps=_fake_deps(), source_builder=builder, dry_run=dry_run,
-                   ttl_seconds=ttl_seconds)
+    return Watcher(
+        deps=_fake_deps(), source_builder=builder, dry_run=dry_run, ttl_seconds=ttl_seconds
+    )
 
 
 def _provider(

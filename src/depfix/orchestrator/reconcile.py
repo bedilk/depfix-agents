@@ -53,7 +53,9 @@ def reconcile_open_prs(session: Session, gh_auth: GitHubAppAuth, repo_full_names
     return drift
 
 
-def compute_merge_rate(session: Session, repo_ids: list[str] | None = None) -> dict[str, int | float | None]:
+def compute_merge_rate(
+    session: Session, repo_ids: list[str] | None = None
+) -> dict[str, int | float | None]:
     """Return resolved PR merge statistics, optionally for selected repos."""
     stmt = select(PullRequestRow).join(PullRequestRow.fix_run).where(PullRequestRow.state != "open")
     if repo_ids:
@@ -61,8 +63,12 @@ def compute_merge_rate(session: Session, repo_ids: list[str] | None = None) -> d
     rows = session.scalars(stmt).all()
     merged = sum(bool(row.merged) for row in rows)
     total = len(rows)
-    return {"merged": merged, "closed_unmerged": total - merged, "total": total,
-            "rate": merged / total if total else None}
+    return {
+        "merged": merged,
+        "closed_unmerged": total - merged,
+        "total": total,
+        "rate": merged / total if total else None,
+    }
 
 
 def _promote_merged(dedupe_key: str) -> None:

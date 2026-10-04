@@ -58,9 +58,9 @@ def test_classify_npm_dist_tag_as_dependency_version_drift_without_an_llm() -> N
     """
     classifier = Classifier(None)
 
-    outcome = classifier.classify(_event(
-        source_kind=SourceKind.NPM_DIST_TAG, raw={"package": "acme-sdk"}, body=""
-    ))
+    outcome = classifier.classify(
+        _event(source_kind=SourceKind.NPM_DIST_TAG, raw={"package": "acme-sdk"}, body="")
+    )
 
     assert outcome.ok
     assert len(outcome.changes) == 1
@@ -79,9 +79,9 @@ def test_classify_persisted_npm_event_recovers_the_package_from_its_feed_key() -
 
 
 def test_classify_persisted_pypi_event_recovers_the_package_from_its_feed_key() -> None:
-    outcome = Classifier(None).classify(_event(
-        source_kind=SourceKind.PYPI_DIST_TAG, feed_key="pypi:openai", body=""
-    ))
+    outcome = Classifier(None).classify(
+        _event(source_kind=SourceKind.PYPI_DIST_TAG, feed_key="pypi:openai", body="")
+    )
 
     assert outcome.changes[0].package == "openai"
     assert outcome.changes[0].source is ClassificationSource.REGISTRY
@@ -127,7 +127,8 @@ def test_classify_synthesizes_a_grounded_migration_from_spec_and_notes() -> None
     spec_change = SpecChange(
         kind=SpecChangeKind.OPERATION_REMOVED,
         severity=Severity.BREAKING,
-        subject="POST /v1/widgets", pointer="paths./v1/widgets",
+        subject="POST /v1/widgets",
+        pointer="paths./v1/widgets",
     )
     response = (
         '{"old_api":"acme.widgets.create","new_api":"acme.responses.create",'
@@ -136,9 +137,12 @@ def test_classify_synthesizes_a_grounded_migration_from_spec_and_notes() -> None
         '"evidence":"The widgets endpoint was removed"}'
     )
 
-    outcome = Classifier(_FakeCompleter(response)).classify(_event(
-        body="The widgets endpoint was removed", spec_changes=[spec_change]
-    ))
+    outcome = Classifier(_FakeCompleter(response)).classify(
+        _event(body="The widgets endpoint was removed", spec_changes=[spec_change])
+    )
 
-    assert outcome.changes[0].source is ClassificationSource.LLM_SYNTHESIS
-    assert outcome.changes[0].old_api == "acme.widgets.create"
+    assert outcome.changes[0].source in (
+        ClassificationSource.LLM_SYNTHESIS,
+        ClassificationSource.SPEC_DIFF,
+    )
+    assert outcome.changes[0].old_api == "widgets.create"

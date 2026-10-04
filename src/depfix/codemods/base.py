@@ -1,4 +1,3 @@
-
 """The codemod contract.
 
 Three outcomes, and the distinction between them is load-bearing:
@@ -53,7 +52,9 @@ class CodemodResult:
 
     @classmethod
     def decline(cls, codemod_id: str, reason: str) -> CodemodResult:
-        return cls(codemod_id=codemod_id, source=None, changed=False, declined_reason=reason, note=reason)
+        return cls(
+            codemod_id=codemod_id, source=None, changed=False, declined_reason=reason, note=reason
+        )
 
 
 @runtime_checkable

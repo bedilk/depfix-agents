@@ -11,8 +11,6 @@ GitHub push protection) don't flag this file.
 
 from __future__ import annotations
 
-import dataclasses
-
 import pytest
 
 from depfix.core.models import FileUsage, Usage

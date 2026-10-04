@@ -67,7 +67,9 @@ class BedrockFixGenerator:
         if redaction.redacted:
             logger.info(
                 "Redacted %d secret value(s) in %s before sending to %s",
-                redaction.redacted_count, file_usage.filepath, self.model,
+                redaction.redacted_count,
+                file_usage.filepath,
+                self.model,
             )
         prompt = self._build_prompt(safe_usage, breaking_change, feedback=safe_feedback)
 
@@ -150,7 +152,9 @@ class BedrockFixGenerator:
 
         feedback_section = ""
         if feedback:
-            feedback_section = f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
+            feedback_section = (
+                f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
+            )
 
         return f"""You are a senior developer performing a code migration for a breaking API change.
 
@@ -232,7 +236,7 @@ Return ONLY the complete updated code. No explanations, no markdown code blocks,
 
     def _calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
         # Fall back to Sonnet-tier rates for unknown model IDs rather than
-        # Opus rates, which over-estimate cost by ~5× for most models.
+        # Opus rates, which over-estimate cost by ~5x for most models.
         pricing = BEDROCK_PRICING.get(self.model, {"input": 3.0, "output": 15.0})
         return (input_tokens / 1_000_000) * pricing["input"] + (
             output_tokens / 1_000_000

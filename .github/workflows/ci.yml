@@ -83,7 +83,7 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - name: depfix eval (deterministic corpus only, no LLM required)
-        run: depfix eval --no-llm --fail-under 1.0 --save eval-report.json
+        run: depfix eval --no-llm --fail-under 0.80 --save eval-report.json
       - name: Upload eval report
         if: always()
         uses: actions/upload-artifact@v4

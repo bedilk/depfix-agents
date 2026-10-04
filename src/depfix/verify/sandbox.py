@@ -11,6 +11,7 @@ from doing much beyond wasting CPU time inside its own checkout.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import signal
@@ -106,10 +107,8 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
         pgid = os.getpgid(proc.pid)
     except ProcessLookupError:
         return
-    try:
+    with contextlib.suppress(ProcessLookupError):
         os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
 
 
 def run_sandboxed(

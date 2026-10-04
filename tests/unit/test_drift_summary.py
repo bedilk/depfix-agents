@@ -6,16 +6,23 @@ from depfix.scanners.models import DeclaredDependency, RepoScanResult
 
 def _change(new_version: str = "7.20.0") -> BreakingChange:
     return BreakingChange(
-        package="openai", old_version="7.19.0", new_version=new_version,
-        old_api="openai@7.19.0", new_api="openai@7.20.0",
-        description="drift", migration_guide="update", kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
-        source=ClassificationSource.REGISTRY, provider_id="openai",
+        package="openai",
+        old_version="7.19.0",
+        new_version=new_version,
+        old_api="openai@7.19.0",
+        new_api="openai@7.20.0",
+        description="drift",
+        migration_guide="update",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
+        source=ClassificationSource.REGISTRY,
+        provider_id="openai",
     )
 
 
 def _result(version: str) -> RepoScanResult:
     return RepoScanResult(
-        repo_full_name="acme/app", commit_sha="sha",
+        repo_full_name="acme/app",
+        commit_sha="sha",
         dependencies=[DeclaredDependency("openai", "package.json", version, version, "range")],
     )
 

@@ -83,9 +83,7 @@ def parse_repo_config(text: str, *, where: str = "<string>") -> RepoConfig:
         max_changes_per_run=_optional_positive_int(
             data.get("max_changes_per_run"), f"{where}.max_changes_per_run"
         ),
-        providers=_parse_filter(
-            data.get("providers"), f"{where}.providers", cls=ProviderFilter
-        ),
+        providers=_parse_filter(data.get("providers"), f"{where}.providers", cls=ProviderFilter),
         paths=_parse_filter(data.get("paths"), f"{where}.paths", cls=PathFilter),
         ignore=_str_tuple(data.get("ignore"), f"{where}.ignore"),
         max_repo_mb=_optional_positive_int(data.get("max_repo_mb"), f"{where}.max_repo_mb"),

@@ -57,8 +57,8 @@ def parse_vitest_verbose(raw: str) -> list[TestCase]:
         line = line.strip()
         if line.startswith(("✓", "√")):
             cases.append(TestCase(name=line.lstrip("✓√ ").strip(), status=TestStatus.PASSED))
-        elif line.startswith(("×", "✕")):
-            cases.append(TestCase(name=line.lstrip("×✕ ").strip(), status=TestStatus.FAILED))
+        elif line.startswith(("×", "✕")):  # noqa: RUF001
+            cases.append(TestCase(name=line.lstrip("×✕ ").strip(), status=TestStatus.FAILED))  # noqa: RUF001
     return cases
 
 
@@ -77,7 +77,9 @@ def parse_mocha_json(raw: str) -> list[TestCase]:
 
     for entry in data.get("failures", []):
         name, file = _mocha_identity(entry)
-        message = entry.get("err", {}).get("message", "") if isinstance(entry.get("err"), dict) else ""
+        message = (
+            entry.get("err", {}).get("message", "") if isinstance(entry.get("err"), dict) else ""
+        )
         cases.append(TestCase(name=name, file=file, status=TestStatus.FAILED, message=message))
         seen.add((name, file))
 

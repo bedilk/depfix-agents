@@ -356,9 +356,7 @@ class ScanChangeMatchRow(Base):
 
     __tablename__ = "repo_scan_change"
     __table_args__ = (
-        UniqueConstraint(
-            "repo_scan_id", "breaking_change_id", name="uq_repo_scan_change_pair"
-        ),
+        UniqueConstraint("repo_scan_id", "breaking_change_id", name="uq_repo_scan_change_pair"),
         Index("ix_repo_scan_change_status", "status"),
     )
 
@@ -544,7 +542,9 @@ class PullRequestRow(Base):
     merged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )

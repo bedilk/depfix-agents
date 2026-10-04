@@ -281,9 +281,7 @@ def _ensure_sqlite_columns(engine: Engine) -> None:
         for table, columns in additions.items():
             if table not in existing_tables:
                 continue
-            existing = {
-                row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")
-            }
+            existing = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")}
             for name, declaration in columns.items():
                 if name not in existing:
                     connection.exec_driver_sql(

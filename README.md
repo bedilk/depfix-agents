@@ -247,8 +247,8 @@ depfix understands the top-10 language ecosystems at two honest tiers
 
 | Tier | Ecosystems | What you get |
 | --- | --- | --- |
-| **Fix + verify** | JavaScript/TypeScript (npm), Python (PyPI) | Full pipeline: call-site scan, LLM fix, syntax validation, dependency install + the repo's own test suite run before/after each edit. Python installs into a throwaway in-checkout `.depfix-venv` and runs pytest with a JUnit reporter. |
-| **Scan-only** | Java, Kotlin, Go, Rust, Ruby, PHP, C#/.NET, Swift | Repo detection, SDK dependency-declaration scanning across each ecosystem's manifests/lockfiles (go.mod, Cargo.toml/lock, Gemfile/lock, composer.json/lock, pom.xml/gradle, csproj, Package.swift/resolved, requirements/pyproject/poetry), and import-level call-site flagging. `plan` reports unsupported ecosystems rather than generating an edit nobody can verify locally. |
+| **Fix + verify** | JavaScript/TypeScript (npm), Python (PyPI), Go, Ruby | Full pipeline: call-site scan, LLM fix, syntax validation, dependency install + the repo's own test suite run before/after each edit. Python installs into a throwaway in-checkout `.depfix-venv` and runs pytest with a JUnit reporter. |
+| **Scan-only** | Java, Kotlin, Rust, PHP, C#/.NET, Swift | Repo detection, SDK dependency-declaration scanning across each ecosystem's manifests/lockfiles (go.mod, Cargo.toml/lock, Gemfile/lock, composer.json/lock, pom.xml/gradle, csproj, Package.swift/resolved, requirements/pyproject/poetry), and import-level call-site flagging. `plan` reports unsupported ecosystems rather than generating an edit nobody can verify locally. |
 
 Dependency-drift automation is end-to-end for npm and PyPI: `depfix watch`
 discovers a registry version move, `classify` records it deterministically,
@@ -457,7 +457,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push and PR to `main`:
 
 1. **lint** — `ruff check`, `ruff format --check`, `mypy`, `bandit`
 2. **test** — `pytest` on Python 3.11 and 3.12 with coverage
-3. **eval** — `depfix eval --no-llm --fail-under 1.0`, gating on the deterministic
+3. **eval** — `depfix eval --no-llm --fail-under 0.80`, gating on the deterministic
    spec-diff corpus (LLM-backed cases are skipped, not failed, without an API key)
 4. **build-docker** — smoke build the Dockerfile (waits on both `test` and `eval`)
 

@@ -64,10 +64,16 @@ def build_ruby_dependency_drift_bumps(root: Path, change: BreakingChange) -> lis
             and _spec_major(old_spec) != _spec_major(new_version)
         ):
             continue
-        bumps.append(GemfileBump(
-            path.relative_to(root).as_posix(), original, fixed, change.package,
-            old_spec, f"~> {new_version}",
-        ))
+        bumps.append(
+            GemfileBump(
+                path.relative_to(root).as_posix(),
+                original,
+                fixed,
+                change.package,
+                old_spec,
+                f"~> {new_version}",
+            )
+        )
     return bumps
 
 
@@ -95,8 +101,8 @@ def _rewrite_gemfile(text: str, package: str, new_version: str) -> tuple[str, st
             old_spec = ", ".join(constraints)
         q = match.group("q")
         return (
-            f'{match.group("indent")}gem {q}{package}{q}, '
-            f'{q}~> {new_version}{q}{match.group("rest")}'
+            f"{match.group('indent')}gem {q}{package}{q}, "
+            f"{q}~> {new_version}{q}{match.group('rest')}"
         )
 
     return _GEM_LINE_RE.sub(_replace, text), old_spec

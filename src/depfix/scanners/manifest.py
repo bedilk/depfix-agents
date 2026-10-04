@@ -89,9 +89,11 @@ def _load_yaml(path: Path) -> dict | None:
                 continue
             for key, value in doc.items():
                 existing = merged.get(key)
-                if isinstance(existing, dict) and isinstance(value, dict) and len(value) > len(existing):
-                    merged[key] = value
-                elif key not in merged:
+                if (
+                    isinstance(existing, dict)
+                    and isinstance(value, dict)
+                    and len(value) > len(existing)
+                ) or key not in merged:
                     merged[key] = value
         return merged
     except (OSError, yaml.YAMLError) as exc:

@@ -32,9 +32,7 @@ def is_major_bump(old: str | None, new: str | None) -> bool:
     return n[0] > o[0]
 
 
-def in_upgrade_window(
-    migration_version: str, installed: str | None, target: str
-) -> bool | None:
+def in_upgrade_window(migration_version: str, installed: str | None, target: str) -> bool | None:
     """Does a migration published at ``migration_version`` apply when moving
     ``installed`` → ``target``?
 
@@ -44,11 +42,9 @@ def in_upgrade_window(
     if migration is None or goal is None:
         return None
     if migration > goal:
-        return False                                   # beyond this upgrade
+        return False  # beyond this upgrade
     current = parse_semver(installed)
-    if current is not None and migration <= current:
-        return False                                   # already adopted
-    return True
+    return not (current is not None and migration <= current)
 
 
 def drift_risk(old: str | None, new: str | None) -> str:

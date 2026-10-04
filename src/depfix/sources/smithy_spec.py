@@ -46,8 +46,7 @@ class SmithySpecSource(StructuredSpecSource):
 
     def version_of(self, document: dict[str, Any], sha: str) -> str:
         ops = sum(
-            1 for s in (document.get("shapes") or {}).values()
-            if _shape_type(s) == "operation"
+            1 for s in (document.get("shapes") or {}).values() if _shape_type(s) == "operation"
         )
         return f"ops-{ops}"
 

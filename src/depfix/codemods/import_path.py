@@ -21,32 +21,26 @@ class ImportPathCodemod(Codemod):
     specificity = 80
 
     # Patterns for different import styles
-    _IMPORT_FROM = re.compile(
-        r'''(from\s+['"])([\w@/-]+)(['"])''',
-        re.MULTILINE
-    )
-    _REQUIRE = re.compile(
-        r'''(require\s*\(\s*['"])([\w@/-]+)(['"]\s*\))''',
-        re.MULTILINE
-    )
-    _IMPORT_STAR = re.compile(
-        r'''(import\s+.*?\s+from\s+['"])([\w@/-]+)(['"])''',
-        re.MULTILINE
-    )
+    _IMPORT_FROM = re.compile(r"""(from\s+['"])([\w@/-]+)(['"])""", re.MULTILINE)
+    _REQUIRE = re.compile(r"""(require\s*\(\s*['"])([\w@/-]+)(['"]\s*\))""", re.MULTILINE)
+    _IMPORT_STAR = re.compile(r"""(import\s+.*?\s+from\s+['"])([\w@/-]+)(['"])""", re.MULTILINE)
 
     def claims(self, change: BreakingChange) -> bool:
         """Claim if the migration guide mentions 'import from' or 'package renamed'."""
         guide = (change.migration_guide or "").lower()
-        return any(
-            phrase in guide
-            for phrase in [
-                "import from",
-                "package renamed",
-                "moved to",
-                "import path",
-                "require(",
-            ]
-        ) and "->" in guide
+        return (
+            any(
+                phrase in guide
+                for phrase in [
+                    "import from",
+                    "package renamed",
+                    "moved to",
+                    "import path",
+                    "require(",
+                ]
+            )
+            and "->" in guide
+        )
 
     def apply(self, source: str, change: BreakingChange) -> CodemodResult:
         """Rewrite all import statements referencing the old package."""
@@ -66,7 +60,7 @@ class ImportPathCodemod(Codemod):
             if pkg == old_pkg or pkg.startswith(old_pkg + "/"):
                 changes += 1
                 # Preserve subpath if present
-                subpath = pkg[len(old_pkg):] if len(pkg) > len(old_pkg) else ""
+                subpath = pkg[len(old_pkg) :] if len(pkg) > len(old_pkg) else ""
                 return f"{prefix}{new_pkg}{subpath}{suffix}"
             return match.group(0)
 
@@ -75,9 +69,7 @@ class ImportPathCodemod(Codemod):
         modified = self._IMPORT_STAR.sub(replace_import, modified)
 
         if changes == 0:
-            return CodemodResult.decline(
-                self.id, f"no import statements found for '{old_pkg}'"
-            )
+            return CodemodResult.decline(self.id, f"no import statements found for '{old_pkg}'")
 
         return CodemodResult.rewrote(
             self.id,
@@ -94,10 +86,7 @@ class ImportPathCodemod(Codemod):
         # "old-package -> new-package"
 
         # Simple heuristic: find quoted strings around an arrow
-        import_match = re.search(
-            r'''['"](\S+)['"]\s*->\s*['"](\S+)['"]''',
-            guide
-        )
+        import_match = re.search(r"""['"](\S+)['"]\s*->\s*['"](\S+)['"]""", guide)
         if import_match:
             return import_match.group(1), import_match.group(2)
 
@@ -105,7 +94,7 @@ class ImportPathCodemod(Codemod):
         if change.package and " -> " in guide:
             parts = guide.split(" -> ", 1)
             for part in parts[1].split():
-                if re.match(r'^[@\w/-]+$', part):
+                if re.match(r"^[@\w/-]+$", part):
                     return change.package, part
 
         return "", ""

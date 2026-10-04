@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FileCoverage:
     """Coverage for one file."""
+
     relpath: str
     changed_lines: tuple[int, ...]
     covered_lines: tuple[int, ...]
@@ -55,17 +56,12 @@ class CoverageReport:
     @property
     def any_uncovered(self) -> bool:
         """True if any changed line was not executed."""
-        for f in self.files:
-            if len(f.covered_lines) < len(f.changed_lines):
-                return True
-        return False
+        return any(len(f.covered_lines) < len(f.changed_lines) for f in self.files)
 
     def summary(self) -> str:
         if not self.ran:
             return f"skipped: {self.skipped_reason}"
-        uncovered_count = sum(
-            len(f.changed_lines) - len(f.covered_lines) for f in self.files
-        )
+        uncovered_count = sum(len(f.changed_lines) - len(f.covered_lines) for f in self.files)
         if uncovered_count > 0:
             return f"test suite never executed {uncovered_count} migrated line(s)"
         return "all migrated lines were executed"
@@ -74,13 +70,14 @@ class CoverageReport:
 def changed_line_numbers(original: str, fixed: str) -> set[int]:
     """Return the line numbers in fixed that differ from original."""
     import difflib
+
     original_lines = original.splitlines(keepends=True)
     fixed_lines = fixed.splitlines(keepends=True)
 
     changed = set()
     matcher = difflib.SequenceMatcher(None, original_lines, fixed_lines)
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag in ('replace', 'insert'):
+    for tag, _i1, _i2, j1, j2 in matcher.get_opcodes():
+        if tag in ("replace", "insert"):
             # Line numbers are 1-indexed
             for line_no in range(j1 + 1, j2 + 1):
                 changed.add(line_no)
@@ -93,8 +90,8 @@ def line_start_offsets(content: str) -> dict[int, int]:
     offset = 0
     line_no = 1
     for char in content:
-        offset += len(char.encode('utf-8'))
-        if char == '\n':
+        offset += len(char.encode("utf-8"))
+        if char == "\n":
             line_no += 1
             offsets[line_no] = offset
     return offsets
@@ -172,9 +169,7 @@ def parse_v8_coverage(coverage_dir: Path, file_path: Path) -> set[int]:
     return executed
 
 
-def check_changed_lines(
-    coverage_dir: Path, root: Path, edits: list
-) -> CoverageReport:
+def check_changed_lines(coverage_dir: Path, root: Path, edits: list) -> CoverageReport:
     """Check whether changed lines were executed during the test run.
 
     Args:
@@ -201,11 +196,13 @@ def check_changed_lines(
         executed = parse_v8_coverage(coverage_dir, file_path)
         covered = tuple(sorted(executed & changed))
 
-        file_coverages.append(FileCoverage(
-            relpath=edit.relpath,
-            changed_lines=tuple(sorted(changed)),
-            covered_lines=covered,
-        ))
+        file_coverages.append(
+            FileCoverage(
+                relpath=edit.relpath,
+                changed_lines=tuple(sorted(changed)),
+                covered_lines=covered,
+            )
+        )
 
     if not file_coverages:
         return CoverageReport(ran=False, skipped_reason="no changed lines to check")

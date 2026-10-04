@@ -6,14 +6,22 @@ from depfix.scanners.report import render_scan_report
 
 def test_report_contains_dependency_and_migration_tables() -> None:
     result = RepoScanResult(
-        repo_full_name="acme/app", commit_sha="abc", files_scanned=3,
+        repo_full_name="acme/app",
+        commit_sha="abc",
+        files_scanned=3,
         dependencies=[DeclaredDependency("openai", "package.json", "5.8.2", "5.8.2", "range")],
     )
     change = BreakingChange(
-        package="openai", old_version="7.19.0", new_version="7.20.0",
-        old_api="openai@7.19.0", new_api="openai@7.20.0", description="drift",
-        migration_guide="update", kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
-        source=ClassificationSource.REGISTRY, provider_id="openai",
+        package="openai",
+        old_version="7.19.0",
+        new_version="7.20.0",
+        old_api="openai@7.19.0",
+        new_api="openai@7.20.0",
+        description="drift",
+        migration_guide="update",
+        kind=ChangeKind.DEPENDENCY_VERSION_BUMP,
+        source=ClassificationSource.REGISTRY,
+        provider_id="openai",
     )
 
     report = render_scan_report(

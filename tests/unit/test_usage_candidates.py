@@ -33,13 +33,15 @@ def _event() -> ChangeEvent:
 def test_resolver_emits_only_a_feed_proven_candidate_for_an_observed_old_symbol() -> None:
     completer = _FakeCompleter(
         json.dumps(
-            [{
-                "old_api": "openai.createChatCompletion",
-                "new_api": "openai.chat.completions.create",
-                "kind": "method_renamed",
-                "migration_guide": "Use the new client method.",
-                "evidence": "Removed openai.createChatCompletion. Use openai.chat.completions.create instead.",
-            }]
+            [
+                {
+                    "old_api": "openai.createChatCompletion",
+                    "new_api": "openai.chat.completions.create",
+                    "kind": "method_renamed",
+                    "migration_guide": "Use the new client method.",
+                    "evidence": "Removed openai.createChatCompletion. Use openai.chat.completions.create instead.",
+                }
+            ]
         )
     )
 
@@ -61,12 +63,14 @@ def test_resolver_emits_only_a_feed_proven_candidate_for_an_observed_old_symbol(
 def test_resolver_drops_a_candidate_for_a_symbol_not_observed_in_this_repo() -> None:
     completer = _FakeCompleter(
         json.dumps(
-            [{
-                "old_api": "openai.createEmbedding",
-                "new_api": "openai.embeddings.create",
-                "kind": "method_renamed",
-                "evidence": "Removed openai.createChatCompletion. Use openai.chat.completions.create instead.",
-            }]
+            [
+                {
+                    "old_api": "openai.createEmbedding",
+                    "new_api": "openai.embeddings.create",
+                    "kind": "method_renamed",
+                    "evidence": "Removed openai.createChatCompletion. Use openai.chat.completions.create instead.",
+                }
+            ]
         )
     )
 
@@ -80,12 +84,14 @@ def test_resolver_drops_a_candidate_for_a_symbol_not_observed_in_this_repo() -> 
 def test_resolver_accepts_a_feed_mapping_when_the_repo_already_uses_the_replacement() -> None:
     completer = _FakeCompleter(
         json.dumps(
-            [{
-                "old_api": "openai.createChatCompletion",
-                "new_api": "openai.chat.completions.create",
-                "kind": "method_renamed",
-                "evidence": "Removed openai.createChatCompletion. Use openai.chat.completions.create instead.",
-            }]
+            [
+                {
+                    "old_api": "openai.createChatCompletion",
+                    "new_api": "openai.chat.completions.create",
+                    "kind": "method_renamed",
+                    "evidence": "Removed openai.createChatCompletion. Use openai.chat.completions.create instead.",
+                }
+            ]
         )
     )
 

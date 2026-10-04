@@ -22,7 +22,10 @@ import re
 from pathlib import Path
 
 from depfix.scanners.language import (
-    BindingKind, ImportBinding, LanguageScanResult, SymbolUse,
+    BindingKind,
+    ImportBinding,
+    LanguageScanResult,
+    SymbolUse,
 )
 from depfix.scanners.masking import MaskingRules, mask_source
 
@@ -82,12 +85,17 @@ class ElixirScanner:
                 if self._is_sdk(module):
                     alias = m.group(2)
                     local = alias if alias else module.rsplit(".", 1)[-1]
-                    out.append(ImportBinding(
-                        package=self._canonical(module), local_name=local,
-                        filepath=relpath, line_number=i, line_content=line,
-                        kind=BindingKind.ALIASED if alias else BindingKind.DIRECT,
-                        bound_symbol=module,
-                    ))
+                    out.append(
+                        ImportBinding(
+                            package=self._canonical(module),
+                            local_name=local,
+                            filepath=relpath,
+                            line_number=i,
+                            line_content=line,
+                            kind=BindingKind.ALIASED if alias else BindingKind.DIRECT,
+                            bound_symbol=module,
+                        )
+                    )
                 continue
 
             # import / use / require Foo.Bar
@@ -96,38 +104,56 @@ class ElixirScanner:
                 module = m.group(1)
                 if self._is_sdk(module):
                     local = module.rsplit(".", 1)[-1]
-                    out.append(ImportBinding(
-                        package=self._canonical(module), local_name=local,
-                        filepath=relpath, line_number=i, line_content=line,
-                        kind=BindingKind.NAMED, bound_symbol=module,
-                    ))
+                    out.append(
+                        ImportBinding(
+                            package=self._canonical(module),
+                            local_name=local,
+                            filepath=relpath,
+                            line_number=i,
+                            line_content=line,
+                            kind=BindingKind.NAMED,
+                            bound_symbol=module,
+                        )
+                    )
         return out
 
     def _collect_uses(
-        self, masked: str, relpath: str, bindings: list[ImportBinding],
+        self,
+        masked: str,
+        relpath: str,
+        bindings: list[ImportBinding],
     ) -> list[SymbolUse]:
         names = {b.local_name for b in bindings}
         if not names:
             return []
         # Elixir: Foo.bar(args) or Foo.Bar.baz()
         pattern = re.compile(
-            r"\b(" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")((?:\.\w+)*)"
+            r"\b("
+            + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+            + r")((?:\.\w+)*)"
         )
         uses: list[SymbolUse] = []
         for i, line in enumerate(masked.splitlines(), start=1):
             if re.match(r"\s*(?:alias|import|use|require)\s", line):
                 continue
             for m in pattern.finditer(line):
-                uses.append(SymbolUse(
-                    filepath=relpath, line_number=i, column=m.start(),
-                    line_content=line, local_name=m.group(1),
-                    attribute_path=m.group(1) + m.group(2),
-                ))
+                uses.append(
+                    SymbolUse(
+                        filepath=relpath,
+                        line_number=i,
+                        column=m.start(),
+                        line_content=line,
+                        local_name=m.group(1),
+                        attribute_path=m.group(1) + m.group(2),
+                    )
+                )
         return uses
 
     def _is_sdk(self, module: str) -> bool:
         root = module.split(".", 1)[0]
-        return any(root == s or module == s or module.startswith(s + ".") for s in self._sdk_modules)
+        return any(
+            root == s or module == s or module.startswith(s + ".") for s in self._sdk_modules
+        )
 
     def _canonical(self, module: str) -> str:
         root = module.split(".", 1)[0]

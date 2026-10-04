@@ -10,7 +10,6 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from depfix.catalog import learned as learned_module
 from depfix.catalog import (
     STATUS_CANDIDATE,
     STATUS_CONFIRMED,
@@ -18,6 +17,7 @@ from depfix.catalog import (
     persist_learned_migrations,
     promote_learned_migration,
 )
+from depfix.catalog import learned as learned_module
 from depfix.config import get_settings
 from depfix.core import shortcuts
 from depfix.core.models import BreakingChange, ChangeKind, ClassificationSource
@@ -37,12 +37,20 @@ def _change(
     confidence: float = 0.75,
 ) -> BreakingChange:
     return BreakingChange(
-        package="openai", old_version=old_version, new_version=new_version,
-        old_api=old_api, new_api="openai.chat.completions.create",
-        description="moved", migration_guide="use the namespaced method",
-        kind=kind, source=source, provider_id="openai",
-        source_url="https://example.test/notes", evidence="Removed createChatCompletion",
-        confidence=confidence, call_site_hints=["openai.createChatCompletion"],
+        package="openai",
+        old_version=old_version,
+        new_version=new_version,
+        old_api=old_api,
+        new_api="openai.chat.completions.create",
+        description="moved",
+        migration_guide="use the namespaced method",
+        kind=kind,
+        source=source,
+        provider_id="openai",
+        source_url="https://example.test/notes",
+        evidence="Removed createChatCompletion",
+        confidence=confidence,
+        call_site_hints=["openai.createChatCompletion"],
     )
 
 
@@ -61,9 +69,15 @@ def test_every_change_kind_round_trips_exactly(tmp_path: Path, kind: ChangeKind)
 def test_repo_scoped_kinds_are_not_learned(tmp_path: Path, kind: ChangeKind) -> None:
     path = tmp_path / "learned.yaml"
     change = BreakingChange(
-        package="openai", old_version="1.0.0", new_version="1.1.0",
-        old_api="openai@1.0.0", new_api="openai@1.1.0", description="d",
-        migration_guide="", kind=kind, provider_id="openai",
+        package="openai",
+        old_version="1.0.0",
+        new_version="1.1.0",
+        old_api="openai@1.0.0",
+        new_api="openai@1.1.0",
+        description="d",
+        migration_guide="",
+        kind=kind,
+        provider_id="openai",
     )
     assert persist_learned_migrations(path, [change]) == 0
     assert not path.exists()
@@ -77,7 +91,8 @@ def test_migrations_in_the_same_major_range_do_not_collide(tmp_path: Path) -> No
 
     assert persist_learned_migrations(path, [first, second]) == 2
     assert {m.change.old_api for m in load_learned_migrations(path)} == {
-        "algolia.initIndex", "algolia.index.search",
+        "algolia.initIndex",
+        "algolia.index.search",
     }
 
 
@@ -90,10 +105,13 @@ def test_same_migration_is_idempotent(tmp_path: Path) -> None:
 
 def test_llm_output_is_a_candidate_and_deterministic_output_is_confirmed(tmp_path: Path) -> None:
     path = tmp_path / "learned.yaml"
-    persist_learned_migrations(path, [
-        _change(old_api="openai.a"),
-        _change(old_api="openai.b", source=ClassificationSource.SPEC_DIFF, confidence=1.0),
-    ])
+    persist_learned_migrations(
+        path,
+        [
+            _change(old_api="openai.a"),
+            _change(old_api="openai.b", source=ClassificationSource.SPEC_DIFF, confidence=1.0),
+        ],
+    )
     by_api = {m.change.old_api: m for m in load_learned_migrations(path)}
 
     assert by_api["openai.a"].status == STATUS_CANDIDATE

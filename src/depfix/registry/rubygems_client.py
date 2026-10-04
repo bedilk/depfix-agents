@@ -31,7 +31,9 @@ class RubyGemsUnavailableError(RubyGemsError):
 
 class RubyGemsClient:
     def __init__(
-        self, base_url: str | None = None, timeout: float | None = None,
+        self,
+        base_url: str | None = None,
+        timeout: float | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
         settings = get_settings()

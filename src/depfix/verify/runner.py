@@ -176,7 +176,9 @@ def run_tests(
     with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
         out_path = Path(tmp) / "results.json"
         argv = _test_argv(
-            manager, framework, out_path,
+            manager,
+            framework,
+            out_path,
             executable=str(prepared.executable) if prepared.installed else None,
             skip_reporter_args=_script_already_configures_reporter(effective_cwd, framework),
         )
@@ -227,9 +229,7 @@ def run_tests(
     )
 
 
-def _run_pytest(
-    cwd: Path, *, timeout: float, max_output_bytes: int
-) -> TestRunResult:
+def _run_pytest(cwd: Path, *, timeout: float, max_output_bytes: int) -> TestRunResult:
     """Run pytest with ``--junit-xml`` and parse the report.
 
     The venv interpreter is preferred when the checkout's ``.depfix-venv``
@@ -363,26 +363,35 @@ def _run_ruby_tests(cwd: Path, *, timeout: float, max_output_bytes: int) -> Test
         if not is_rspec:
             extra_env.update(minitest_junit_env(junit))
         result = run_sandboxed(
-            argv, cwd=cwd, timeout=timeout, extra_env=extra_env,
-            max_output_bytes=max_output_bytes, extra_allowlist=RUBY.env_allowlist_extra,
+            argv,
+            cwd=cwd,
+            timeout=timeout,
+            extra_env=extra_env,
+            max_output_bytes=max_output_bytes,
+            extra_allowlist=RUBY.env_allowlist_extra,
         )
         if result.timed_out:
             return TestRunResult(
-                framework=TestFramework.RSPEC, command=result.argv,
-                exit_code=result.exit_code, duration_ms=result.duration_ms,
-                timed_out=True, raw_output_tail=result.stdout[-2000:] + result.stderr[-2000:],
+                framework=TestFramework.RSPEC,
+                command=result.argv,
+                exit_code=result.exit_code,
+                duration_ms=result.duration_ms,
+                timed_out=True,
+                raw_output_tail=result.stdout[-2000:] + result.stderr[-2000:],
             )
         # RSpec JSON is on stdout; minitest-reporters JUnit is in the file.
         framework = TestFramework.RSPEC if is_rspec else TestFramework.MINITEST
         report_input = result.stdout
         if not is_rspec and junit.is_file():
             report_input = junit.read_text(encoding="utf-8")
-        cases, parse_error, used_fallback = parse_output(
-            framework, report_input, result.stderr
-        )
+        cases, parse_error, used_fallback = parse_output(framework, report_input, result.stderr)
     return TestRunResult(
-        framework=framework, command=result.argv, exit_code=result.exit_code,
-        duration_ms=result.duration_ms, cases=cases, parse_error=parse_error,
+        framework=framework,
+        command=result.argv,
+        exit_code=result.exit_code,
+        duration_ms=result.duration_ms,
+        cases=cases,
+        parse_error=parse_error,
         used_fallback_parser=used_fallback,
         raw_output_tail=(result.stdout[-2000:] + result.stderr[-2000:]),
     )

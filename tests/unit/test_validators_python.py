@@ -91,9 +91,7 @@ def test_ast_validation_can_be_disabled() -> None:
 def test_focused_change_is_valid() -> None:
     validator = PythonFixValidator()
     original = (
-        "import stripe\n\n\n"
-        "def charge(amount):\n"
-        "    return stripe.Charge.create(amount=amount)\n"
+        "import stripe\n\n\ndef charge(amount):\n    return stripe.Charge.create(amount=amount)\n"
     )
     fixed = (
         "import stripe\n\n\n"

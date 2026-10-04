@@ -35,7 +35,7 @@ class SourceKind(StrEnum):
     ASYNCAPI_SPEC = "asyncapi_spec"
     REDIS_COMMANDS = "redis_commands"
     TS_EXPORTS_DIFF = "ts_exports_diff"
-    SECURITY_ADVISORY = "security_advisory"   # NEW: OSV / GHSA vulnerability feed
+    SECURITY_ADVISORY = "security_advisory"  # NEW: OSV / GHSA vulnerability feed
     # Explicit opt-in local feed for deterministic end-to-end tests.
     FIXTURE_CHANGE = "fixture_change"
     RUBYGEMS_DIST_TAG = "rubygems_dist_tag"
@@ -128,12 +128,12 @@ class AdvisoryRecord:
     vulnerable function, but when they do it drives reachability filtering.
     """
 
-    advisory_id: str            # e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2026-1234"
+    advisory_id: str  # e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2026-1234"
     package: str
-    ecosystem: str              # "npm" | "pypi" | ...
+    ecosystem: str  # "npm" | "pypi" | ...
     summary: str
-    severity: str               # "critical" | "high" | "moderate" | "low"
-    vulnerable_range: str       # human-readable, e.g. ">=3.0.0 <3.4.1"
+    severity: str  # "critical" | "high" | "moderate" | "low"
+    vulnerable_range: str  # human-readable, e.g. ">=3.0.0 <3.4.1"
     fixed_version: str | None
     references: tuple[str, ...] = ()
     affected_symbols: tuple[str, ...] = ()
@@ -165,7 +165,7 @@ class ChangeEvent:
     body_url: str | None = None  # link to the release-notes page `body` came from
     severity: Severity = Severity.UNKNOWN
     spec_changes: list[SpecChange] = field(default_factory=list)
-    advisory: AdvisoryRecord | None = None   # NEW: set by the security feed
+    advisory: AdvisoryRecord | None = None  # NEW: set by the security feed
     detected_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     raw: dict[str, Any] = field(default_factory=dict)
 

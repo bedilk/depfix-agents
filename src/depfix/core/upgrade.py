@@ -1,4 +1,5 @@
 """Assemble a version-window upgrade from already-scanned feed data."""
+
 from __future__ import annotations
 
 import hashlib
@@ -30,7 +31,7 @@ class UpgradeStep:
         return {**self.__dict__, "relpaths": list(self.relpaths)}
 
     @classmethod
-    def from_dict(cls, raw: dict) -> "UpgradeStep":
+    def from_dict(cls, raw: dict) -> UpgradeStep:
         return cls(**{**raw, "relpaths": tuple(raw.get("relpaths", ()))})
 
 
@@ -49,8 +50,10 @@ class UpgradePlan:
 
     @property
     def dedupe_key(self) -> str:
-        payload = (f"upgrade|{self.provider_id}|{self.package}|"
-                   f"{self.installed_version or '?'}|{self.target_version}")
+        payload = (
+            f"upgrade|{self.provider_id}|{self.package}|"
+            f"{self.installed_version or '?'}|{self.target_version}"
+        )
         return hashlib.sha256(payload.encode()).hexdigest()
 
     @property
@@ -71,18 +74,22 @@ class UpgradePlan:
 
     @property
     def needs_draft(self) -> bool:
-        return (any(n.blocks_merge for n in self.removals)
-                or bool(self.unplaceable)
-                or (self.crosses_major and not self.has_source_work))
+        return (
+            any(n.blocks_merge for n in self.removals)
+            or bool(self.unplaceable)
+            or (self.crosses_major and not self.has_source_work)
+        )
 
     @property
     def title(self) -> str:
         span = f"{self.installed_version or '?'} → {self.target_version}"
         if not self.migrations:
             return f"depfix: upgrade {self.package} {span}"
-        return (f"depfix: upgrade {self.package} {span} "
-                f"({len(self.migrations)} API migration"
-                f"{'s' if len(self.migrations) > 1 else ''})")
+        return (
+            f"depfix: upgrade {self.package} {span} "
+            f"({len(self.migrations)} API migration"
+            f"{'s' if len(self.migrations) > 1 else ''})"
+        )
 
 
 def _installed_version(result: RepoScanResult, package: str) -> str | None:
@@ -103,25 +110,28 @@ def build_upgrade_plan(
     package: str,
     ecosystem: str,
     target_version: str | None = None,
-) -> "UpgradePlan | None":
+) -> UpgradePlan | None:
     relevant = [c for c in changes if not c.package or c.package == package]
-    drift = next(
-        (c for c in relevant if c.kind is ChangeKind.DEPENDENCY_VERSION_BUMP), None)
+    drift = next((c for c in relevant if c.kind is ChangeKind.DEPENDENCY_VERSION_BUMP), None)
 
-    installed = _installed_version(result, package) or (
-        drift.old_version if drift else None)
+    installed = _installed_version(result, package) or (drift.old_version if drift else None)
     goal = target_version or (drift.new_version if drift else None)
     if goal is None:
-        candidates = [(parse_semver(c.new_version), c.new_version)
-                      for c in relevant if c.new_version]
+        candidates = [
+            (parse_semver(c.new_version), c.new_version) for c in relevant if c.new_version
+        ]
         placed = [(v, raw) for v, raw in candidates if v is not None]
         goal = max(placed)[1] if placed else None
     if goal is None or parse_semver(goal) is None:
         return None
 
     plan = UpgradePlan(
-        provider_id=provider_id, package=package, ecosystem=ecosystem,
-        installed_version=installed, target_version=goal, drift_change=drift,
+        provider_id=provider_id,
+        package=package,
+        ecosystem=ecosystem,
+        installed_version=installed,
+        target_version=goal,
+        drift_change=drift,
     )
 
     for change in relevant:
@@ -134,7 +144,8 @@ def build_upgrade_plan(
             plan.unplaceable.append(change)
             plan.notes.append(
                 f"cannot place {change.old_api} (version {change.new_version!r}) "
-                f"in the {installed or '?'} → {goal} window; excluded from this upgrade")
+                f"in the {installed or '?'} → {goal} window; excluded from this upgrade"
+            )
             continue
         if not placed:
             continue
@@ -145,8 +156,8 @@ def build_upgrade_plan(
             plan.notes.append(f"{change.old_api}: already migrated in this repo")
 
     plan.removals = collect_removal_notices(
-        result, relevant, provider_id=provider_id, package=package,
-        target_version=goal)
+        result, relevant, provider_id=provider_id, package=package, target_version=goal
+    )
 
     if plan.installed_version == goal and not plan.migrations:
         return None

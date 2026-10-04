@@ -43,8 +43,13 @@ class CostLedger:
     tokens_by_stage: dict[str, int] = field(default_factory=dict)
 
     def record(
-        self, stage: CostStage, usd: float, *, calls: int = 1,
-        input_tokens: int = 0, output_tokens: int = 0,
+        self,
+        stage: CostStage,
+        usd: float,
+        *,
+        calls: int = 1,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> None:
         self.by_stage[stage.value] = self.by_stage.get(stage.value, 0.0) + max(0.0, usd)
         self.call_count[stage.value] = self.call_count.get(stage.value, 0) + calls
@@ -85,12 +90,12 @@ class CostLedger:
             diff = usd - snapshot.by_stage.get(stage, 0.0)
             if diff > 0:
                 delta.by_stage[stage] = diff
-                delta.call_count[stage] = (
-                    self.call_count.get(stage, 0) - snapshot.call_count.get(stage, 0)
+                delta.call_count[stage] = self.call_count.get(stage, 0) - snapshot.call_count.get(
+                    stage, 0
                 )
-                delta.tokens_by_stage[stage] = (
-                    self.tokens_by_stage.get(stage, 0) - snapshot.tokens_by_stage.get(stage, 0)
-                )
+                delta.tokens_by_stage[stage] = self.tokens_by_stage.get(
+                    stage, 0
+                ) - snapshot.tokens_by_stage.get(stage, 0)
         return delta
 
     def summary(self) -> str:

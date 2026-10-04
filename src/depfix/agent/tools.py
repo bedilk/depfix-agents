@@ -29,7 +29,9 @@ class ToolResult:
 class FixToolset:
     """Read-only tools bound to precisely one disposable checkout."""
 
-    def __init__(self, checkout: Checkout, *, scanner: CallSiteScanner, max_file_bytes: int) -> None:
+    def __init__(
+        self, checkout: Checkout, *, scanner: CallSiteScanner, max_file_bytes: int
+    ) -> None:
         self._root = checkout.path.resolve()
         self._scanner = scanner
         self._max_file_bytes = max_file_bytes
@@ -58,9 +60,7 @@ class FixToolset:
 
     def find_usages(self, symbol: str) -> ToolResult:
         self.call_log.append(("find_usages", symbol))
-        result = self._scanner.scan(
-            self._root, ScanTarget(provider_id="", symbols=(symbol,))
-        )
+        result = self._scanner.scan(self._root, ScanTarget(provider_id="", symbols=(symbol,)))
         if not result.call_sites:
             return ToolResult(ok=True, content=f"no usages of {symbol!r} found")
         lines = [

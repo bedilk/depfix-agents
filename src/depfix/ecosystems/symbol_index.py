@@ -14,7 +14,6 @@ Two immediate wins, both free:
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import logging
@@ -25,7 +24,7 @@ from pathlib import Path
 
 import httpx
 
-from depfix.registry.client import NpmRegistryClient, RegistryError
+from depfix.registry.client import NpmRegistryClient
 
 logger = logging.getLogger(__name__)
 
@@ -151,12 +150,14 @@ def _load_cached(path: Path) -> SymbolIndex | None:
 def _save_cached(path: Path, index: SymbolIndex) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps({
-            "package": index.package,
-            "version": index.version,
-            "symbols": sorted(index.symbols),
-            "roots": sorted(index.roots),
-        }),
+        json.dumps(
+            {
+                "package": index.package,
+                "version": index.version,
+                "symbols": sorted(index.symbols),
+                "roots": sorted(index.roots),
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -215,7 +216,12 @@ def build_index(
     try:
         response = http.get(url)
         if response.status_code != 200 or len(response.content) > _MAX_TARBALL_BYTES:
-            logger.debug("symbol_index: fetch failed for %s@%s (status=%s)", package, version, response.status_code)
+            logger.debug(
+                "symbol_index: fetch failed for %s@%s (status=%s)",
+                package,
+                version,
+                response.status_code,
+            )
             return None
     except httpx.HTTPError as exc:
         logger.debug("symbol_index: fetch error for %s@%s: %s", package, version, exc)

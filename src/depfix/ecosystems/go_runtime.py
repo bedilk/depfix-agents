@@ -47,7 +47,7 @@ def install_argv(root: str | Path) -> list[str] | None:
 
 def has_test_setup(root: str | Path) -> bool:
     """Whether any ``*_test.go`` exists outside a vendored tree."""
-    for dirpath, dirnames, filenames in os.walk(Path(root), followlinks=False):
+    for _dirpath, dirnames, filenames in os.walk(Path(root), followlinks=False):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
         if any(name.endswith("_test.go") for name in filenames):
             return True

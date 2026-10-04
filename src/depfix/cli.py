@@ -31,6 +31,7 @@ assumed for backwards compatibility with the Day 1-2 CLI.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import logging
@@ -134,7 +135,17 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 _RUN_COMMANDS = {
-    "run", "watch", "classify", "eval", "scan", "repos", "init", "plan", "apply", "status", "pr"
+    "run",
+    "watch",
+    "classify",
+    "eval",
+    "scan",
+    "repos",
+    "init",
+    "plan",
+    "apply",
+    "status",
+    "pr",
 }
 _TOP_LEVEL_FLAGS = {"-h", "--help", "--log-level", "--log-format"}
 
@@ -197,7 +208,9 @@ def _scan_location(args: argparse.Namespace) -> tuple[str | None, str | None]:
     return local_path, remote_repo
 
 
-def _scan_provider(providers: list[ProviderSpec], provider_id: str | None, package: str | None) -> ProviderSpec | None:
+def _scan_provider(
+    providers: list[ProviderSpec], provider_id: str | None, package: str | None
+) -> ProviderSpec | None:
     """Resolve a scan provider by configured id or SDK package name."""
     if provider_id is not None:
         return next((provider for provider in providers if provider.id == provider_id), None)
@@ -211,7 +224,10 @@ def _scan_provider(providers: list[ProviderSpec], provider_id: str | None, packa
 
 
 def _load_pipeline_changes(
-    args: argparse.Namespace, settings: Settings, *, limit: int,
+    args: argparse.Namespace,
+    settings: Settings,
+    *,
+    limit: int,
     repo_full_names: list[str] | None = None,
 ) -> list[BreakingChange]:
     """Resolve the breaking changes a `pipeline` run should consider.
@@ -249,15 +265,21 @@ def _load_pipeline_changes(
             from depfix.core.models import ChangeKind
             from depfix.storage import ChangeEventRow
 
-            repo_keys = [hashlib.sha256(repo.encode("utf-8")).hexdigest()[:12] for repo in repo_full_names]
-            repo_drift = or_(*[
-                ChangeEventRow.feed_key.like(f"%:repo:{repo_key}:installed:%")
-                for repo_key in repo_keys
-            ])
-            stmt = stmt.join(ChangeEventRow).where(or_(
-                BreakingChangeRow.kind != ChangeKind.DEPENDENCY_VERSION_BUMP.value,
-                repo_drift,
-            ))
+            repo_keys = [
+                hashlib.sha256(repo.encode("utf-8")).hexdigest()[:12] for repo in repo_full_names
+            ]
+            repo_drift = or_(
+                *[
+                    ChangeEventRow.feed_key.like(f"%:repo:{repo_key}:installed:%")
+                    for repo_key in repo_keys
+                ]
+            )
+            stmt = stmt.join(ChangeEventRow).where(
+                or_(
+                    BreakingChangeRow.kind != ChangeKind.DEPENDENCY_VERSION_BUMP.value,
+                    repo_drift,
+                )
+            )
         stmt = stmt.order_by(order)
         # Pre-cap only when no specific repos are named. When repos are named
         # the orchestrator filters by scan-match relevance before capping, so
@@ -366,9 +388,7 @@ def _build_fixer(settings):
     )
 
 
-def _build_scan_coordinator(
-    settings: "Settings", ledger: "CostLedger"
-) -> "object | None":
+def _build_scan_coordinator(settings: Settings, ledger: CostLedger) -> object | None:
     """Build a ScanCoordinator sharing the caller's CostLedger.
 
     The ledger is passed in, never created here — it must be the SAME
@@ -390,7 +410,6 @@ def _build_scan_coordinator(
             )
         return None
     # Import lazily so the module is not loaded when strategy=deterministic.
-    from depfix.agent.scan_agent import ScanAgent
     from depfix.classify.llm import CostTrackingCompleter
     from depfix.obs.cost import CostStage
 
@@ -550,8 +569,11 @@ _CONFIDENCE_STYLE = {
 }
 
 _SEVERITY_COLOR = {
-    ChangeSeverity.CRITICAL: "red bold", ChangeSeverity.HIGH: "red",
-    ChangeSeverity.MEDIUM: "yellow", ChangeSeverity.LOW: "dim", ChangeSeverity.NONE: "dim",
+    ChangeSeverity.CRITICAL: "red bold",
+    ChangeSeverity.HIGH: "red",
+    ChangeSeverity.MEDIUM: "yellow",
+    ChangeSeverity.LOW: "dim",
+    ChangeSeverity.NONE: "dim",
 }
 
 
@@ -585,7 +607,9 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
     )
     if result.severity is not None:
         evidence = result.severity_evidence.value if result.severity_evidence else "unknown"
-        console.print(f"[dim]severity:[/dim] {_severity_style(result.severity)} [dim](predicted, {evidence})[/dim]")
+        console.print(
+            f"[dim]severity:[/dim] {_severity_style(result.severity)} [dim](predicted, {evidence})[/dim]"
+        )
 
     if result.manifest_matches:
         console.print("[bold]Manifest matches:[/bold]")
@@ -721,12 +745,18 @@ def _write_scan_report(
 
 
 def _record_scan_detections(
-    settings: Settings, *, repo_full_name: str, provider_id: str,
-    result: RepoScanResult, assessments: list[ScanChangeAssessment],
+    settings: Settings,
+    *,
+    repo_full_name: str,
+    provider_id: str,
+    result: RepoScanResult,
+    assessments: list[ScanChangeAssessment],
 ) -> None:
     from depfix.catalog import learned_migrations_file
     from depfix.catalog.detections import (
-        build_detections, build_anchor_detection, record_repository_detections,
+        build_anchor_detection,
+        build_detections,
+        record_repository_detections,
     )
 
     path = learned_migrations_file(settings)
@@ -743,7 +773,9 @@ def _record_scan_detections(
 
     try:
         count = record_repository_detections(
-            path, repo_full_name=repo_full_name, provider_id=provider_id,
+            path,
+            repo_full_name=repo_full_name,
+            provider_id=provider_id,
             detections=detections,
         )
     except (OSError, yaml.YAMLError) as exc:
@@ -761,23 +793,33 @@ def _record_scan_detections(
         )
 
 
-def _record_planned_detection(settings: Settings, artifact: PlanArtifact, artifact_path: Path) -> None:
+def _record_planned_detection(
+    settings: Settings, artifact: PlanArtifact, artifact_path: Path
+) -> None:
     from depfix.catalog import learned_migrations_file
     from depfix.catalog.detections import (
-        STATUS_PLANNED, STATUS_REPORT_ONLY, mark_detection_planned, mark_detection_status,
+        STATUS_PLANNED,
+        STATUS_REPORT_ONLY,
+        mark_detection_planned,
+        mark_detection_status,
     )
 
     path = learned_migrations_file(settings)
     try:
         mark_detection_planned(
-            path, repo_full_name=artifact.repo_full_name, change=artifact.change,
-            commit_sha=artifact.base_sha, artifact_path=str(artifact_path),
+            path,
+            repo_full_name=artifact.repo_full_name,
+            change=artifact.change,
+            commit_sha=artifact.base_sha,
+            artifact_path=str(artifact_path),
             files=[e.relpath for e in artifact.edits],
         )
         members = [k for k in artifact.member_dedupe_keys if k != artifact.change_dedupe_key]
         if members:
             mark_detection_status(
-                path, repo_full_name=artifact.repo_full_name, dedupe_keys=members,
+                path,
+                repo_full_name=artifact.repo_full_name,
+                dedupe_keys=members,
                 status=STATUS_PLANNED if artifact.edits else STATUS_REPORT_ONLY,
                 plan_artifact=str(artifact_path),
             )
@@ -794,9 +836,11 @@ def _record_applied_detections(settings: Settings, outcome: OrchestratorOutcome)
         for change in repo.changes:
             if change.pr_url:
                 mark_detection_status(
-                    path, repo_full_name=repo.repo_full_name,
+                    path,
+                    repo_full_name=repo.repo_full_name,
                     dedupe_keys=change.member_dedupe_keys or (change.dedupe_key,),
-                    status=STATUS_PR_OPENED, pr_url=change.pr_url,
+                    status=STATUS_PR_OPENED,
+                    pr_url=change.pr_url,
                 )
 
 
@@ -838,20 +882,28 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
         for change in acted:
             if change.upgrade is not None:
                 plan = change.upgrade
-                verb = ("would upgrade" if change.planned and change.attempt_status in {
-                    AttemptStatus.PR_OPENED, AttemptStatus.FIXED_NO_PR} else _outcome_text(change))
+                verb = (
+                    "would upgrade"
+                    if change.planned
+                    and change.attempt_status
+                    in {AttemptStatus.PR_OPENED, AttemptStatus.FIXED_NO_PR}
+                    else _outcome_text(change)
+                )
                 console.print(
                     f"    {plan.package} {plan.installed_version or '?'} → {plan.target_version}: "
                     f"{verb} [{len(plan.migrations)} migration(s), "
                     f"{len(change.member_dedupe_keys)} change(s)]"
-                    f"{change.pr_url or (f' -- {change.detail}' if change.detail else '')}")
+                    f"{change.pr_url or (f' -- {change.detail}' if change.detail else '')}"
+                )
                 continue
             # A dry-run predicts the *actual* terminal outcome. Do not hide
             # "no kept edits" or "no call sites" behind a vague success-like
             # message merely because no state was written.
             verb = (
                 "would process"
-                if change.planned and change.attempt_status in {
+                if change.planned
+                and change.attempt_status
+                in {
                     AttemptStatus.PR_OPENED,
                     AttemptStatus.FIXED_NO_PR,
                 }
@@ -864,7 +916,9 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
                 else ""
             )
             source = f" [dim](scan: {change.scan_source})[/dim]" if change.scan_source else ""
-            console.print(f"    {change.package} {change.old_api}: {verb}{suppressed}{suffix}{source}")
+            console.print(
+                f"    {change.package} {change.old_api}: {verb}{suppressed}{suffix}{source}"
+            )
     console.print(
         f"\n{outcome.prs_opened} PR(s), {outcome.changes_failed} failed change(s), "
         f"${outcome.total_cost_usd:.4f} spent"
@@ -910,7 +964,8 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     try:
         with SourceDeps.from_settings() as deps:
             outcome = Watcher(
-                deps=deps, dry_run=args.dry_run,
+                deps=deps,
+                dry_run=args.dry_run,
                 ttl_seconds=0 if args.refresh else None,
             ).run_once(providers)
     except Exception as e:
@@ -1002,14 +1057,14 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     if getattr(args, "anyversion", False):
         settings.drift_scope = "any"
-        from depfix.defaults import load_local_defaults, _path
         import yaml as _yaml
+
+        from depfix.defaults import _path, load_local_defaults
+
         _local = load_local_defaults()
         _local["drift_scope"] = "any"
-        try:
+        with contextlib.suppress(OSError):
             _path().write_text(_yaml.safe_dump(_local, sort_keys=True), encoding="utf-8")
-        except OSError:
-            pass
 
     ledger = CostLedger()
     _scan_coordinator = _build_scan_coordinator(settings, ledger)
@@ -1035,7 +1090,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if provider is None:
         known = ", ".join(sorted(p.id for p in providers))
         selector = args.provider or args.package
-        console.print(f"[red]Error: unknown provider/package {selector!r} (known providers: {known})[/red]")
+        console.print(
+            f"[red]Error: unknown provider/package {selector!r} (known providers: {known})[/red]"
+        )
         return 2
 
     try:
@@ -1062,7 +1119,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             provider_changes = all_changes_for_provider(provider.id)
             change, _change_id = latest_change_for_provider(provider.id)
         except Exception as exc:  # detection must not prevent a broad provider scan
-            console.print(f"[yellow]Change detection failed ({exc}); scanning all provider symbols[/yellow]")
+            console.print(
+                f"[yellow]Change detection failed ({exc}); scanning all provider symbols[/yellow]"
+            )
         else:
             if change is not None:
                 console.print(
@@ -1099,19 +1158,18 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
             judge = LLMCallSiteJudge(
                 CostTrackingCompleter(completer, ledger, CostStage.CALL_SITE_JUDGE),
-                max_candidates=settings.scan_llm_judge_max_candidates
+                max_candidates=settings.scan_llm_judge_max_candidates,
             )
 
     _print_header()
     light, heavy = _resolve_light_model(settings)
     if light != heavy:
-        console.print(
-            f"[dim]Model tiers — scan/classify: {light}  fix/generate: {heavy}[/dim]"
-        )
+        console.print(f"[dim]Model tiers — scan/classify: {light}  fix/generate: {heavy}[/dim]")
     console.print(
         f"[dim]Looking for {len(target.feed_symbols)} feed-derived symbol(s) "
-        "(old APIs + replacements)[/dim]" if target.feed_symbols else
-        "[dim]No feed change names an API symbol yet; recording SDK usage only[/dim]"
+        "(old APIs + replacements)[/dim]"
+        if target.feed_symbols
+        else "[dim]No feed change names an API symbol yet; recording SDK usage only[/dim]"
     )
 
     owner = name = ""
@@ -1121,8 +1179,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         if local_path:
             repo_full_name = str(Path(local_path).resolve())
             result = scan_path(
-                local_path, target, repo_full_name=repo_full_name, scanner=scanner,
-                change=scan_change, judge=judge,
+                local_path,
+                target,
+                repo_full_name=repo_full_name,
+                scanner=scanner,
+                change=scan_change,
+                judge=judge,
                 prepare_package_manager_runtime=settings.scan_prepare_package_manager,
                 package_manager_timeout=settings.package_manager_install_timeout,
                 strategy=_scan_strategy,
@@ -1151,6 +1213,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             _per_repo_max_mb: int | None = None
             try:
                 from depfix.repoconfig.loader import parse_repo_config
+
                 _config_text = gh_auth.get_file_contents(owner, name, settings.repo_config_filename)
                 if _config_text:
                     _per_repo_max_mb = parse_repo_config(_config_text).max_repo_mb
@@ -1199,9 +1262,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         for sdk in provider.sdk_packages:
             package_ecosystems[sdk.name] = (*package_ecosystems.get(sdk.name, ()), sdk.ecosystem)
         github_repos = {
-            str(feed.config.get("package") or feed.config.get("gem")): str(feed.config["github_repo"])
+            str(feed.config.get("package") or feed.config.get("gem")): str(
+                feed.config["github_repo"]
+            )
             for feed in provider.feeds
-            if feed.config.get("github_repo") and (feed.config.get("package") or feed.config.get("gem"))
+            if feed.config.get("github_repo")
+            and (feed.config.get("package") or feed.config.get("gem"))
         }
         drift_completer = _build_completer(settings)
         if drift_completer is not None:
@@ -1242,8 +1308,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 # making the security decision depend on a read-after-write.
                 changes_to_assess = list(
                     {
-                        change.dedupe_key: change
-                        for change in [*provider_changes, *discovered]
+                        change.dedupe_key: change for change in [*provider_changes, *discovered]
                     }.values()
                 )
                 console.print(
@@ -1264,15 +1329,14 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 f"{preparation.package_manager}{version} ({source})"
             )
         else:
-            console.print(
-                f"[yellow]Package manager unavailable:[/yellow] {preparation.detail}"
-            )
-    assessments = assess_scan_changes(
-        result, changes_to_assess, provider_id=provider.id
-    )
+            console.print(f"[yellow]Package manager unavailable:[/yellow] {preparation.detail}")
+    assessments = assess_scan_changes(result, changes_to_assess, provider_id=provider.id)
     _record_scan_detections(
-        settings, repo_full_name=repo_full_name, provider_id=provider.id,
-        result=result, assessments=assessments,
+        settings,
+        repo_full_name=repo_full_name,
+        provider_id=provider.id,
+        result=result,
+        assessments=assessments,
     )
     _print_scan_assessments(assessments)
     _print_dependency_drift_summary(result, assessments)
@@ -1361,8 +1425,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             )
         else:
             console.print(
-                f"[dim]Reusable by:[/dim] depfix plan {repo_full_name} "
-                f"--provider {provider.id}"
+                f"[dim]Reusable by:[/dim] depfix plan {repo_full_name} --provider {provider.id}"
             )
         console.print()
     else:
@@ -1483,7 +1546,9 @@ def _open_pr_for_fix(
 ) -> PullRequest | None:
     """Push the shared fix-service's committable edits to a PR."""
     if not args.repo:
-        console.print("[yellow]Skipping --open-pr: only supported with --repo, not --path.[/yellow]")
+        console.print(
+            "[yellow]Skipping --open-pr: only supported with --repo, not --path.[/yellow]"
+        )
         return None
     if not edits:
         console.print("[yellow]Skipping --open-pr: no committable edits.[/yellow]")
@@ -1656,12 +1721,17 @@ def _cmd_fix(args: argparse.Namespace) -> int:
         scan_result = scan_checkout(
             checkout, target, repo_full_name=repo_full_name, scanner=scanner
         )
-        if not scan_result.actionable_sites and breaking.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP:
+        if (
+            not scan_result.actionable_sites
+            and breaking.kind is not ChangeKind.DEPENDENCY_VERSION_BUMP
+        ):
             console.print("[yellow]No actionable call sites found for this change.[/yellow]")
             return 0
 
-        max_retries = 0 if args.no_retry else (
-            args.max_retries if args.max_retries is not None else settings.retry_max_rounds
+        max_retries = (
+            0
+            if args.no_retry
+            else (args.max_retries if args.max_retries is not None else settings.retry_max_rounds)
         )
         repo_config = RepoConfig(version=SUPPORTED_VERSION, verify=not args.no_verify)
 
@@ -1845,6 +1915,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         args.force = True
     settings = get_settings()
     from depfix.defaults import fill_pipeline_context, load_local_defaults
+
     fill_pipeline_context(args, load_local_defaults())
     _apply_model_overrides(args, settings)
 
@@ -1913,9 +1984,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
             args,
             settings,
             limit=(
-                args.limit
-                if args.limit is not None
-                else settings.pipeline_default_change_limit
+                args.limit if args.limit is not None else settings.pipeline_default_change_limit
             ),
             repo_full_names=repo_full_names if (args.repos or args.repo) else None,
         )
@@ -1947,9 +2016,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 for change in provider_changes[:5]:
                     console.print(f"[dim]  {change.old_api} → {change.new_api}[/dim]")
                 if len(provider_changes) > 5:
-                    console.print(
-                        f"[dim]  ... and {len(provider_changes) - 5} more[/dim]"
-                    )
+                    console.print(f"[dim]  ... and {len(provider_changes) - 5} more[/dim]")
     # `apply <repo>` may obtain its one change from the repo's canonical
     # plan artifact, so do not reject an empty database/change-file result
     # until plan discovery has had a chance to run.
@@ -1967,7 +2034,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
             console.print(f"[red]Error loading plan artifact: {exc}[/red]")
             gh_auth.close()
             return 2
-    elif args.command == "apply" and len(repo_full_names) == 1 and not (args.from_event or args.change_file):
+    elif (
+        args.command == "apply"
+        and len(repo_full_names) == 1
+        and not (args.from_event or args.change_file)
+    ):
         discovered = PlanArtifact.plans_for_repo(repo_full_names[0], directory=settings.plan_dir)
         if not discovered:
             console.print(
@@ -1991,7 +2062,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         for artifact in discovered:
             plan_artifacts[(artifact.repo_full_name, artifact.change_dedupe_key)] = artifact
         changes = [artifact.change for artifact in discovered]
-        console.print(f"[dim]Applying {len(discovered)} reviewed plan(s) for {repo_full_names[0]}[/dim]")
+        console.print(
+            f"[dim]Applying {len(discovered)} reviewed plan(s) for {repo_full_names[0]}[/dim]"
+        )
 
     if resolved_artifact is not None:
         if args.command != "apply":
@@ -2013,9 +2086,9 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 f"artifact applies change {resolved_artifact.change_dedupe_key[:12]}.[/yellow]"
             )
         changes = [resolved_artifact.change]
-        plan_artifacts[
-            (resolved_artifact.repo_full_name, resolved_artifact.change_dedupe_key)
-        ] = resolved_artifact
+        plan_artifacts[(resolved_artifact.repo_full_name, resolved_artifact.change_dedupe_key)] = (
+            resolved_artifact
+        )
 
     if not changes:
         console.print("[yellow]No breaking changes to process.[/yellow]")
@@ -2043,8 +2116,18 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         max_repo_mb=settings.clone_max_repo_mb,
     )
 
-    mode = "plan" if args.command == "plan" else (
-        "no-pr" if args.no_pr else "force" if args.force else "apply" if args.command == "apply" else "live"
+    mode = (
+        "plan"
+        if args.command == "plan"
+        else (
+            "no-pr"
+            if args.no_pr
+            else "force"
+            if args.force
+            else "apply"
+            if args.command == "apply"
+            else "live"
+        )
     )
     _print_header()
     console.print(
@@ -2066,7 +2149,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         no_pr=args.no_pr,
         use_lock=not args.no_lock and not args.dry_run and settings.pipeline_require_lock,
         max_duration_seconds=(
-            (args.max_duration if args.max_duration is not None else settings.pipeline_max_duration_minutes)
+            (
+                args.max_duration
+                if args.max_duration is not None
+                else settings.pipeline_max_duration_minutes
+            )
             * 60.0
             if (args.max_duration is not None or settings.pipeline_max_duration_minutes is not None)
             else None
@@ -2075,7 +2162,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         plan_artifacts=plan_artifacts,
         completer=_build_completer(settings),
         agent_coordinator=_pipeline_coordinator,  # NEW — shared with ledger
-        ledger=_pipeline_ledger,                   # NEW — shared ledger
+        ledger=_pipeline_ledger,  # NEW — shared ledger
     )
 
     try:
@@ -2101,10 +2188,12 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 archived = change.plan_artifact.write_to_archive(settings.plan_dir)
                 _record_planned_detection(settings, change.plan_artifact, canonical)
                 if change.plan_artifact.is_upgrade:
-                    console.print(f"[green]Upgrade plan:[/green] {canonical}  "
-                                  f"[dim]{change.plan_artifact.upgrade_package} "
-                                  f"{change.plan_artifact.upgrade_from or '?'} → "
-                                  f"{change.plan_artifact.upgrade_to}[/dim]")
+                    console.print(
+                        f"[green]Upgrade plan:[/green] {canonical}  "
+                        f"[dim]{change.plan_artifact.upgrade_package} "
+                        f"{change.plan_artifact.upgrade_from or '?'} → "
+                        f"{change.plan_artifact.upgrade_to}[/dim]"
+                    )
                 elif change.plan_artifact.is_drift:
                     art = change.plan_artifact
                     color = "red" if art.drift_risk == "multi-major" else "yellow"
@@ -2119,13 +2208,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 console.print(f"[dim]Archived to:[/dim] {archived}")
                 if args.plan_output_dir != Path(settings.plan_dir).as_posix():
                     stamped = legacy_dir / (
-                        f"{outcome.run_id}-"
-                        f"{change.plan_artifact.change_dedupe_key[:12]}.json"
+                        f"{outcome.run_id}-{change.plan_artifact.change_dedupe_key[:12]}.json"
                     )
                     change.plan_artifact.write(stamped)
                 console.print(
-                    f"[dim]Apply with:[/dim] "
-                    f"[bold]{change.plan_artifact.apply_command()}[/bold]"
+                    f"[dim]Apply with:[/dim] [bold]{change.plan_artifact.apply_command()}[/bold]"
                 )
         rollup = outcome.rollup()
         if rollup.prs_planned:
@@ -2139,8 +2226,12 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 )
             else:
                 cost_note = ""
-            console.print(f"\n[bold]{rollup.prs_planned} PR(s) planned[/bold]  [dim]cost:[/dim] ${rollup.total_cost_usd:.4f}{cost_note}")
-            for severity, count in sorted(rollup.by_severity.items(), key=lambda item: item[0].rank, reverse=True):
+            console.print(
+                f"\n[bold]{rollup.prs_planned} PR(s) planned[/bold]  [dim]cost:[/dim] ${rollup.total_cost_usd:.4f}{cost_note}"
+            )
+            for severity, count in sorted(
+                rollup.by_severity.items(), key=lambda item: item[0].rank, reverse=True
+            ):
                 console.print(f"  {_severity_style(severity)}: {count}")
         else:
             console.print("\n[dim]No PRs planned this run.[/dim]")
@@ -2148,7 +2239,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     if outcome.cost_ledger is not None and outcome.cost_ledger.by_stage:
         console.print(f"[bold]LLM spend this run:[/bold] {outcome.cost_ledger.summary()}")
     elif outcome.cost_ledger is not None:
-        console.print(f"[dim]No LLM calls this run.  TTS: 0 tokens[/dim]")
+        console.print("[dim]No LLM calls this run.  TTS: 0 tokens[/dim]")
     if outcome.stopped_early:
         console.print("[yellow]Run stopped early: budget (time or cost) exhausted.[/yellow]")
     if not outcome.locked:
@@ -2159,8 +2250,13 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
 
     if not outcome.failures and outcome.locked and getattr(args, "_depfix_has_target", False):
         from depfix.defaults import save_context
-        save_context(repos=repo_full_names, provider=args.provider, from_event=args.from_event,
-                     change_file=args.change_file)
+
+        save_context(
+            repos=repo_full_names,
+            provider=args.provider,
+            from_event=args.from_event,
+            change_file=args.change_file,
+        )
 
     return 1 if outcome.failures else 0
 
@@ -2199,8 +2295,7 @@ def _print_eval_report(report: EvalReport) -> None:
         console.print(f"  {status} {case.case_id}{cost_str}: {case.detail}")
 
     console.print(
-        f"\n[dim]{report.summary_line}[/dim]  "
-        f"[dim]cost:[/dim] ${report.total_cost:.4f}\n"
+        f"\n[dim]{report.summary_line}[/dim]  [dim]cost:[/dim] ${report.total_cost:.4f}\n"
     )
     skipped_categories = sorted({case.category.value for case in report.skipped_cases})
     if skipped_categories:
@@ -2297,9 +2392,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="depfix",
         description="Fix breaking dependency changes with AI",
     )
-    p.add_argument(
-        "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default=None
-    )
+    p.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default=None)
     p.add_argument("--log-format", choices=["text", "json"], default=None)
     sub = p.add_subparsers(dest="command")
 
@@ -2385,7 +2478,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=None, help="Classify at most this many events"
     )
     classify_p.add_argument(
-        "--output-dir", default="output/changes",
+        "--output-dir",
+        default="output/changes",
         help="Write one generated JSON artifact per created breaking change",
     )
     classify_p.add_argument(
@@ -2438,7 +2532,9 @@ def build_parser() -> argparse.ArgumentParser:
     status_p.add_argument("--status", default=None, help="Filter by attempt status")
     status_p.add_argument("--limit", type=int, default=50)
     status_p.add_argument("-v", "--verbose", action="store_true")
-    status_p.add_argument("--reconcile", action="store_true", help="Cross-reference open depfix PRs on GitHub")
+    status_p.add_argument(
+        "--reconcile", action="store_true", help="Cross-reference open depfix PRs on GitHub"
+    )
     _add_command_logging_arguments(status_p)
 
     # -- scan -------------------------------------------------------------------
@@ -2587,11 +2683,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="breaking_change row id to include (repeatable)",
     )
     workflow_p.add_argument(
-        "--plan-file", default=None, metavar="PATH",
+        "--plan-file",
+        default=None,
+        metavar="PATH",
         help="For apply: consume this immutable plan artifact instead of calling the LLM again.",
     )
     workflow_p.add_argument(
-        "--plan-output-dir", default="output/plans",
+        "--plan-output-dir",
+        default="output/plans",
         help="For plan: directory for verified immutable plan artifacts.",
     )
     workflow_p.add_argument(
@@ -2681,7 +2780,9 @@ def build_parser() -> argparse.ArgumentParser:
         "actually processed.",
     )
     workflow_p.add_argument(
-        "--reuse-scan", choices=["auto", "require", "never"], default=None,
+        "--reuse-scan",
+        choices=["auto", "require", "never"],
+        default=None,
         help="Where call sites come from. 'require' refuses to rescan, so a plan "
         "can only reflect a `depfix scan` you reviewed.",
     )
@@ -2707,7 +2808,9 @@ def build_parser() -> argparse.ArgumentParser:
         "init", help="Initialize the local database and run preflight diagnostics"
     )
     init_p.add_argument("--providers-file", default=None, help="Path to providers.yaml")
-    init_p.add_argument("--offline", action="store_true", help="Skip GitHub App and LLM network checks")
+    init_p.add_argument(
+        "--offline", action="store_true", help="Skip GitHub App and LLM network checks"
+    )
     init_p.add_argument(
         "--keep-state",
         action="store_true",
@@ -2865,16 +2968,23 @@ def _cmd_status(args: argparse.Namespace) -> int:
             if errors:
                 console.print("\n[bold]Recent failure details:[/bold]")
                 for row in errors:
-                    console.print(f"\n[cyan]{row.repo_id}[/cyan] · [dim]{row.dedupe_key[:12]}[/dim]")
+                    console.print(
+                        f"\n[cyan]{row.repo_id}[/cyan] · [dim]{row.dedupe_key[:12]}[/dim]"
+                    )
                     console.print(f"  {row.last_error}")
         _print_merge_rate(session, args.repo)
     return 0
 
 
 _STATUS_STYLE_MAP = {
-    "pr_opened": "green", "fixed_no_pr": "cyan", "no_call_sites": "dim",
+    "pr_opened": "green",
+    "fixed_no_pr": "cyan",
+    "no_call_sites": "dim",
     "version_not_affected": "dim",
-    "report_only": "yellow", "no_kept_edits": "yellow", "failed": "red", "ignored": "dim",
+    "report_only": "yellow",
+    "no_kept_edits": "yellow",
+    "failed": "red",
+    "ignored": "dim",
 }
 
 
@@ -2904,9 +3014,9 @@ def _reconcile_open_prs(gh_auth, repo_filter: list[str] | None) -> dict[str, dic
         reconcile_open_prs(session, gh_auth, repos)
 
         rows = session.scalars(
-            select(PullRequestRow).join(PullRequestRow.fix_run).where(
-                FixRunRow.repo_id.in_(repos), PullRequestRow.state == "open"
-            )
+            select(PullRequestRow)
+            .join(PullRequestRow.fix_run)
+            .where(FixRunRow.repo_id.in_(repos), PullRequestRow.state == "open")
         ).all()
         for row in rows:
             result.setdefault(row.fix_run.repo_id, {})[row.fix_run.dedupe_key[:12]] = "open"
@@ -2915,7 +3025,10 @@ def _reconcile_open_prs(gh_auth, repo_filter: list[str] | None) -> dict[str, dic
 
 def _print_merge_rate(session, repo_filter: list[str] | None) -> None:
     from depfix.storage.schema import FixRunRow, PullRequestRow
-    statement = select(PullRequestRow).join(PullRequestRow.fix_run).where(PullRequestRow.state != "open")
+
+    statement = (
+        select(PullRequestRow).join(PullRequestRow.fix_run).where(PullRequestRow.state != "open")
+    )
     if repo_filter:
         statement = statement.where(FixRunRow.repo_id.in_(repo_filter))
     rows = session.scalars(statement).all()
@@ -2924,14 +3037,20 @@ def _print_merge_rate(session, repo_filter: list[str] | None) -> None:
     merged = sum(row.merged for row in rows)
     total = len(rows)
     rate = merged / total
-    color = "green" if rate >= .7 else "yellow" if rate >= .3 else "red"
-    console.print(f"\n[bold]Merge rate:[/bold] [{color}]{rate:.0%}[/{color}] "
-                  f"([dim]{merged} merged / {total} resolved; {total - merged} closed unmerged[/dim])")
+    color = "green" if rate >= 0.7 else "yellow" if rate >= 0.3 else "red"
+    console.print(
+        f"\n[bold]Merge rate:[/bold] [{color}]{rate:.0%}[/{color}] "
+        f"([dim]{merged} merged / {total} resolved; {total - merged} closed unmerged[/dim])"
+    )
 
 
 def _github_cell(ledger_status: str, github_state: str | None) -> tuple[str, bool]:
     if ledger_status == "pr_opened":
-        return ("[green]open[/green]", False) if github_state == "open" else ("[yellow]closed/merged[/yellow]", True)
+        return (
+            ("[green]open[/green]", False)
+            if github_state == "open"
+            else ("[yellow]closed/merged[/yellow]", True)
+        )
     if github_state == "open":
         return "[red]open (stale)[/red]", True
     return "[dim]—[/dim]", False
@@ -2991,6 +3110,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = get_settings()
     from depfix.defaults import apply_defaults_to_settings, load_local_defaults
+
     apply_defaults_to_settings(settings, load_local_defaults())
     log_level = getattr(args, "log_level", None) or settings.log_level
     # Human-readable in a developer's terminal, JSON lines everywhere else

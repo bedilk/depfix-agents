@@ -30,13 +30,13 @@ __all__ = [
 ]
 
 
-def repository_observations_file(settings: "Settings | None" = None) -> str:
+def repository_observations_file(settings: Settings | None = None) -> str:
     from depfix.config import get_settings
 
     return (settings or get_settings()).repository_observations_file
 
 
-def learned_migrations_file(settings: "Settings | None" = None) -> str:
+def learned_migrations_file(settings: Settings | None = None) -> str:
     """Local, gitignored store for migrations learned from feeds/LLM."""
     from depfix.config import get_settings
 

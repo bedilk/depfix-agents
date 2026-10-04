@@ -16,7 +16,6 @@ the same way).
 from __future__ import annotations
 
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
@@ -91,8 +90,8 @@ class _FakeFixer:
 
 def _correct_rewrite(content: str) -> str:
     return content.replace(
-        "response = client.create_moderation(text)\n    return response[\"results\"][0][\"flagged\"]",
-        "response = client.moderations.create(text)\n    return response[\"flagged\"]",
+        'response = client.create_moderation(text)\n    return response["results"][0]["flagged"]',
+        'response = client.moderations.create(text)\n    return response["flagged"]',
     )
 
 
@@ -107,9 +106,7 @@ def _run_pipeline(tmp_path: Path, rewrite) -> tuple[Path, object]:
     scan_result = _scan_result(root)
     editor = WorkspaceEditor(Checkout(path=root, is_temporary=False))
     verifier = Verifier(editor, install_timeout=180.0, test_timeout=120.0, ecosystem="python")
-    pipeline = FixPipeline(
-        _FakeFixer(rewrite), validator=PythonFixValidator(), verifier=verifier
-    )
+    pipeline = FixPipeline(_FakeFixer(rewrite), validator=PythonFixValidator(), verifier=verifier)
     result = pipeline.run(scan_result, _breaking_change(), editor)
     return root, result
 

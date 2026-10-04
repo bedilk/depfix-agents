@@ -412,8 +412,7 @@ class CallSiteScanner:
             return
 
         matched_package = next(
-            (pkg for pkg in target.sdk_packages
-             if spec == pkg or spec.startswith(pkg + "/")),
+            (pkg for pkg in target.sdk_packages if spec == pkg or spec.startswith(pkg + "/")),
             None,
         )
         if matched_package is None:
@@ -479,21 +478,27 @@ class CallSiteScanner:
             new_path = ".".join(p for p in (base.path, accessor) if p)
             # Allow dotted factory callees (storage.bucket) even when base
             # isn't a bare SDK import, as long as it's a known provider binding.
-            if not accessor and not base.is_bare_symbol and base.kind is not CallSiteKind.SDK_IMPORT:
+            if (
+                not accessor
+                and not base.is_bare_symbol
+                and base.kind is not CallSiteKind.SDK_IMPORT
+            ):
                 continue
-            facts.direct_bindings.setdefault(assigned_name, _Binding(
-                kind=CallSiteKind.CLIENT_CONSTRUCTION,
-                confidence=base.confidence,
-                provider_id=base.provider_id,
-                hops=base.hops,
-                evidence=(
-                    f"derived from {callee}(...)" if accessor
-                    else f"factory call on {head}"
+            facts.direct_bindings.setdefault(
+                assigned_name,
+                _Binding(
+                    kind=CallSiteKind.CLIENT_CONSTRUCTION,
+                    confidence=base.confidence,
+                    provider_id=base.provider_id,
+                    hops=base.hops,
+                    evidence=(
+                        f"derived from {callee}(...)" if accessor else f"factory call on {head}"
+                    ),
+                    is_bare_symbol=False,
+                    path=new_path,
+                    chain_depth=base.chain_depth + (1 if accessor else 0),
                 ),
-                is_bare_symbol=False,
-                path=new_path,
-                chain_depth=base.chain_depth + (1 if accessor else 0),
-            ))
+            )
 
     def _collect_exports(self, facts: _FileFacts, source: str) -> None:
         for match in _EXPORT_DEFAULT_NAME_RE.finditer(source):
@@ -680,14 +685,14 @@ class CallSiteScanner:
 
     def _walk_inline_chain(
         self,
-        facts: "_FileFacts",
+        facts: _FileFacts,
         source: str,
-        match: "re.Match[str]",
-        binding: "_Binding",
+        match: re.Match[str],
+        binding: _Binding,
         accumulated_member: str,
-        target: "ScanTarget",
-        sites: "list[CallSite]",
-        symbol_wanted: "Callable[[str], bool]",
+        target: ScanTarget,
+        sites: list[CallSite],
+        symbol_wanted: Callable[[str], bool],
     ) -> None:
         """Walk ``recv.method1(...).method2(...)`` chains inline.
 
@@ -706,7 +711,7 @@ class CallSiteScanner:
             close = matching_paren(source, open_paren)
             if close < 0:
                 return
-            tail = source[close + 1:]
+            tail = source[close + 1 :]
             follow = re.match(r"\s*\.\s*(\w+(?:\s*\.\s*\w+)*)\s*\(", tail)
             if follow is None:
                 return

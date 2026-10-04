@@ -11,10 +11,10 @@ from depfix.verify.confidence import ConfidenceTier
 from depfix.verify.contract import ContractReport
 from depfix.verify.coverage import CoverageReport, changed_line_numbers, check_changed_lines
 from depfix.verify.manager import InstallResult, detect_package_manager, install_dependencies
-from depfix.verify.selection import select_test_files
-from depfix.verify.static_check import StaticCheckResult, run_static_check
 from depfix.verify.models import TestCase, TestFramework, TestRunResult, TestStatus
 from depfix.verify.runner import detect_framework, has_test_script, run_tests
+from depfix.verify.selection import select_test_files
+from depfix.verify.static_check import StaticCheckResult, run_static_check
 from depfix.verify.typecheck import (
     Diagnostic,
     TypecheckResult,

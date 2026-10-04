@@ -7,11 +7,18 @@ from depfix.scanners.models import CallSite, MatchConfidence
 from depfix.severity import EvidenceKind, Severity, cap_severity
 
 _REMOVAL_KINDS = frozenset(
-    {ChangeKind.METHOD_REMOVED, ChangeKind.PARAM_REMOVED, ChangeKind.FIELD_REMOVED, ChangeKind.ENUM_VALUE_REMOVED}
+    {
+        ChangeKind.METHOD_REMOVED,
+        ChangeKind.PARAM_REMOVED,
+        ChangeKind.FIELD_REMOVED,
+        ChangeKind.ENUM_VALUE_REMOVED,
+    }
 )
 
 
-def severity_from_scan(change: BreakingChange, call_sites: list[CallSite]) -> tuple[Severity, EvidenceKind]:
+def severity_from_scan(
+    change: BreakingChange, call_sites: list[CallSite]
+) -> tuple[Severity, EvidenceKind]:
     actionable = [site for site in call_sites if site.is_actionable]
     if not actionable:
         return Severity.NONE, EvidenceKind.NONE

@@ -114,11 +114,13 @@ def persist_classification(
     # multiple fixture_change feeds covering overlapping version ranges).
     candidate_keys = [c.dedupe_key for c in outcome.changes if c.dedupe_key not in existing]
     if candidate_keys:
-        existing |= set(session.scalars(
-            select(BreakingChangeRow.dedupe_key).where(
-                BreakingChangeRow.dedupe_key.in_(candidate_keys)
+        existing |= set(
+            session.scalars(
+                select(BreakingChangeRow.dedupe_key).where(
+                    BreakingChangeRow.dedupe_key.in_(candidate_keys)
+                )
             )
-        ))
+        )
     created: list[BreakingChangeRow] = []
     for change in outcome.changes:
         if change.dedupe_key in existing:

@@ -225,9 +225,7 @@ def test_two_repos_can_each_have_their_own_attempt_for_the_same_change(
 def test_touch_no_call_sites_creates_a_row_without_consuming_attempt_budget(
     db_session: Session,
 ) -> None:
-    row = touch_no_call_sites(
-        db_session, repo_id="acme/widgets", dedupe_key="dk", ref_sha="sha-1"
-    )
+    row = touch_no_call_sites(db_session, repo_id="acme/widgets", dedupe_key="dk", ref_sha="sha-1")
     db_session.commit()
 
     assert row.status == AttemptStatus.NO_CALL_SITES.value

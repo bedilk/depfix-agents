@@ -24,10 +24,10 @@ Design contract, in order of importance:
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
-import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -35,7 +35,7 @@ from typing import Any
 
 from depfix.agent.scan_tools import ScanToolset, ToolResult
 from depfix.classify.llm import LLMCompleter
-from depfix.core.models import BreakingChange, LLMCall
+from depfix.core.models import LLMCall
 from depfix.obs.cost import CostLedger, CostStage
 from depfix.providers.models import ProviderSpec
 from depfix.scanners.models import (
@@ -122,7 +122,9 @@ class ScanAgent:
         # Only METHOD_CALL, BARE_SYMBOL, and WRAPPER_IMPORT sites qualify for
         # the judge loop. ANCHOR, RAW_HTTP, and API_VERSION_PIN sites are not
         # judgeable — a raw-HTTP grep alone must never trigger the judge loop.
-        _JUDGEABLE = frozenset({CallSiteKind.METHOD_CALL, CallSiteKind.BARE_SYMBOL, CallSiteKind.WRAPPER_IMPORT})
+        _JUDGEABLE = frozenset(
+            {CallSiteKind.METHOD_CALL, CallSiteKind.BARE_SYMBOL, CallSiteKind.WRAPPER_IMPORT}
+        )
         high_medium = [s for s in baseline.call_sites if s.is_actionable]
         low_sites = [s for s in baseline.call_sites if not s.is_actionable and s.kind in _JUDGEABLE]
         needs_judge = bool(low_sites)
@@ -132,7 +134,9 @@ class ScanAgent:
             logger.info(
                 "%s/%s: deterministic found %d actionable site(s), no ambiguity "
                 "— skipping agent augmentation ($0 spent)",
-                repo_full_name, provider.id, len(high_medium),
+                repo_full_name,
+                provider.id,
+                len(high_medium),
             )
             return baseline
 
@@ -140,8 +144,7 @@ class ScanAgent:
         # Non-judgeable non-actionable sites (RAW_HTTP, API_VERSION_PIN, …) are
         # preserved unchanged and appended after judging.
         non_judgeable_low = [
-            s for s in baseline.call_sites
-            if not s.is_actionable and s.kind not in _JUDGEABLE
+            s for s in baseline.call_sites if not s.is_actionable and s.kind not in _JUDGEABLE
         ]
 
         if needs_judge and low_sites:
@@ -161,6 +164,7 @@ class ScanAgent:
                     augmented.append(site)
 
         from depfix.scanners.models import dedupe_call_sites
+
         return dataclasses.replace(baseline, call_sites=dedupe_call_sites(augmented))
 
     def _find_raw_http_sites(
@@ -189,17 +193,19 @@ class ScanAgent:
                     line_number = int(lineno_str)
                 except ValueError:
                     continue
-                sites.append(CallSite(
-                    filepath=filepath,
-                    line_number=line_number,
-                    column=0,
-                    line_content=parts[2].strip(),
-                    kind=CallSiteKind.RAW_HTTP,
-                    confidence=MatchConfidence.LOW,
-                    symbol=f"raw_http:{host}",
-                    provider_id=provider.id,
-                    evidence=f"raw HTTP call to {host}",
-                ))
+                sites.append(
+                    CallSite(
+                        filepath=filepath,
+                        line_number=line_number,
+                        column=0,
+                        line_content=parts[2].strip(),
+                        kind=CallSiteKind.RAW_HTTP,
+                        confidence=MatchConfidence.LOW,
+                        symbol=f"raw_http:{host}",
+                        provider_id=provider.id,
+                        evidence=f"raw HTTP call to {host}",
+                    )
+                )
         return sites
 
     def scan_repo(
@@ -229,7 +235,8 @@ class ScanAgent:
         raw_mapping = parsed.get("api_mapping")
         if isinstance(raw_mapping, list):
             transcript.api_mapping = [
-                m for m in raw_mapping
+                m
+                for m in raw_mapping
                 if isinstance(m, dict) and m.get("old_symbol") and m.get("new_symbol")
             ]
 
@@ -273,12 +280,16 @@ class ScanAgent:
 
             tool = parsed.get("tool")
             if not isinstance(tool, str):
-                context.append("The previous response was invalid. Return either a tool "
-                               "request or the final JSON result.")
+                context.append(
+                    "The previous response was invalid. Return either a tool "
+                    "request or the final JSON result."
+                )
                 continue
 
             result = self._dispatch_tool(toolset, tool, parsed.get("arguments", {}))
-            transcript.tool_calls.append((tool, json.dumps(parsed.get("arguments", {}), sort_keys=True), result.ok))
+            transcript.tool_calls.append(
+                (tool, json.dumps(parsed.get("arguments", {}), sort_keys=True), result.ok)
+            )
             context.append(f"TOOL {tool} RESULT (ok={result.ok}):\n{result.content}")
 
             if _is_stalling(transcript):
@@ -376,7 +387,9 @@ class ScanAgent:
         skills["shared"] = shared.read_text(encoding="utf-8") if shared.is_file() else ""
 
         provider_skill = self._skills_dir / _PROVIDER_SKILL_TEMPLATE.format(provider_id=provider_id)
-        skills["provider"] = provider_skill.read_text(encoding="utf-8") if provider_skill.is_file() else ""
+        skills["provider"] = (
+            provider_skill.read_text(encoding="utf-8") if provider_skill.is_file() else ""
+        )
 
         if checkout_root is not None:
             repo_skill = checkout_root / _REPO_SKILL_NAME
@@ -414,9 +427,13 @@ class ScanAgent:
             if not filepath or line_number <= 0:
                 continue
             # Verify the line exists and contains what the agent claims.
-            verified = toolset.verify_line(filepath, line_number, str(entry.get("line_content") or ""))
+            verified = toolset.verify_line(
+                filepath, line_number, str(entry.get("line_content") or "")
+            )
             if not verified:
-                logger.info("agent claimed unverifiable site %s:%d — dropping", filepath, line_number)
+                logger.info(
+                    "agent claimed unverifiable site %s:%d — dropping", filepath, line_number
+                )
                 continue
             call_sites.append(
                 CallSite(
@@ -437,6 +454,7 @@ class ScanAgent:
             if not isinstance(entry, dict):
                 continue
             from depfix.scanners.models import DeclaredDependency
+
             dependencies.append(
                 DeclaredDependency(
                     package=str(entry.get("package") or ""),
@@ -518,11 +536,9 @@ def _repo_scan_prompt(
 ) -> str:
     sdk_packages = [pkg.name for pkg in provider.sdk_packages]
     npm_packages = [pkg.name for pkg in provider.sdk_packages if pkg.ecosystem == "npm"]
-    github_repos = list({
-        f.config["github_repo"]
-        for f in provider.feeds
-        if f.config.get("github_repo")
-    })
+    github_repos = list(
+        {f.config["github_repo"] for f in provider.feeds if f.config.get("github_repo")}
+    )
     return f"""You are the depfix scan agent. Your job has TWO parts:
 
 PART 1 — Discover the CURRENT (new) API surface from the provider's feeds.
@@ -540,16 +556,16 @@ You never make arbitrary network calls; only the registered tools are allowed.
 - Pre-classified feed symbols (may be empty on a fresh DB): {list(target.feed_symbols)}
 
 ## Shared instructions (AGENT.md)
-{skills['shared']}
+{skills["shared"]}
 
 ## Provider-specific instructions
-{skills['provider'] or '(none — use general SDK conventions for this ecosystem)'}
+{skills["provider"] or "(none — use general SDK conventions for this ecosystem)"}
 
 ## Repository-specific overrides (.depfix/SCAN.md)
-{skills['repo'] or '(none)'}
+{skills["repo"] or "(none)"}
 
 ## Available tools
-{_tool_manifest(mode='repo')}
+{_tool_manifest(mode="repo")}
 
 ## Workflow
 
@@ -622,9 +638,7 @@ old→new reference that the fix pipeline will use to rewrite the code.
 """
 
 
-def _feed_poll_prompt(
-    provider: ProviderSpec, skills: dict[str, str], toolset: ScanToolset
-) -> str:
+def _feed_poll_prompt(provider: ProviderSpec, skills: dict[str, str], toolset: ScanToolset) -> str:
     return f"""You are the depfix feed agent. Your job: check {provider.name}'s
 configured feeds for changes since the last recorded cursor, and report
 any new events.
@@ -637,13 +651,13 @@ state through a small set of tools.
 - Feeds: {[str(feed.kind.value) for feed in provider.feeds]}
 
 ## Shared instructions (AGENT.md)
-{skills['shared']}
+{skills["shared"]}
 
 ## Provider-specific instructions
-{skills['provider'] or '(none)'}
+{skills["provider"] or "(none)"}
 
 ## Available tools
-{_tool_manifest(mode='feed')}
+{_tool_manifest(mode="feed")}
 
 ## How to respond
 Each turn, return exactly ONE JSON object:
@@ -692,30 +706,30 @@ Return your next JSON turn.
 
 def _tool_manifest(*, mode: str) -> str:
     common = [
-        '- read_file(relpath): read a repository-relative file.',
-        '- list_dir(relpath, depth=1): list contents of a directory.',
-        '- grep(pattern, relpath, max_results=50): regex search across source files.',
-        '- find_files(pattern, max_results=50): glob for files by name.',
+        "- read_file(relpath): read a repository-relative file.",
+        "- list_dir(relpath, depth=1): list contents of a directory.",
+        "- grep(pattern, relpath, max_results=50): regex search across source files.",
+        "- find_files(pattern, max_results=50): glob for files by name.",
     ]
     repo_only = [
-        '- read_manifest(relpath): parse a package.json/pyproject.toml/etc.',
-        '- resolve_installed_version(package): read the lockfile-resolved version.',
+        "- read_manifest(relpath): parse a package.json/pyproject.toml/etc.",
+        "- resolve_installed_version(package): read the lockfile-resolved version.",
         # Feed tools are also available in repo mode so the agent can fetch the
         # current API surface and derive old→new mappings in one pass.
         '- poll_npm(package, dist_tag="latest"): fetch npm registry metadata and recent versions.',
-        '- poll_pypi(package): fetch PyPI metadata.',
-        '- poll_github_releases(repo): fetch newest GitHub release notes (migration guides live here).',
-        '- fetch_url(url, max_bytes=200000): fetch a bounded URL (changelog, docs page).',
-        '- record_call_site_anchor(symbol, filepath, line_number, line_content): '
-        'verify the line exists, then stage it as a discovered old-API call site. '
-        'Call this for EVERY confirmed old-API usage found in the repo.',
+        "- poll_pypi(package): fetch PyPI metadata.",
+        "- poll_github_releases(repo): fetch newest GitHub release notes (migration guides live here).",
+        "- fetch_url(url, max_bytes=200000): fetch a bounded URL (changelog, docs page).",
+        "- record_call_site_anchor(symbol, filepath, line_number, line_content): "
+        "verify the line exists, then stage it as a discovered old-API call site. "
+        "Call this for EVERY confirmed old-API usage found in the repo.",
     ]
     feed_only = [
         '- poll_npm(package, dist_tag="latest"): fetch npm registry info.',
-        '- poll_pypi(package): fetch PyPI JSON.',
-        '- poll_github_releases(repo): fetch newest GitHub releases.',
-        '- fetch_openapi_spec(url): fetch and hash a spec.',
-        '- fetch_url(url, max_bytes=200000): fetch a bounded URL for release notes.',
+        "- poll_pypi(package): fetch PyPI JSON.",
+        "- poll_github_releases(repo): fetch newest GitHub releases.",
+        "- fetch_openapi_spec(url): fetch and hash a spec.",
+        "- fetch_url(url, max_bytes=200000): fetch a bounded URL for release notes.",
     ]
     tools = common + (repo_only if mode == "repo" else feed_only)
     return "\n".join(tools)
@@ -727,10 +741,7 @@ def _tool_manifest(*, mode: str) -> str:
 def _has_raw_http_anchors(provider: ProviderSpec, target: ScanTarget) -> bool:
     """pg is a wire protocol (no HTTP) so this returns False for it.
     OpenAI, Stripe etc. have api.openai.com/api.stripe.com declared."""
-    return bool(
-        getattr(target, "api_base_urls", ()) or
-        getattr(provider, "api_base_urls", ())
-    )
+    return bool(getattr(target, "api_base_urls", ()) or getattr(provider, "api_base_urls", ()))
 
 
 @dataclass
@@ -889,9 +900,7 @@ class _JudgeToolAgent:
         return response.text, call
 
 
-_TOOLS_READONLY_MANIFEST = (
-    "Available tools: read_file(relpath), grep(pattern, relpath)"
-)
+_TOOLS_READONLY_MANIFEST = "Available tools: read_file(relpath), grep(pattern, relpath)"
 
 _JUDGE_PROMPT = """You are the depfix CallSiteJudgeAgent. The deterministic scanner found
 these LOW-confidence potential {provider_id} call sites but could not
@@ -936,6 +945,7 @@ def _parse_json_response(text: str) -> dict[str, Any]:
         parsed = json.loads(stripped)
     except json.JSONDecodeError:
         import re
+
         match = re.search(r"\{.*\}", stripped, re.DOTALL)
         if match is None:
             return {}

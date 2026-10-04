@@ -150,7 +150,9 @@ def upgrade() -> None:
         "repo_scan",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column(
-            "repo_id", sa.String(length=255), sa.ForeignKey("repo.id", ondelete="CASCADE"),
+            "repo_id",
+            sa.String(length=255),
+            sa.ForeignKey("repo.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("commit_sha", sa.String(length=64), nullable=False),
@@ -190,7 +192,9 @@ def upgrade() -> None:
         "fix_run",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column(
-            "repo_id", sa.String(length=255), sa.ForeignKey("repo.id", ondelete="CASCADE"),
+            "repo_id",
+            sa.String(length=255),
+            sa.ForeignKey("repo.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(
@@ -221,7 +225,9 @@ def upgrade() -> None:
         "file_fix",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column(
-            "fix_run_id", sa.Integer(), sa.ForeignKey("fix_run.id", ondelete="CASCADE"),
+            "fix_run_id",
+            sa.Integer(),
+            sa.ForeignKey("fix_run.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("relpath", sa.Text(), nullable=False),
@@ -238,7 +244,9 @@ def upgrade() -> None:
         "test_run",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column(
-            "fix_run_id", sa.Integer(), sa.ForeignKey("fix_run.id", ondelete="CASCADE"),
+            "fix_run_id",
+            sa.Integer(),
+            sa.ForeignKey("fix_run.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("phase", sa.String(length=16), nullable=False),

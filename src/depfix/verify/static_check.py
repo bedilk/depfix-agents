@@ -62,12 +62,14 @@ def _parse_diagnostics(
         for match in pattern.finditer(output)
     )
 
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class StaticDiagnostic:
     """One static check diagnostic."""
+
     relpath: str
     line: int
     message: str
@@ -158,9 +160,7 @@ def _check_python(root: Path, timeout: float, max_output_bytes: int) -> StaticCh
     if shutil.which("pyright") is not None:
         return _run_pyright(root, timeout, max_output_bytes)
 
-    return StaticCheckResult(
-        skipped_reason="neither mypy nor pyright found on PATH"
-    )
+    return StaticCheckResult(skipped_reason="neither mypy nor pyright found on PATH")
 
 
 def _run_mypy(root: Path, timeout: float, max_output_bytes: int) -> StaticCheckResult:
@@ -201,7 +201,10 @@ def _check_go(root: Path, timeout: float, max_output_bytes: int) -> StaticCheckR
 
     argv = ["go", "vet", "./..."]
     result = run_sandboxed(
-        argv, cwd=root, timeout=timeout, max_output_bytes=max_output_bytes,
+        argv,
+        cwd=root,
+        timeout=timeout,
+        max_output_bytes=max_output_bytes,
         extra_allowlist=GO.env_allowlist_extra,
     )
     output = result.stdout + "\n" + result.stderr

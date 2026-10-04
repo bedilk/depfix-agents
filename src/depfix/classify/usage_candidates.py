@@ -68,7 +68,7 @@ def _event_touches_observed(event: ChangeEvent, observed: list[str]) -> bool:
     substring search). The prose search is a pre-filter only — it can false-
     positive, but the LLM prompt's _candidate_from_item evidence guard catches
     those. What we're preventing is the sentry-style complete miss: 477 v11
-    events × 6 v6 symbols that share nothing.
+    events x 6 v6 symbols that share nothing.
     """
     corpus_symbols: set[str] = set()
     for change in event.spec_changes:
@@ -81,9 +81,7 @@ def _event_touches_observed(event: ChangeEvent, observed: list[str]) -> bool:
 
     # Structural match: any observed symbol plausibly related to any spec symbol.
     if corpus_symbols and any(
-        _plausibly_related(obs, cand)
-        for obs in observed
-        for cand in corpus_symbols
+        _plausibly_related(obs, cand) for obs in observed for cand in corpus_symbols
     ):
         return True
 
@@ -191,7 +189,8 @@ def discover_usage_candidates(
         if not _event_touches_observed(event, observed):
             logger.debug(
                 "skipping event %s for %s: no shared leaf/resource with observed symbols",
-                row.id, provider_id,
+                row.id,
+                provider_id,
             )
             skipped += 1
             continue
@@ -209,7 +208,9 @@ def discover_usage_candidates(
     if skipped:
         logger.debug(
             "pre-filter skipped %d/%d event(s) for %s (no leaf/resource overlap)",
-            skipped, skipped + len(discovered), provider_id,
+            skipped,
+            skipped + len(discovered),
+            provider_id,
         )
     return discovered
 

@@ -151,14 +151,14 @@ def test_repo_shipped_providers_file_is_valid() -> None:
         "discord",
         "mongodb",
         "redis",
-            "posthog",
-            "algolia",
-            "google-cloud",
-            "elasticsearch",
-            "postgresql",
-            "kafka",
-            "rabbitmq",
-        } <= ids
+        "posthog",
+        "algolia",
+        "google-cloud",
+        "elasticsearch",
+        "postgresql",
+        "kafka",
+        "rabbitmq",
+    } <= ids
     assert len([provider for provider in providers if provider.enabled]) == 25
 
 
@@ -176,4 +176,3 @@ def test_call_site_anchors_are_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ProviderConfigError, match="call_site_anchors"):
         load_providers_file(path)
-

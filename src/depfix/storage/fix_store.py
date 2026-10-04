@@ -66,8 +66,12 @@ def record_fix_run(
         total_usages_fixed=result.total_usages_fixed,
         total_cost=result.total_cost,
         cost_classify=cost_ledger.by_stage.get("classify", 0.0) if cost_ledger else 0.0,
-        cost_characterization=cost_ledger.by_stage.get("characterization", 0.0) if cost_ledger else 0.0,
-        cost_call_site_judge=cost_ledger.by_stage.get("call_site_judge", 0.0) if cost_ledger else 0.0,
+        cost_characterization=cost_ledger.by_stage.get("characterization", 0.0)
+        if cost_ledger
+        else 0.0,
+        cost_call_site_judge=cost_ledger.by_stage.get("call_site_judge", 0.0)
+        if cost_ledger
+        else 0.0,
         total_tokens=result.total_tokens,
         duration_ms=result.duration_ms,
         verified=result.verification is not None and result.verification.ran,

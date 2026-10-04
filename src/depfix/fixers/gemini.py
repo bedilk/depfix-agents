@@ -89,7 +89,9 @@ class FixGenerator:
         if redaction.redacted:
             logger.info(
                 "Redacted %d secret value(s) in %s before sending to %s",
-                redaction.redacted_count, file_usage.filepath, self.model,
+                redaction.redacted_count,
+                file_usage.filepath,
+                self.model,
             )
         prompt = self._build_prompt(safe_usage, breaking_change, feedback=safe_feedback)
 
@@ -145,7 +147,10 @@ class FixGenerator:
 
                 logger.info(
                     "Generated fix for %s (tokens: %d+%d, cost: $%.4f)",
-                    file_usage.filepath, input_tokens, output_tokens, cost,
+                    file_usage.filepath,
+                    input_tokens,
+                    output_tokens,
+                    cost,
                 )
 
                 return fixed_code, confidence, llm_call
@@ -189,7 +194,9 @@ class FixGenerator:
 
         feedback_section = ""
         if feedback:
-            feedback_section = f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
+            feedback_section = (
+                f"\n\nPREVIOUS ATTEMPT FAILED:\n{feedback}\nFix the issue above in this attempt."
+            )
 
         prompt = f"""You are a senior developer performing a code migration for a breaking API change.
 
