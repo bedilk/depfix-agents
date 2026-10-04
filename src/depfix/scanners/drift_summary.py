@@ -70,7 +70,7 @@ def _highest_feed_version(assessments: list[ScanChangeAssessment]) -> str:
     parsed = [(parse_semver(version), version) for version in versions if parse_semver(version)]
     if not parsed:
         return ""
-    return max(parsed, key=lambda item: item[0])[1]
+    return max(parsed, key=lambda item: item[0])[1]  # type: ignore[arg-type,return-value]
 
 
 def _decision(

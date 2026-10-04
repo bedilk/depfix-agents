@@ -84,7 +84,7 @@ class BedrockFixGenerator:
                 )
                 duration_ms = int((time.time() - start) * 1000)
 
-                raw_text = message.content[0].text if message.content else ""
+                raw_text = message.content[0].text if message.content else ""  # type: ignore[union-attr]
                 fixed_code = redaction.restore(self._extract_code(raw_text))
 
                 input_tokens = message.usage.input_tokens

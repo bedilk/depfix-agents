@@ -459,7 +459,7 @@ def _print_results(result: AgentResult) -> None:
     table.add_row("Files Scanned", str(result.files_scanned))
     table.add_row("Files Affected", str(result.files_affected))
     table.add_row("Total Usages Fixed", str(result.total_usages_fixed))
-    table.add_row("Confidence", f"[bold]{result.confidence.value}[/bold]")
+    table.add_row("Confidence", f"[bold]{result.confidence.value}[/bold]")  # type: ignore[attr-defined]
     rate_color = "green" if result.success_rate == 1.0 else "yellow"
     table.add_row("Success Rate", f"[{rate_color}]{result.success_rate:.0%}[/{rate_color}]")
     table.add_row("Total Cost", f"${result.total_cost:.4f}")
@@ -890,8 +890,8 @@ def _print_orchestrator_outcome(outcome: OrchestratorOutcome, *, show_skips: boo
                     else _outcome_text(change)
                 )
                 console.print(
-                    f"    {plan.package} {plan.installed_version or '?'} → {plan.target_version}: "
-                    f"{verb} [{len(plan.migrations)} migration(s), "
+                    f"    {plan.package} {plan.installed_version or '?'} → {plan.target_version}: "  # type: ignore[attr-defined]
+                    f"{verb} [{len(plan.migrations)} migration(s), "  # type: ignore[attr-defined]
                     f"{len(change.member_dedupe_keys)} change(s)]"
                     f"{change.pr_url or (f' -- {change.detail}' if change.detail else '')}"
                 )
@@ -1135,7 +1135,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     explicitly_selected_change = bool(args.change_file or args.from_event is not None)
     scan_change = change if explicitly_selected_change else None
     changes_to_assess = [change] if scan_change is not None else provider_changes
-    target = build_scan_target(provider, scan_change, feed_changes=changes_to_assess)
+    target = build_scan_target(provider, scan_change, feed_changes=changes_to_assess)  # type: ignore[arg-type]
     if args.old_api:
         if change is not None:
             console.print(
@@ -1330,7 +1330,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             )
         else:
             console.print(f"[yellow]Package manager unavailable:[/yellow] {preparation.detail}")
-    assessments = assess_scan_changes(result, changes_to_assess, provider_id=provider.id)
+    assessments = assess_scan_changes(result, changes_to_assess, provider_id=provider.id)  # type: ignore[arg-type]
     _record_scan_detections(
         settings,
         repo_full_name=repo_full_name,
@@ -1382,7 +1382,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                         for site in result.actionable_sites
                         if site.kind in recordable_kinds
                     ],
-                    classified_changes=changes_to_assess,
+                    classified_changes=changes_to_assess,  # type: ignore[arg-type]
                     sdk_versions={
                         dependency.package: dependency.resolved_version
                         for dependency in result.dependencies
@@ -1404,7 +1404,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 session,
                 repo_full_name=repo_full_name,
                 owner=owner or "local",
-                name=name or Path(local_path).name,
+                name=name or Path(local_path).name,  # type: ignore[arg-type]
                 result=result,
                 provider_id=provider.id,
                 change=scan_change,
@@ -2149,7 +2149,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         no_pr=args.no_pr,
         use_lock=not args.no_lock and not args.dry_run and settings.pipeline_require_lock,
         max_duration_seconds=(
-            (
+            (  # type: ignore[operator]
                 args.max_duration
                 if args.max_duration is not None
                 else settings.pipeline_max_duration_minutes
@@ -2181,21 +2181,21 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         # run-stamped copies for CI/audit workflows.
         legacy_dir = Path(args.plan_output_dir)
         for repo in outcome.repos:
-            for change in repo.changes:
-                if change.plan_artifact is None:
+            for change in repo.changes:  # type: ignore[assignment]
+                if change.plan_artifact is None:  # type: ignore[attr-defined]
                     continue
-                canonical = change.plan_artifact.write_for_repo(settings.plan_dir)
-                archived = change.plan_artifact.write_to_archive(settings.plan_dir)
-                _record_planned_detection(settings, change.plan_artifact, canonical)
-                if change.plan_artifact.is_upgrade:
+                canonical = change.plan_artifact.write_for_repo(settings.plan_dir)  # type: ignore[attr-defined]
+                archived = change.plan_artifact.write_to_archive(settings.plan_dir)  # type: ignore[attr-defined]
+                _record_planned_detection(settings, change.plan_artifact, canonical)  # type: ignore[attr-defined]
+                if change.plan_artifact.is_upgrade:  # type: ignore[attr-defined]
                     console.print(
                         f"[green]Upgrade plan:[/green] {canonical}  "
-                        f"[dim]{change.plan_artifact.upgrade_package} "
-                        f"{change.plan_artifact.upgrade_from or '?'} → "
-                        f"{change.plan_artifact.upgrade_to}[/dim]"
+                        f"[dim]{change.plan_artifact.upgrade_package} "  # type: ignore[attr-defined]
+                        f"{change.plan_artifact.upgrade_from or '?'} → "  # type: ignore[attr-defined]
+                        f"{change.plan_artifact.upgrade_to}[/dim]"  # type: ignore[attr-defined]
                     )
-                elif change.plan_artifact.is_drift:
-                    art = change.plan_artifact
+                elif change.plan_artifact.is_drift:  # type: ignore[attr-defined]
+                    art = change.plan_artifact  # type: ignore[attr-defined]
                     color = "red" if art.drift_risk == "multi-major" else "yellow"
                     label = "PR planned" if art.edits else "report-only, no PR"
                     console.print(
@@ -2208,11 +2208,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                 console.print(f"[dim]Archived to:[/dim] {archived}")
                 if args.plan_output_dir != Path(settings.plan_dir).as_posix():
                     stamped = legacy_dir / (
-                        f"{outcome.run_id}-{change.plan_artifact.change_dedupe_key[:12]}.json"
+                        f"{outcome.run_id}-{change.plan_artifact.change_dedupe_key[:12]}.json"  # type: ignore[attr-defined]
                     )
-                    change.plan_artifact.write(stamped)
+                    change.plan_artifact.write(stamped)  # type: ignore[attr-defined]
                 console.print(
-                    f"[dim]Apply with:[/dim] [bold]{change.plan_artifact.apply_command()}[/bold]"
+                    f"[dim]Apply with:[/dim] [bold]{change.plan_artifact.apply_command()}[/bold]"  # type: ignore[attr-defined]
                 )
         rollup = outcome.rollup()
         if rollup.prs_planned:

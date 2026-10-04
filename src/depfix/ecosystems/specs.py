@@ -17,6 +17,7 @@ positives are not.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from depfix.ecosystems import manifests
 from depfix.ecosystems.base import EcosystemSpec, compile_all
@@ -96,7 +97,7 @@ def _swift_import_regexes(package: str) -> tuple[re.Pattern[str], ...]:
     return compile_all([rf"^\s*import\s+{re.escape(_studly(tail))}\b"])
 
 
-_C_STYLE_COMMENTS = {
+_C_STYLE_COMMENTS: dict[str, Any] = {
     "line_comments": ("//",),
     "block_comments": (("/*", "*/"),),
 }

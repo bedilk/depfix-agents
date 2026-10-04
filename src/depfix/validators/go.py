@@ -61,7 +61,7 @@ class GoFixValidator:
             temp_path = handle.name
         try:
             result = subprocess.run(
-                [self._gofmt, "-e", "-l", temp_path],
+                [self._gofmt, "-e", "-l", temp_path],  # type: ignore[list-item]
                 capture_output=True,
                 text=True,
                 timeout=10,

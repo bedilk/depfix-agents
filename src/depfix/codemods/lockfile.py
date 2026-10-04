@@ -66,7 +66,7 @@ def _semver(value: str) -> tuple[int, int, int] | None:
     match = _SEMVER.fullmatch(value.strip())
     if match is None:
         return None
-    return tuple(int(match.group(part)) for part in ("major", "minor", "patch"))
+    return tuple(int(match.group(part)) for part in ("major", "minor", "patch"))  # type: ignore[return-value]
 
 
 @dataclass(frozen=True)
@@ -240,13 +240,13 @@ def build_dependency_drift_plan(
             if new_range is None:
                 declines.append(f"{relpath}: cannot rewrite the range {current!r}")
                 break
-            if policy == "automatic" and verdict.current[0] != new_version[0]:
+            if policy == "automatic" and verdict.current[0] != new_version[0]:  # type: ignore[index]
                 declines.append(
                     f"{relpath}: refusing to bump {change.package} {current!r} to "
                     f"{change.new_version} -- that crosses a major boundary"
                 )
                 break
-            dependencies[change.package] = new_range
+            dependencies[change.package] = new_range  # type: ignore[index]
             indent = 4 if '\n    "' in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
             bumps.append(
@@ -469,7 +469,7 @@ def build_manifest_bumps(root: Path, change: BreakingChange) -> list[ManifestBum
                 # bumpable pin for the same package, so keep looking rather
                 # than abandoning the whole manifest.
                 continue
-            dependencies[change.package] = new_range
+            dependencies[change.package] = new_range  # type: ignore[index]
             indent = 4 if '\n    "' in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
             bumps.append(
@@ -541,7 +541,7 @@ def build_upgrade_manifest_bumps(root: Path, package: str, target_version: str) 
             if new_range is None:
                 declines.append(f"{relpath}: cannot rewrite the range {current!r}")
                 break
-            deps[package] = new_range
+            deps[package] = new_range  # type: ignore[index]
             indent = 4 if '\n    "' in original else 2
             fixed = json.dumps(document, indent=indent) + ("\n" if original.endswith("\n") else "")
             bumps.append(

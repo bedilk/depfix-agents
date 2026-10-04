@@ -138,7 +138,7 @@ class ScanToolset:
             if len(entries) >= _MAX_LIST_ENTRIES:
                 entries.append("… [truncated]")
                 break
-            rel = path.relative_to(self._checkout_root).as_posix()
+            rel = path.relative_to(self._checkout_root).as_posix()  # type: ignore[arg-type]
             entries.append(f"{'D' if path.is_dir() else 'F'} {rel}")
         return ToolResult(ok=True, content="\n".join(entries)).truncate()
 
@@ -164,7 +164,7 @@ class ScanToolset:
                 continue
             for i, line in enumerate(text.splitlines(), 1):
                 if regex.search(line):
-                    rel = path.relative_to(self._checkout_root).as_posix()
+                    rel = path.relative_to(self._checkout_root).as_posix()  # type: ignore[arg-type]
                     hits.append(f"{rel}:{i}: {line.strip()[:200]}")
                     if len(hits) >= max_results:
                         return ToolResult(ok=True, content="\n".join(hits)).truncate()

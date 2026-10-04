@@ -48,7 +48,7 @@ class LLMCallSiteJudge:
                 refined[(verdict.filepath, verdict.line_number)] = verdict
         output: list[CallSite] = []
         for site in call_sites:
-            verdict = refined.get((site.filepath, site.line_number))
+            verdict = refined.get((site.filepath, site.line_number))  # type: ignore[assignment]
             if verdict is None:
                 output.append(site)
             elif verdict.affected:

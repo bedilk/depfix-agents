@@ -142,7 +142,7 @@ def build_pr_body(
 
     # Always-run stage results (smoke, characterization) — shown when present.
     # Skipped stages are visible here so reviewers know WHY a stage didn't run.
-    if verification is not None and getattr(verification, "stage_results", ()):
+    if verification is not None and getattr(verification, "stage_results", ()):  # type: ignore[arg-type]
         from depfix.verify.models import StageStatus
 
         stage_lines = [sr.as_pr_line() for sr in verification.stage_results]

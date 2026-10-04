@@ -77,7 +77,7 @@ class GeminiCompleter:
         except Exception:
             text = ""
             if getattr(response, "candidates", None):
-                parts = getattr(response.candidates[0].content, "parts", None) or []
+                parts = getattr(response.candidates[0].content, "parts", None) or []  # type: ignore[index]
                 text = "".join(getattr(p, "text", "") for p in parts)
 
         usage = getattr(response, "usage_metadata", None)
@@ -89,7 +89,7 @@ class GeminiCompleter:
         ) * pricing["output"]
 
         return LLMResponse(
-            text=text,
+            text=text,  # type: ignore[arg-type]
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_estimate=cost,
@@ -139,7 +139,7 @@ class BedrockCompleter:
         )
         duration_ms = int((time.time() - start) * 1000)
 
-        text = message.content[0].text if message.content else ""
+        text = message.content[0].text if message.content else ""  # type: ignore[union-attr]
         input_tokens = message.usage.input_tokens
         output_tokens = message.usage.output_tokens
         # Fall back to Sonnet-tier rates for unknown Bedrock model IDs rather

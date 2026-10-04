@@ -68,7 +68,7 @@ def ensure_changes_detected(
         summary = classify_pending(
             session,
             Classifier(
-                completer,
+                completer,  # type: ignore[arg-type]
                 min_confidence=min_confidence,
             ),
             provider_id=provider_id,
@@ -237,7 +237,7 @@ def capture_repository_dependency_drift(
         drift_summary = classify_pending(
             session,
             Classifier(
-                completer,
+                completer,  # type: ignore[arg-type]
             ),
             provider_id=provider_id,
         )

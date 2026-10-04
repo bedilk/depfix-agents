@@ -162,11 +162,11 @@ def parse_v8_coverage(coverage_dir: Path, file_path: Path) -> set[int]:
                     start = rng.get("startOffset", 0)
                     end = rng.get("endOffset", 0)
                     for offset in range(start, end):
-                        line = offset_to_line.get(offset)
+                        line = offset_to_line.get(offset)  # type: ignore[assignment]
                         if line is not None:
                             executed.add(line)
 
-    return executed
+    return executed  # type: ignore[return-value]
 
 
 def check_changed_lines(coverage_dir: Path, root: Path, edits: list) -> CoverageReport:

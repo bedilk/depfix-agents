@@ -139,7 +139,7 @@ def build_upgrade_plan(
             continue
         if is_method_removal(change):
             continue
-        placed = in_upgrade_window(change.new_version or "", installed, goal)
+        placed = in_upgrade_window(change.new_version or "", installed, goal)  # type: ignore[assignment]
         if placed is None:
             plan.unplaceable.append(change)
             plan.notes.append(

@@ -113,7 +113,7 @@ class FixGenerator:
                 except Exception:
                     raw_text = ""
                     if getattr(response, "candidates", None):
-                        parts = getattr(response.candidates[0].content, "parts", None) or []
+                        parts = getattr(response.candidates[0].content, "parts", None) or []  # type: ignore[index]
                         raw_text = "".join(getattr(p, "text", "") for p in parts)
 
                 # Token usage from usage_metadata
@@ -130,7 +130,7 @@ class FixGenerator:
                 llm_call = LLMCall(
                     timestamp=datetime.now(),
                     prompt=prompt,
-                    response=raw_text,
+                    response=raw_text,  # type: ignore[arg-type]
                     model=self.model,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
@@ -139,7 +139,7 @@ class FixGenerator:
                 )
                 self.llm_calls.append(llm_call)
 
-                fixed_code = redaction.restore(self._extract_code(raw_text))
+                fixed_code = redaction.restore(self._extract_code(raw_text))  # type: ignore[arg-type]
 
                 confidence = self._calculate_confidence(
                     file_usage.file_content, fixed_code, file_usage.usages, breaking_change

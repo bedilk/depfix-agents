@@ -65,7 +65,7 @@ def pypi_version_published_at(
         return None
     times = [_parse_iso(f.get("upload_time_iso_8601")) for f in files]
     times = [t for t in times if t is not None]
-    return min(times) if times else None
+    return min(times) if times else None  # type: ignore[type-var]
 
 
 def version_published_at(

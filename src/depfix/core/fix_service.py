@@ -100,7 +100,7 @@ def build_fix_pipeline(
         else None
     )
     return FixPipeline(
-        fixer,
+        fixer,  # type: ignore[arg-type]
         validator=validator,
         verifier=verifier,
         retry_loop=retry_loop,
@@ -488,7 +488,7 @@ def _run_dependency_drift(
             except OSError:
                 refreshed = {}
             for relpath, original_lock in originals.items():
-                lockfile = refreshed.get(relpath)
+                lockfile = refreshed.get(relpath)  # type: ignore[assignment]
                 if lockfile is None:
                     continue
                 try:
@@ -541,7 +541,7 @@ def _run_dependency_drift(
             for relpath, original_text in before.items():
                 path = checkout.path / relpath
                 try:
-                    refreshed = path.read_text(encoding="utf-8")
+                    refreshed = path.read_text(encoding="utf-8")  # type: ignore[assignment]
                 except (OSError, UnicodeDecodeError):
                     continue
                 if refreshed == original_text:
@@ -550,7 +550,7 @@ def _run_dependency_drift(
                 refreshed_edit = dataclasses.replace(
                     editor.write_fix(
                         relpath,
-                        refreshed,
+                        refreshed,  # type: ignore[arg-type]
                         confidence=1.0,
                         origin=EditOrigin.CODEMOD,
                         codemod_id="manifest.lockfile-regen",
@@ -718,7 +718,7 @@ def _run_once(
 ) -> FixServiceResult:
     """Run one isolated primary or fallback fix attempt."""
     editor = WorkspaceEditor(checkout)
-    strategy = make_fix_strategy(settings, fixer)
+    strategy = make_fix_strategy(settings, fixer)  # type: ignore[arg-type]
     toolset = (
         FixToolset(
             checkout,

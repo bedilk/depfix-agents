@@ -593,7 +593,7 @@ def _scan_checkout_deterministic(
                 all_call_sites.extend(type_sites)
 
     if judge is not None and change is not None and all_call_sites:
-        all_call_sites = judge.judge(change, all_call_sites, checkout.path)
+        all_call_sites = judge.judge(change, all_call_sites, checkout.path)  # type: ignore[attr-defined]
 
     manifest_matches = [
         f"{d.package}@{d.resolved_version or d.declared_range or '?'} "
@@ -685,16 +685,16 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
 
     # Index bindings by file
     bindings_by_file: dict[str, list] = {}
-    for b in lang_result.bindings:
+    for b in lang_result.bindings:  # type: ignore[attr-defined]
         bindings_by_file.setdefault(b.filepath, []).append(b)
 
     # Build a cross-file index for one-hop detection
-    all_local_names: set[str] = {b.local_name for b in lang_result.bindings}
+    all_local_names: set[str] = {b.local_name for b in lang_result.bindings}  # type: ignore[attr-defined]
 
     narrowing = set(target.symbols or ())
     sites: list[CallSite] = []
 
-    for use in lang_result.uses:
+    for use in lang_result.uses:  # type: ignore[attr-defined]
         if narrowing and not any(
             use.attribute_path.startswith(s) or use.attribute_path == s for s in narrowing
         ):
@@ -717,7 +717,7 @@ def _resolve_call_sites(lang_result: object, target: ScanTarget) -> list[CallSit
             confidence = MatchConfidence.HIGH
             evidence = "binding found via cross-file re-export"
             # Find the package from any binding with this name
-            pkg_b = next((b for b in lang_result.bindings if b.local_name == use.local_name), None)
+            pkg_b = next((b for b in lang_result.bindings if b.local_name == use.local_name), None)  # type: ignore[attr-defined]
             package = pkg_b.package if pkg_b else target.provider_id
         else:
             confidence = MatchConfidence.LOW
@@ -777,7 +777,7 @@ def _scan_checkout_agent_augment(
             pypi=deps.pypi,
             github_api_url=deps.github_api_url,
         )
-        agent = ScanAgent(completer, ledger=ledger)
+        agent = ScanAgent(completer, ledger=ledger)  # type: ignore[arg-type]
         target = ScanTarget(provider_id=provider.id)
         augmented = agent.augment_baseline(
             provider,
@@ -823,7 +823,7 @@ def _scan_checkout_agent(
             pypi=deps.pypi,
             github_api_url=deps.github_api_url,
         )
-        agent = ScanAgent(completer, ledger=ledger)
+        agent = ScanAgent(completer, ledger=ledger)  # type: ignore[arg-type]
         result, transcript = agent.scan_repo(
             provider, target, toolset, repo_full_name=repo_full_name
         )

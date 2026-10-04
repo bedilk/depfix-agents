@@ -93,7 +93,7 @@ class MigrationSynthesizer:
             return SynthesisResult(
                 reason="no replacement for non-removal", cost_usd=response.cost_estimate
             )
-        hints = [str(h).strip() for h in payload.get("call_site_hints", []) if isinstance(h, str)][
+        hints = [str(h).strip() for h in payload.get("call_site_hints", []) if isinstance(h, str)][  # type: ignore[attr-defined]
             :5
         ]
         change = BreakingChange(

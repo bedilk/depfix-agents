@@ -134,7 +134,7 @@ def select_tests_for_changes(
 
 def _find_test_files(root: Path, pattern: str) -> list[Path]:
     """Find all test files matching the pattern."""
-    test_files = []
+    test_files: list[Path] = []
     # Expand {js,ts} style patterns manually
     if "{" in pattern and "}" in pattern:
         # Simple brace expansion: **/*.test.{js,ts} -> [**/*.test.js, **/*.test.ts]

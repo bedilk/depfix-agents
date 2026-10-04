@@ -119,7 +119,7 @@ class GenericImportScanner:
         sites: list[CallSite] = []
         skip = spec.all_skip_dirs()
 
-        files = []
+        files: list[Path] = []
         for path in sorted(root.rglob("*")):
             if len(files) >= self._max_files:
                 result.errors.append(f"file cap reached ({self._max_files}); scan truncated")

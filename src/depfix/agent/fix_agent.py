@@ -106,7 +106,7 @@ class FixAgent:
         response, call = self._complete(
             self._prompt(safe_usage, breaking_change, safe_feedback, context, final=True)
         )
-        code = self._json_response(response).get("code")
+        code = self._json_response(response).get("code")  # type: ignore[assignment]
         if not isinstance(code, str) or not code:
             raise RuntimeError("fix agent did not return a complete replacement file")
         return self._proposal(redaction.restore(code), file_usage, breaking_change, call)
@@ -134,7 +134,7 @@ class FixAgent:
         else:
             model = self._completer.model
             with httpx.Client(timeout=self._completer.timeout) as client:
-                response = client.post(
+                response = client.post(  # type: ignore[assignment]
                     f"{self._completer.base_url}/api/generate",
                     json={
                         "model": model,
@@ -144,16 +144,16 @@ class FixAgent:
                         "options": {"temperature": self._completer.temperature},
                     },
                 )
-            response.raise_for_status()
+            response.raise_for_status()  # type: ignore[attr-defined]
             data = response.json()
-            raw = str(data.get("response", ""))
-            input_tokens = int(data.get("prompt_eval_count", 0) or 0)
-            output_tokens = int(data.get("eval_count", 0) or 0)
+            raw = str(data.get("response", ""))  # type: ignore[attr-defined]
+            input_tokens = int(data.get("prompt_eval_count", 0) or 0)  # type: ignore[attr-defined]
+            output_tokens = int(data.get("eval_count", 0) or 0)  # type: ignore[attr-defined]
             cost = 0.0
         call = LLMCall(
             timestamp=datetime.now(),
             prompt=prompt,
-            response=raw,
+            response=raw,  # type: ignore[arg-type]
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -161,7 +161,7 @@ class FixAgent:
             duration_ms=int((time.time() - started) * 1000),
         )
         self.llm_calls.append(call)
-        return raw, call
+        return raw, call  # type: ignore[return-value]
 
     @staticmethod
     def _json_response(response: str) -> dict[str, Any]:

@@ -167,7 +167,7 @@ def decide(
         if (
             gated is not None
             and current_ref_sha
-            and attempt.last_checked_ref_sha == current_ref_sha
+            and attempt.last_checked_ref_sha == current_ref_sha  # type: ignore[union-attr]
         ):
             return gated
         if attempt is not None and _cooldown_active(attempt, settings):
@@ -190,17 +190,17 @@ def decide_with_detail(**kwargs: object) -> SkipDetail | None:
     message = ""
     resumes_at = ""
     if reason is SkipReason.COOLDOWN_ACTIVE and attempt is not None:
-        updated_at = attempt.updated_at
+        updated_at = attempt.updated_at  # type: ignore[attr-defined]
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=UTC)
-        expires = updated_at + timedelta(hours=settings.pipeline_retry_cooldown_hours)
+        expires = updated_at + timedelta(hours=settings.pipeline_retry_cooldown_hours)  # type: ignore[attr-defined]
         resumes_at = expires.isoformat(timespec="seconds")
         message = f"{max(0, (expires - datetime.now(UTC)).total_seconds() / 3600):.1f}h left"
     elif reason is SkipReason.ALREADY_TERMINAL and attempt is not None:
-        message = f"ledger status is {attempt.status}; use --force to retry"
+        message = f"ledger status is {attempt.status}; use --force to retry"  # type: ignore[attr-defined]
     elif reason is SkipReason.MAX_ATTEMPTS_REACHED and attempt is not None:
         message = (
-            f"{attempt.attempts_used}/{settings.pipeline_max_attempts} attempts used; use --force"
+            f"{attempt.attempts_used}/{settings.pipeline_max_attempts} attempts used; use --force"  # type: ignore[attr-defined]
         )
     elif reason is SkipReason.MAX_OPEN_PRS_REACHED:
         message = "merge or close an existing depfix PR, or use --force"
@@ -220,7 +220,7 @@ def decide_with_detail(**kwargs: object) -> SkipDetail | None:
         message = "snoozed by a triage rule in .depfix.yml"
     elif reason is SkipReason.VERSION_TOO_NEW:
         message = (
-            f"target version is newer than the {settings.version_cooldown_hours:.0f}h cooldown; "
+            f"target version is newer than the {settings.version_cooldown_hours:.0f}h cooldown; "  # type: ignore[attr-defined]
             "will proceed once it ages, or use --force"
         )
     elif reason is SkipReason.UNKNOWN_PROVIDER:

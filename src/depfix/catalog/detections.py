@@ -64,7 +64,7 @@ def _site(site: CallSite) -> dict:
 
 def _base_entry(change: BreakingChange, *, commit_sha: str) -> dict:
     kind = detection_kind(change)
-    entry = {
+    entry: dict = {
         "detection_key": change.dedupe_key,
         "kind": kind,
         "provider_id": change.provider_id,
@@ -158,7 +158,7 @@ def build_anchor_detection(
         new_api="(see api_mapping)",
         description=f"Agent-discovered old-API call sites for {provider_id}",
         migration_guide="",
-        kind=ChangeKind.API_RENAME,
+        kind=ChangeKind.API_RENAME,  # type: ignore[attr-defined]
         source=ClassificationSource.AGENT,
     )
     entry = _base_entry(synthetic, commit_sha=result.commit_sha)

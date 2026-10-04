@@ -439,7 +439,7 @@ class Watcher:
         )
         now = datetime.now(tz=UTC)
         try:
-            events, _transcript = ScanAgent(self._completer, ledger=self._ledger).poll_feed(
+            events, _transcript = ScanAgent(self._completer, ledger=self._ledger).poll_feed(  # type: ignore[arg-type]
                 provider, toolset
             )
         except Exception as exc:

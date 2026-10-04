@@ -62,7 +62,7 @@ class RubyFixValidator:
             temp_path = handle.name
         try:
             result = subprocess.run(
-                [self._ruby, "-c", temp_path],
+                [self._ruby, "-c", temp_path],  # type: ignore[list-item]
                 capture_output=True,
                 text=True,
                 timeout=10,

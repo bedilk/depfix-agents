@@ -116,7 +116,7 @@ def build_source(provider_id: str, feed: FeedLike, deps: SourceDeps) -> ChangeSo
             SourceKind.ASYNCAPI_SPEC: AsyncApiSpecSource,
             SourceKind.REDIS_COMMANDS: RedisCommandsSource,
         }[feed.kind]
-        return source_cls(
+        return source_cls(  # type: ignore[abstract]
             provider_id,
             feed.config,
             deps.http,

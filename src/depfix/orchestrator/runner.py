@@ -912,7 +912,7 @@ class Orchestrator:
                         self._provider_changes(change.provider_id),
                         provider_id=change.provider_id,
                         package=change.package,
-                        ecosystem=ecosystem,
+                        ecosystem=ecosystem,  # type: ignore[arg-type]
                         target_version=(
                             change.new_version
                             if change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP
@@ -1011,7 +1011,7 @@ class Orchestrator:
                 and scan_result.actionable_sites
                 and self._completer is not None
             ):
-                provider = self._providers.get(change.provider_id)
+                provider = self._providers.get(change.provider_id)  # type: ignore[assignment]
                 package = (
                     provider.sdk_packages[0].name
                     if provider and provider.sdk_packages
@@ -1485,7 +1485,7 @@ class Orchestrator:
             total_cost=result.total_cost,
             total_tokens=result.total_tokens,
             duration_ms=0,
-            verification=result.verification,
+            verification=result.verification,  # type: ignore[arg-type]
             codemod_notes=tuple(result.notes),
         )
 
@@ -1630,7 +1630,7 @@ class Orchestrator:
                 )
                 plan_digest = ""
             outcome.cost_usd = result.total_cost
-            outcome.severity, outcome.severity_evidence = self._upgrade_severity(plan, result)
+            outcome.severity, outcome.severity_evidence = self._upgrade_severity(plan, result)  # type: ignore[attr-defined]
 
             if not result.committable:
                 detail = (
@@ -1705,7 +1705,7 @@ class Orchestrator:
                 draft=(
                     repo_config.draft_pr
                     or plan.needs_draft
-                    or not result.confidence.at_least(
+                    or not result.confidence.at_least(  # type: ignore[attr-defined]
                         ConfidenceTier(self._settings.draft_below_confidence)
                     )
                 ),
