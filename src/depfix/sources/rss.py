@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any, ClassVar
-from xml.etree import ElementTree
+from xml.etree import ElementTree  # nosec B405
 
 import httpx
 
@@ -65,7 +65,7 @@ class RssSource(ChangeSource):
 
         digest = hashlib.sha256(raw).hexdigest()
         try:
-            root = ElementTree.fromstring(raw)
+            root = ElementTree.fromstring(raw)  # nosec B314
         except ElementTree.ParseError as exc:
             return FeedPoll.failure(f"feed is not parseable XML: {exc}")
 

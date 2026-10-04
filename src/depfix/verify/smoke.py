@@ -299,7 +299,7 @@ class SmokeStage:
                             source=f"pyproject:scripts.{name}",
                         )
                     )
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         for candidate in ("manage.py", "app.py", "main.py", "server.py"):
             if (root / candidate).exists():

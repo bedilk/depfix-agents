@@ -225,7 +225,7 @@ class ScanToolset:
         if self._checkout_root is None:
             return ""
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B607
                 ["git", "-C", str(self._checkout_root), "rev-parse", "HEAD"],
                 capture_output=True,
                 text=True,

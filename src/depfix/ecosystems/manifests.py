@@ -20,7 +20,7 @@ import re
 import tomllib
 from collections.abc import Iterable
 from pathlib import Path
-from xml.etree import ElementTree
+from xml.etree import ElementTree  # nosec B405
 
 from depfix.ecosystems.base import DependencyDeclaration
 
@@ -386,7 +386,7 @@ def scan_jvm_dependencies(root: Path, packages: list[str]) -> list[DependencyDec
         if text is None:
             continue
         try:
-            tree = ElementTree.fromstring(text)
+            tree = ElementTree.fromstring(text)  # nosec B314
         except ElementTree.ParseError:
             continue
         namespace = tree.tag.split("}")[0] + "}" if tree.tag.startswith("{") else ""

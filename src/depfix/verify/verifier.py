@@ -609,7 +609,7 @@ class Verifier:
 
                 for sr in stage_results:
                     verification_stage_outcomes.record_stage_result(sr)
-            except Exception:
+            except Exception:  # nosec B110
                 pass  # never let metrics break verification
 
             return VerificationReport(

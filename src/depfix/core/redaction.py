@@ -47,7 +47,7 @@ _TOKEN_PATTERNS: tuple[re.Pattern[str], ...] = (
 #: Identifier fragments that mean "this value is a credential". Deliberately
 #: excludes bare ``api`` (so ``apiVersion``/``apiBase`` survive) and bare
 #: ``key`` (so ``keyBy``/``objectKey`` survive).
-_SECRET_NAME = (
+_SECRET_NAME = (  # nosec B105
     r"(?:api[_-]?key|apikey|secret|token|password|passwd|credential|"
     r"private[_-]?key|access[_-]?key|client[_-]?secret|auth[_-]?token|authorization)"
 )

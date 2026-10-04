@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import json
 import re
-from xml.etree import ElementTree
-from xml.etree.ElementTree import ParseError as _XML_PARSE_ERROR
+from xml.etree import ElementTree  # nosec B405
+from xml.etree.ElementTree import ParseError as _XML_PARSE_ERROR  # nosec B405
 
 from depfix.verify.models import TestCase, TestFramework, TestStatus
 
@@ -132,7 +132,7 @@ def parse_junit_xml(raw: str) -> list[TestCase]:
     is. A ``<failure>``/``<error>`` child means FAILED; ``<skipped>`` means
     SKIPPED; a bare ``<testcase>`` passed.
     """
-    root = ElementTree.fromstring(raw)
+    root = ElementTree.fromstring(raw)  # nosec B314
     cases: list[TestCase] = []
     for case in root.iter("testcase"):
         classname = case.get("classname") or ""

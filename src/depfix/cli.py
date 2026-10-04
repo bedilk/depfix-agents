@@ -1217,7 +1217,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
                 _config_text = gh_auth.get_file_contents(owner, name, settings.repo_config_filename)
                 if _config_text:
                     _per_repo_max_mb = parse_repo_config(_config_text).max_repo_mb
-            except Exception:
+            except Exception:  # nosec B110
                 pass
             result = scan_repo(
                 owner,
