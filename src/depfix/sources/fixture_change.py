@@ -26,6 +26,7 @@ class FixtureChangeSource(ChangeSource):
         self.fixture_id = str(config.get("id") or provider_id)
         self.old_token = str(self._require("old_token"))
         self.new_token = str(self._require("new_token"))
+        self.package = str(config["package"]) if "package" in config else None
         raw_changes = self._require("spec_changes")
         if not isinstance(raw_changes, list) or not raw_changes:
             raise ValueError("fixture_change: 'spec_changes' must be a non-empty list")
@@ -64,6 +65,6 @@ class FixtureChangeSource(ChangeSource):
             summary="Deterministic local test change",
             severity=Severity.BREAKING,
             spec_changes=self.changes,
-            raw={"fixture": True},
+            raw={"fixture": True, **({"package": self.package} if self.package else {})},
         )
         return FeedPoll(changed=True, new_token=self.new_token, events=[event])

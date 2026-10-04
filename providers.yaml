@@ -116,6 +116,7 @@ providers:
   # but streaming callers should migrate.
   - kind: fixture_change
     id: anthropic-sdk-stream-api-0.20-0.131
+    package: "@anthropic-ai/sdk"
     old_token: "0.20.9"
     new_token: "0.131.0"
     spec_changes:
@@ -755,6 +756,7 @@ providers:
   # is required for transaction support and connection error handling.
   - kind: fixture_change
     id: pg-8-pool-query-to-connect-8.16-8.23
+    package: "pg"
     old_token: "8.16.3"
     new_token: "8.23.1"
     spec_changes:
