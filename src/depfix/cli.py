@@ -2138,6 +2138,11 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     _pipeline_ledger = CostLedger()
     _pipeline_coordinator = _build_scan_coordinator(settings, _pipeline_ledger)
 
+    _raw_mins: float | None = (
+        args.max_duration
+        if args.max_duration is not None
+        else settings.pipeline_max_duration_minutes
+    )
     orchestrator = Orchestrator(
         settings=settings,
         gh_auth=gh_auth,
@@ -2148,16 +2153,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         no_pr=args.no_pr,
         use_lock=not args.no_lock and not args.dry_run and settings.pipeline_require_lock,
-        max_duration_seconds=(
-            (  # type: ignore[operator]
-                args.max_duration
-                if args.max_duration is not None
-                else settings.pipeline_max_duration_minutes
-            )
-            * 60.0
-            if (args.max_duration is not None or settings.pipeline_max_duration_minutes is not None)
-            else None
-        ),
+        max_duration_seconds=_raw_mins * 60.0 if _raw_mins is not None else None,
         max_cost_usd=args.max_cost,
         plan_artifacts=plan_artifacts,
         completer=_build_completer(settings),
