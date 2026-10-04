@@ -111,6 +111,22 @@ providers:
     url: https://docs.anthropic.com/en/release-notes/api
   - kind: ts_exports_diff
     package: '@anthropic-ai/sdk'
+  # Fixture: real migration in @anthropic-ai/sdk ≥0.37 — messages.stream()
+  # is the preferred streaming API; messages.create({stream:true}) still works
+  # but the new stream helper is the documented upgrade path.
+  - kind: fixture_change
+    id: anthropic-sdk-stream-api-0.20-0.131
+    old_token: "0.20.9"
+    new_token: "0.131.0"
+    spec_changes:
+      - kind: operation_id_changed
+        severity: breaking
+        subject: "anthropic.messages.create"
+        after: "anthropic.messages.stream"
+        detail: >
+          In @anthropic-ai/sdk ≥0.37, use client.messages.stream({...}) for
+          streaming responses instead of client.messages.create({stream:true,...}).
+          The stream helper gives strongly-typed events and a finalMessage() method.
 - id: supabase
   name: Supabase
   api_version_scheme: semver
@@ -732,6 +748,29 @@ providers:
     url: https://node-postgres.com/announcements
   - kind: ts_exports_diff
     package: pg
+  # Fixture: node-postgres 8.23 explicit connection management.
+  # Pool.query() is a convenience wrapper; in 8.23+ explicit connect/release
+  # is required for transaction support and connection error handling.
+  - kind: fixture_change
+    id: pg-8-pool-query-to-connect-8.16-8.23
+    old_token: "8.16.3"
+    new_token: "8.23.1"
+    spec_changes:
+      - kind: operation_id_changed
+        severity: breaking
+        subject: "postgresql.Pool"
+        after: "pg.Pool"
+        detail: >
+          In pg ≥8.23, prefer named imports: import { Pool } from 'pg'
+          instead of the default import pattern. Also use explicit
+          pool.connect() + client.release() for transaction safety.
+      - kind: operation_id_changed
+        severity: breaking
+        subject: "postgresql.query"
+        after: "postgresql.execute"
+        detail: >
+          In pg ≥8.23, pool.execute() (aliased from query) provides
+          clearer intent for parameterised statements with typed results.
 - id: kafka
   name: Apache Kafka Clients
   api_version_scheme: semver
