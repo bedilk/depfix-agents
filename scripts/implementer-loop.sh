@@ -58,14 +58,14 @@ T-5: Add 5 ruby ecosystem eval cases
 
 WHEN DONE WITH A TASK:
 1. Run make test — confirm passing
-2. Commit all changed files: flock .local/git.lock git add <specific files> && flock .local/git.lock git commit -m 'implementer(T-N): <description>'
+2. Commit all changed files: flock .local/git.lock bash -c 'git add <specific files> && git commit -m \"implementer(T-N): <description>\"'
 3. Update coordination/TASKS.json: status=review, owner=reviewer
 4. Update coordination/implementer.md
 5. Send: python3 scripts/agent-msg.py send reviewer '{\"action\":\"review_request\",\"task_id\":\"T-N\",\"summary\":\"what changed\",\"commit\":\"<sha>\",\"files_changed\":[\"...\"]}'
 6. Send: python3 scripts/agent-msg.py send principal '{\"action\":\"status\",\"task_id\":\"T-N\",\"status\":\"review\",\"reviewer\":\"reviewer\"}'
 
 COMMIT YOUR STATE after every step:
-flock .local/git.lock git add coordination/implementer.md && flock .local/git.lock git commit -m 'implementer: state update round $round'
+flock .local/git.lock bash -c 'git add coordination/implementer.md && git commit -m \"implementer: state update round $round\"'
 
 This is round $round. Work on your assigned task. If no task assigned yet, check TASKS.json
 for tasks with owner=implementer and status=running."

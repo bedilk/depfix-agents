@@ -58,7 +58,7 @@ EVIDENCE CHECK (do every round after round 1):
 
 COMMIT YOUR WORK:
 - Update coordination/principal.md with: current round, tasks assigned, tasks completed, issues found, next actions
-- Commit: flock .local/git.lock git add coordination/TASKS.json coordination/TEAM-REGISTRY.json coordination/principal.md && flock .local/git.lock git commit -m 'principal(round-$round): task dispatch and oversight'
+- Commit: flock .local/git.lock bash -c 'git add coordination/TASKS.json coordination/TEAM-REGISTRY.json coordination/principal.md && git commit -m \"principal(round-$round): task dispatch and oversight\"'
 
 This is round $round. Print a brief final status (5 lines max): tasks assigned, tasks completed, any stalls found."
 

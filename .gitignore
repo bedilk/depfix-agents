@@ -12,6 +12,9 @@ depfix.db
 # Raw session transcripts.
 changes.txt
 
+# Agent team runtime state (logs, PIDs, git lock)
+.local/
+
 # Build/runtime artifacts
 __pycache__/
 *.pyc

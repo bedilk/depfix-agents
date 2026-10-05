@@ -39,7 +39,7 @@ TASK T-1: Run full test suite and report failures
   - Overall assessment: is the codebase healthy?
 
   When done:
-  1. Commit: flock .local/git.lock git add coordination/tester.md && flock .local/git.lock git commit -m 'tester(T-1): full test suite results'
+  1. Commit: flock .local/git.lock bash -c 'git add coordination/tester.md && git commit -m \"tester(T-1): full test suite results\"'
   2. Update TASKS.json: T-1 status=done (no review needed for a test report)
   3. Send: python3 scripts/agent-msg.py send principal '{\"action\":\"task_done\",\"task_id\":\"T-1\",\"summary\":\"X tests pass, Y fail, see coordination/tester.md\"}'
 
@@ -55,7 +55,7 @@ If tests fail after an implementer commit:
 - Update TASKS.json: set status=rejected for the relevant task if the failures are caused by the new code
 
 COMMIT YOUR STATE after every step:
-flock .local/git.lock git add coordination/tester.md && flock .local/git.lock git commit -m 'tester: state update round $round'
+flock .local/git.lock bash -c 'git add coordination/tester.md && git commit -m \"tester: state update round $round\"'
 
 This is round $round."
 

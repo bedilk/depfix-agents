@@ -52,14 +52,14 @@ CURRENT TASKS you may be assigned:
 
 WHEN DONE WITH A TASK:
 1. Write your output to the research/ file
-2. Commit: flock .local/git.lock git add research/<file>.md && flock .local/git.lock git commit -m 'researcher(T-N): <description>'
+2. Commit: flock .local/git.lock bash -c 'git add research/<file>.md && git commit -m \"researcher(T-N): <description>\"'
 3. Update coordination/TASKS.json: set your task status=done (if no review needed) or notify implementer
 4. Update coordination/researcher.md with what you did and what's next
 5. Send message to principal: python3 scripts/agent-msg.py send principal '{\"action\":\"task_done\",\"task_id\":\"T-N\",\"evidence\":\"research/<file>.md\"}'
 
 COMMIT YOUR STATE:
 After each meaningful step, update coordination/researcher.md and commit it.
-flock .local/git.lock git add coordination/researcher.md && flock .local/git.lock git commit -m 'researcher: state update round $round'
+flock .local/git.lock bash -c 'git add coordination/researcher.md && git commit -m \"researcher: state update round $round\"'
 
 This is round $round. If you have no assigned task, check TASKS.json for ready research tasks
 and start on the most valuable one."

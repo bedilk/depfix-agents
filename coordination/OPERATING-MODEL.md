@@ -42,8 +42,7 @@ Principal checks progress every 2 rounds
 All commits use the git lock to avoid conflicts:
 
 ```bash
-flock .local/git.lock git add <specific-files> && \
-flock .local/git.lock git commit -m "role(task): description"
+flock .local/git.lock bash -c 'git add <specific-files> && git commit -m "role(task): description"'
 ```
 
 Commit message format: `<role>(<task-id>): <description>`
@@ -98,6 +97,28 @@ Receipt schema:
 Principal checks every 2 rounds for tasks that have been `running` for >15 min with no new commit.
 If found: principal sends accountability ping to the task owner via inbox.
 If no response after next round: principal reassigns the task.
+
+## Dynamic Task Creation
+
+Agents may propose new tasks. The protocol:
+1. Agent sends a message to principal with `{"action":"propose_task","title":"...","rationale":"...","suggested_owner":"..."}`
+2. Principal validates the proposal, assigns an ID (T-8, T-9, ...), and adds it to TASKS.json
+3. Principal assigns the task via the normal assignment flow
+
+Only principal may write new tasks to TASKS.json. Other agents propose; principal decides.
+
+## Human-in-the-Loop Review
+
+Every 4 hours, `scripts/human-review.sh` pauses all agents and produces a summary for human review.
+
+The cycle:
+1. The script creates `.stop` files for all agents (graceful pause after current round)
+2. Generates `coordination/HUMAN-REVIEW.md` with: task status, recent commits, open issues, agent health
+3. Human reviews, edits TASKS.json or AGENTS.md as needed, then runs `bash scripts/human-review.sh --resume`
+4. Resume clears `.stop` files and restarts all agents
+
+To run manually at any time: `bash scripts/human-review.sh`
+To schedule automatic 4-hour cycles: `bash scripts/human-review.sh --schedule`
 
 ## Boundaries
 

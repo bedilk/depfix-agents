@@ -141,6 +141,37 @@ Principal sends accountability pings via inbox to stalled agents.
 
 ---
 
+## Human-in-the-Loop Review
+
+Every 4 hours, the team pauses for human review. This ensures no agent drifts off-track
+and gives you a checkpoint to reprioritize, add tasks, or fix issues.
+
+**Automatic schedule:**
+```bash
+bash scripts/human-review.sh --schedule   # installs a 4-hour launchd timer
+```
+
+**Manual review at any time:**
+```bash
+bash scripts/human-review.sh              # pause agents, generate summary
+# ... review coordination/HUMAN-REVIEW.md, edit TASKS.json as needed ...
+bash scripts/human-review.sh --resume     # restart all agents
+```
+
+**What the review summary includes:**
+- Task status table (from TASKS.json)
+- Last 15 commits
+- Agent lifecycle logs (last 5 lines each)
+- Review receipts
+- Unacked inbox messages per agent
+
+**Your powers during review:**
+- Edit `coordination/TASKS.json` to add, modify, or reprioritize tasks
+- Edit `AGENTS.md` to change instructions or constraints
+- Send direct messages: `python3 scripts/agent-msg.py send <role> '{"action":"human_directive","msg":"..."}'`
+
+---
+
 ## Initial Task Backlog
 
 See coordination/TASKS.json. Starting tasks (ordered by value):

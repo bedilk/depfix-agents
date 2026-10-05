@@ -63,7 +63,7 @@ FOR EACH REVIEW:
 5. Update TASKS.json:
    - ACCEPTED: set status=done
    - REJECTED: set status=rejected, add issues to task.notes
-6. Commit: flock .local/git.lock git add coordination/review/<task_id>_receipt.json coordination/TASKS.json coordination/reviewer.md && flock .local/git.lock git commit -m 'reviewer(T-N): ACCEPTED/REJECTED'
+6. Commit: flock .local/git.lock bash -c 'git add coordination/review/<task_id>_receipt.json coordination/TASKS.json coordination/reviewer.md && git commit -m \"reviewer(T-N): ACCEPTED/REJECTED\"'
 7. Send verdict: python3 scripts/agent-msg.py send implementer '{\"action\":\"review_verdict\",\"task_id\":\"T-N\",\"verdict\":\"ACCEPTED\",\"issues\":[]}'
    Also: python3 scripts/agent-msg.py send principal '{\"action\":\"review_verdict\",\"task_id\":\"T-N\",\"verdict\":\"ACCEPTED\"}'
 
