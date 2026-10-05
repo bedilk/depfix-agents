@@ -106,13 +106,13 @@
     {
       "id": "T-9",
       "title": "Audit version drift detection: minor vs major completeness",
-      "status": "ready",
-      "owner": null,
+      "status": "done",
+      "owner": "researcher",
       "depends_on": ["T-1"],
       "acceptance": "researcher writes research/drift-detection-audit.md documenting: (1) how depfix currently detects minor vs major drift, (2) which code paths handle each, (3) test coverage for drift classification, (4) any gaps where drift would be missed or misclassified. Include file paths and line numbers for every finding.",
       "evidence_paths": ["research/drift-detection-audit.md"],
-      "next_action": "researcher: read src/depfix/ to trace the version comparison logic from scan through plan, document minor vs major handling",
-      "notes": "Core to the value prop — depfix must reliably distinguish minor bumps (auto-update) from major breaks (needs migration)"
+      "next_action": "done",
+      "notes": "5 gaps found: (1) non-semver versions (Stripe dated) silently become 'version unresolved' — HIGH risk; (2) max_minor_gap config has zero test coverage — MEDIUM; (3) Python/Ruby drift path untested — HIGH; (4) drift_summary display label vs plan misalignment (major-gap review shown even for N→N+1 which does get a plan); (5) in_upgrade_window edge case untested. See research/drift-detection-audit.md, commit 31a536e."
     },
     {
       "id": "T-10",
