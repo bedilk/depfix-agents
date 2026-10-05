@@ -40,15 +40,15 @@
     {
       "id": "T-4",
       "title": "Expand eval corpus — 10 new sentry cases",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "researcher",
       "depends_on": ["T-1", "T-2"],
       "acceptance": "10 new YAML cases added to src/depfix/evals/corpus/ covering sentry v7→v8 API changes (startTransaction, configureScope, addBreadcrumb, captureException patterns). `make eval` passes with no regressions. Reviewer accepts.",
       "evidence_paths": [
         "src/depfix/evals/corpus/",
         "coordination/review/T-4_receipt.json"
       ],
-      "next_action": "researcher: study existing eval YAML format and sentry v7→v8 changelog; implementer: write 10 cases",
+      "next_action": "researcher: write research/sentry-eval-cases.md with 10 API changes and fixture code examples",
       "notes": "Researcher should produce research/sentry-eval-cases.md first, then implementer writes the YAML"
     },
     {
