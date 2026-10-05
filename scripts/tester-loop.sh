@@ -63,6 +63,34 @@ TASK T-10: End-to-end dry-run on 3 seed repos (after T-1)
   test results. This proves the end-to-end flow works.
   Write results to coordination/tester.md with a section per repo.
 
+TASK T-11: Real-repo scan — test all 7 forked repos (after T-1)
+  Run: bash test_all_repos.sh
+  This tests: probot(octokit), renovate(octokit), bolt-js(slack), sentry(slack),
+  AtlantaBot(discord), guide(discord), Rocket.Chat(mongodb)
+  For each: record files_scanned, call_sites, actionable, plan output.
+  Write results table to research/real-repo-scan-results.md
+  THIS IS THE GROUND TRUTH TEST — if depfix can't find call-sites in real repos, it doesn't work.
+
+TASK T-12: Real-repo scan — test 3 e2e repos (after T-1)
+  Run test_pipeline.sh on:
+  1. sentry:bedilk/depfix-test-sentry-v6-app
+  2. openai:bedilk/depfix-test-openai-v3-chat
+  3. anthropic:bedilk/depfix-test-anthropic-callsites
+  Then run depfix plan --dry-run for repos with actionable findings.
+  Write to research/e2e-repo-results.md
+
+TASK T-13: Multi-provider scan on firecrawl (after T-1)
+  Run: (1) test_pipeline.sh openai:bedilk/firecrawl
+       (2) test_pipeline.sh anthropic:bedilk/firecrawl
+       (3) test_pipeline.sh openai,anthropic:bedilk/firecrawl
+  Compare single vs multi-provider results. Write to research/multi-provider-scan.md
+
+TASK T-14: Large-repo scan — Rocket.Chat + superset (after T-1)
+  Run: (1) test_pipeline.sh mongodb:bedilk/Rocket.Chat
+       (2) test_pipeline.sh sentry:bedilk/superset
+  These are 100k+ file repos. Monitor scan time, call-sites, any failures.
+  Write to research/large-repo-scan.md
+
 COMMIT YOUR STATE after every step:
 flock .local/git.lock bash -c 'git add coordination/tester.md && git commit -m \"tester: state update round $round\"'
 

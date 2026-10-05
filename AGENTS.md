@@ -214,7 +214,14 @@ See coordination/TASKS.json. Tasks advance depfix toward production-ready "Depen
 **Hardened fixers:**
 9. T-6: Adversarial review of ruby fixer — find real bugs before users hit them (reviewer)
 
-**End-to-end proof:**
-10. T-10: Dry-run the full pipeline on 3 seed repos, document what works and what breaks (tester)
+**End-to-end proof (seed repos):**
+10. T-10: Dry-run full pipeline on 3 seed repos (tester)
+
+**Real-repo validation (the ground truth):**
+11. T-11: Scan all 7 forked repos with test_all_repos.sh — octokit, slack, discord, mongodb (tester)
+12. T-12: Scan 3 e2e test repos — sentry-v6, openai-v3, anthropic-callsites (tester)
+13. T-13: Multi-provider scan on firecrawl — openai + anthropic single and combined (tester)
+14. T-14: Large-repo stress test — Rocket.Chat (mongodb) + superset (sentry) at 100k+ files (tester)
 
 Principal assigns and sequences these on first run.
+T-11 through T-14 are the ground truth: if depfix can't find real call-sites in real repos, the product doesn't work.

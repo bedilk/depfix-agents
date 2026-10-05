@@ -47,6 +47,11 @@ TASK ASSIGNMENT RULES:
 - Assign T-5 to implementer after T-1 is done
 - Assign T-6 to reviewer if reviewer is idle (it's a pure review, no dependency)
 - Assign T-10 to tester after T-1 is done (end-to-end dry-run on seed repos)
+- Assign T-11 to tester after T-1 is done (real-repo scan — 7 forked repos, ground truth test)
+- Assign T-12 to tester after T-1 is done (e2e test repos — sentry-v6, openai-v3, anthropic)
+- Assign T-13 to tester after T-1 is done (multi-provider scan on firecrawl)
+- Assign T-14 to tester after T-1 is done (large-repo stress test — Rocket.Chat + superset)
+- PRIORITY: T-11 and T-12 are higher priority than T-10 — real repos matter more than seed repos
 - For T-4: first assign research subtask to researcher, then implementation to implementer
 
 When assigning a task:

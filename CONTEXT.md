@@ -38,17 +38,59 @@ service tracking changes across vendors — like Dependabot but for APIs.
 
 ## What Exists Today
 
-- **25 providers** tracked in `providers.yaml` (stripe, openai, anthropic, sentry, mongodb, supabase,
-  vercel-ai, kafka, rabbitmq, and more)
+- **27 providers** tracked in `providers.yaml`: openai, stripe, anthropic, supabase, vercel-ai,
+  sentry, prisma, clerk, langchain, aws-s3, firebase, twilio, sendgrid, octokit, slack, discord,
+  mongodb, redis, posthog, algolia, google-cloud, elasticsearch, postgresql, kafka, rabbitmq,
+  mysql, astro
 - **3 fix-supported ecosystems**: JavaScript, Python, Ruby (Go is scan-only)
-- **Scan pipeline**: detects call-sites, classifies changes, maps API symbols to source locations
-- **Plan + Apply**: LLM-generated fixes with test verification
+- **Full pipeline working**: init → watch → scan → plan → apply (with LLM-generated fixes)
 - **Eval corpus**: deterministic test cases for scan accuracy
-- **8 seed repos** (`bedilk/seed-*`) for controlled end-to-end testing
+- **Test infrastructure**:
+  - `make test` — unit tests (no LLM, no network)
+  - `make eval` — eval corpus (deterministic, no LLM)
+  - `bash scripts/test_pipeline.sh provider:owner/repo` — run scan on a real repo
+  - `bash test_all_repos.sh` — run init→scan→plan on 7 real-world repos
+  - `depfix pipeline --dry-run --no-pr` — full pipeline without opening PRs
+
+### Test Repos (real-world forks — agents MUST test against these)
+
+| Repo | Provider | What it tests |
+|---|---|---|
+| `bedilk/probot` | octokit | Real GitHub bot, Octokit SDK usage |
+| `bedilk/renovate` | octokit | Large repo, many Octokit call-sites |
+| `bedilk/bolt-js` | slack | Slack SDK, real event handlers |
+| `bedilk/sentry` | slack | Slack integration inside Sentry |
+| `bedilk/AtlantaBot` | discord | Discord.js bot, event-driven |
+| `bedilk/guide` | discord | Discord.js documentation site |
+| `bedilk/Rocket.Chat` | mongodb | Large app, MongoDB driver throughout |
+| `bedilk/firecrawl` | openai, anthropic | Multi-provider AI app |
+| `bedilk/superset` | sentry | Large Python app, Sentry SDK |
+
+### E2E Test Repos (purpose-built for depfix)
+
+| Repo | Provider | Difficulty | What it tests |
+|---|---|---|---|
+| `bedilk/depfix-test-sentry-v6-app` | sentry | Medium | 2 major version drift (@sentry/node@6.19.7) |
+| `bedilk/depfix-test-openai-v3-chat` | openai | Medium | Version drift + API method drift (openai@3.3.0) |
+| `bedilk/depfix-test-anthropic-callsites` | anthropic | Hard | API method drift only (@anthropic-ai/sdk@0.6.2) |
+
+### Seed Repos (controlled fixtures)
+
+| Repo | Migration |
+|---|---|
+| `bedilk/seed-openai-v3-to-v4` | OpenAI v3→v4 |
+| `bedilk/seed-anthropic-v0-v0x` | Anthropic completions→messages |
+| `bedilk/seed-stripe-apiversion` | Stripe API version migration |
+| `bedilk/seed-sentry-v7-v8` | Sentry v7→v8 |
+| `bedilk/seed-mongodb-v4-v5` | MongoDB v4→v5 |
+| `bedilk/seed-supabase-v1-v2` | Supabase v1→v2 |
+| `bedilk/seed-vercel-ai-v2-v3` | Vercel AI SDK v2→v3 |
+| `bedilk/seed-multi-sdk` | Multi-provider migration |
 
 ## What the Agent Team Is Building
 
-The agent team advances depfix toward production-readiness:
+The agent team validates and extends depfix toward production-readiness:
+- **Test on real repos** — run the pipeline on real-world forks and e2e repos to find what works and what breaks
 - **Broader provider coverage** — more providers, better detection accuracy
 - **Deeper eval corpus** — more test cases, more ecosystems, more edge cases
 - **Higher scan recall** — find call-sites the current scanner misses

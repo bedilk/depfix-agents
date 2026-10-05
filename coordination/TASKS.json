@@ -120,8 +120,52 @@
       "evidence_paths": ["coordination/tester.md"],
       "next_action": "tester: run the full pipeline in dry-run mode on each seed repo, capture all output",
       "notes": "This proves the end-to-end flow works — from watch through plan. The apply step is dry-run only."
+    },
+    {
+      "id": "T-11",
+      "title": "Real-repo scan: test all 7 forked repos with test_all_repos.sh",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "tester runs `bash test_all_repos.sh` which tests: bedilk/probot (octokit), bedilk/renovate (octokit), bedilk/bolt-js (slack), bedilk/sentry (slack), bedilk/AtlantaBot (discord), bedilk/guide (discord), bedilk/Rocket.Chat (mongodb). For each repo: record files_scanned, call_sites found, actionable count, and whether plan generated fixes. Write results table to research/real-repo-scan-results.md.",
+      "evidence_paths": ["research/real-repo-scan-results.md"],
+      "next_action": "tester: run test_all_repos.sh, capture output, build results table comparing expected vs actual detection",
+      "notes": "This is the ground truth test — if depfix can't find real call-sites in real repos, the product doesn't work"
+    },
+    {
+      "id": "T-12",
+      "title": "Real-repo scan: test e2e repos (sentry-v6, openai-v3, anthropic-callsites)",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "tester runs test_pipeline.sh on all 3 e2e repos: (1) sentry:bedilk/depfix-test-sentry-v6-app, (2) openai:bedilk/depfix-test-openai-v3-chat, (3) anthropic:bedilk/depfix-test-anthropic-callsites. For each: record scan output (drifts, call-sites, actionable), then run plan with --dry-run. Document whether the full flow produces correct fixes. Write to research/e2e-repo-results.md.",
+      "evidence_paths": ["research/e2e-repo-results.md"],
+      "next_action": "tester: run test_pipeline.sh for each e2e repo, then depfix plan --dry-run for repos with actionable findings",
+      "notes": "These repos were purpose-built to test specific scenarios — results should be close to perfect"
+    },
+    {
+      "id": "T-13",
+      "title": "Real-repo scan: multi-provider test on firecrawl (openai + anthropic)",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "tester runs: (1) bash scripts/test_pipeline.sh openai:bedilk/firecrawl, (2) bash scripts/test_pipeline.sh anthropic:bedilk/firecrawl, (3) bash scripts/test_pipeline.sh openai,anthropic:bedilk/firecrawl. Compare single-provider vs multi-provider scan. Document call-sites found per provider, any overlap or conflicts. Write to research/multi-provider-scan.md.",
+      "evidence_paths": ["research/multi-provider-scan.md"],
+      "next_action": "tester: run all 3 scan variants on firecrawl, compare results",
+      "notes": "Multi-provider scanning is key to the Dependabot-for-APIs vision — most real repos use multiple SDKs"
+    },
+    {
+      "id": "T-14",
+      "title": "Real-repo scan: MongoDB on Rocket.Chat + Sentry on superset (large repos)",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "tester runs: (1) bash scripts/test_pipeline.sh mongodb:bedilk/Rocket.Chat, (2) bash scripts/test_pipeline.sh sentry:bedilk/superset. These are large repos (100k+ files). Document: scan time, call-sites found, memory usage if visible, any timeouts or failures. Write to research/large-repo-scan.md.",
+      "evidence_paths": ["research/large-repo-scan.md"],
+      "next_action": "tester: run test_pipeline.sh on both large repos, monitor for performance issues",
+      "notes": "Enterprise repos are large — depfix must handle them without choking"
     }
   ],
-  "last_updated": "2026-10-05T22:00:00Z",
+  "last_updated": "2026-10-05T23:00:00Z",
   "updated_by": "principal-init"
 }
