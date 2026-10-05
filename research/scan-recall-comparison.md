@@ -83,17 +83,27 @@ platform with no dependency on the Sentry SDK at all in its test suite.
 **The low-confidence filter correctly suppresses all 223 false positives.** No real Sentry SDK
 usage was missed.
 
-### 4. Python sentry SDK gap: `sentry_sdk.*` not detected
+### 4. Python sentry SDK: scanner IS correct, superset doesn't use sentry_sdk
 
-Superset's actual sentry integration (if any) would use `import sentry_sdk` and call
-`sentry_sdk.init(...)`. The scanner currently looks for `sentry.*` namespace patterns, not
-`sentry_sdk.*` patterns. Zero `sentry_sdk` call sites were found in any file.
+**CORRECTION (2026-10-05 round 3):** The original finding was incorrect. Code analysis confirms the
+scanner DOES correctly detect `sentry_sdk` imports.
 
-**This means Python repos that use the `sentry-sdk` pip package correctly will show 0 call sites.**
-If a Python app imports `sentry_sdk` and calls `sentry_sdk.capture_exception(...)`, those calls
-are invisible to the current scanner.
+`_python_import_regexes("sentry-sdk")` produces:
+```
+^\s*import\s+(?:sentry\.sdk|sentry_sdk)\b
+^\s*from\s+(?:sentry\.sdk|sentry_sdk)\b
+```
 
-This is a **false negative gap** for Python + sentry, distinct from the false positive issue above.
+Both patterns match `import sentry_sdk` and `from sentry_sdk import ...` correctly (verified by running
+the patterns against test input — all 6 forms match).
+
+The actual situation: **superset does not use `sentry_sdk` at all** in the scanned files. The 223
+low-confidence sites are from the `GenericImportScanner`'s feed symbol matching (e.g., `captureException`,
+`startTransaction`) against SQLAlchemy/threading variable names — not from import detection.
+
+No false negative gap exists for the current Python sentry scanner. The low-confidence filter correctly
+suppresses all 223 superset false positives. A Python repo that DOES import `sentry_sdk` will produce
+HIGH confidence call sites from both `GenericImportScanner` and `PythonScanner`.
 
 ### 5. OpenAI drift: no manifest declared in firecrawl
 
@@ -112,7 +122,7 @@ but no version drift artifact is generated because no lockfile was found.
 | Python openai call sites | 21/21 found, all high conf | PASS |
 | Python anthropic call sites | 15 Python + 2 TS found | PASS |
 | JS sentry call sites | 31 found, 30/31 high conf | PASS |
-| Python sentry (sentry-sdk) | 0 found (gap) | NEEDS WORK |
+| Python sentry (sentry-sdk) | 0 found (superset doesn't use it; scanner correct) | PASS |
 | Superset false positive rate | 223 suppressed correctly | PASS (filter works) |
 | Drift detection (major) | sentry 10.75.3→11.4.0 caught | PASS |
 | Drift detection (minor) | anthropic 0.20.9→0.131.0 caught | PASS |
@@ -122,11 +132,9 @@ but no version drift artifact is generated because no lockfile was found.
 
 ## Recommendation
 
-1. **Add `sentry_sdk.*` support to the Python sentry scanner.** The Python sentry SDK package
-   is `sentry-sdk` (pip), which is imported as `sentry_sdk`. The current scanner only detects
-   `sentry.*` patterns (the JS namespace). Real Python sentry usage would look like:
-   `sentry_sdk.init(dsn=...)`, `sentry_sdk.capture_exception(e)`, `sentry_sdk.push_scope()`.
-   This is the highest-impact gap found.
+1. **The scanner is correct for `sentry_sdk`.** No changes needed. The `_python_import_regexes("sentry-sdk")`
+   function generates patterns for both `sentry_sdk` and `sentry.sdk`. A Python repo using the `sentry-sdk`
+   pip package will be detected. (CORRECTION from original finding: original diagnosis was wrong.)
 
 2. **The false positive filter (low confidence) is working correctly.** The 223 superset sites
    are correctly suppressed. No immediate action needed for precision.
