@@ -3,13 +3,13 @@
     {
       "id": "T-1",
       "title": "Run full test suite and report failures",
-      "status": "running",
+      "status": "done",
       "owner": "tester",
       "depends_on": [],
       "acceptance": "tester writes coordination/tester.md with full pytest output, failure count, and any errors with root cause. Commit the report.",
       "evidence_paths": ["coordination/tester.md"],
-      "next_action": "tester: run `make test` and `make typecheck`, capture full output, summarise failures",
-      "notes": ""
+      "next_action": "done",
+      "notes": "871 pass, 1 fail (provider count mismatch test), lint clean, mypy blocked by numpy/Python3.14, eval 86% (3 spec_diff failures). See coordination/tester.md."
     },
     {
       "id": "T-2",
