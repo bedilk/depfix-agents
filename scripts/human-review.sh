@@ -14,6 +14,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
+# macOS compat
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 ROLES=(principal researcher implementer reviewer tester)
 REVIEW_FILE="coordination/HUMAN-REVIEW.md"
 PLIST_LABEL="com.depfix.human-review"
@@ -78,7 +81,7 @@ done
 echo "Generating review summary -> $REVIEW_FILE"
 
 {
-  echo "# Human Review — $(date -Is)"
+  echo "# Human Review — $(date_iso)"
   echo ""
   echo "Agents paused. Review the status below, then run:"
   echo '```'

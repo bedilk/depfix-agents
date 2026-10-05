@@ -6,6 +6,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 export AGENT_ROLE=reviewer
 
+# macOS compat: GNU coreutils prefixed with 'g'
+timeout() { if command -v gtimeout >/dev/null; then gtimeout "$@"; else command timeout "$@"; fi; }
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 mkdir -p .local coordination/review
 
 MODEL="claude-opus-4-6"
@@ -13,7 +17,7 @@ MODEL="claude-opus-4-6"
 for round in $(seq 1 8); do
   [ -f "coordination/reviewer.stop" ] && exit 0
 
-  printf 'reviewer round %s started %s\n' "$round" "$(date -Is)" >> .local/reviewer-lifecycle.log
+  printf 'reviewer round %s started %s\n' "$round" "$(date_iso)" >> .local/reviewer-lifecycle.log
 
   PROMPT="You are the reviewer agent in /Users/bedil_karimov/Documents/depfix-agents.
 You are an adversarial code reviewer. Your job is to find real bugs, not rubber-stamp work.
@@ -88,7 +92,7 @@ This is round $round."
     "$PROMPT" 2>&1 | tee ".local/reviewer-$round.log"
 
   rc=$?
-  printf 'reviewer round %s exit %s %s\n' "$round" "$rc" "$(date -Is)" >> .local/reviewer-lifecycle.log
+  printf 'reviewer round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/reviewer-lifecycle.log
   [ -f "coordination/reviewer.stop" ] && exit 0
 
   # 120s sleep to respect Opus rate limit and interleave with principal

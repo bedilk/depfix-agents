@@ -13,11 +13,14 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
+# macOS compat
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 ROLE="${AGENT_ROLE:-unknown}"
 LOG=".local/commit-gate.log"
 mkdir -p .local
 
-log() { printf '[%s] %s: %s\n' "$(date -Is)" "$ROLE" "$1" | tee -a "$LOG"; }
+log() { printf '[%s] %s: %s\n' "$(date_iso)" "$ROLE" "$1" | tee -a "$LOG"; }
 
 TEST_ONLY=false
 [[ "${1:-}" == "--test-only" ]] && TEST_ONLY=true
@@ -75,6 +78,6 @@ fi
 # CI runs on GitHub Actions. We log the push SHA so it can be checked later.
 SHA=$(git rev-parse HEAD)
 log "Pushed $SHA — CI will run on GitHub Actions"
-echo "$(date -Is) $SHA $ROLE push-ok" >> .local/push-history.log
+echo "$(date_iso) $SHA $ROLE push-ok" >> .local/push-history.log
 
 exit 0

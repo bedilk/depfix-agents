@@ -11,6 +11,10 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
+# macOS compat
+timeout() { if command -v gtimeout >/dev/null; then gtimeout "$@"; else command timeout "$@"; fi; }
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 REPOS_FILE="real-repos.txt"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 OUTPUT_FILE="research/smoke-${TIMESTAMP}.md"
@@ -44,7 +48,7 @@ echo "Smoke testing $COUNT repos -> $OUTPUT_FILE"
 echo ""
 
 {
-  echo "# Smoke Test — $(date -Is)"
+  echo "# Smoke Test — $(date_iso)"
   echo ""
   echo "Repos tested: $COUNT (from real-repos.txt)"
   echo ""
@@ -103,7 +107,7 @@ done
   echo ""
   echo "- **Passed:** $PASS / $COUNT"
   echo "- **Failed:** $FAIL / $COUNT"
-  echo "- **Timestamp:** $(date -Is)"
+  echo "- **Timestamp:** $(date_iso)"
   echo ""
   if [[ $FAIL -gt 0 ]]; then
     echo "### Failures"
@@ -120,4 +124,4 @@ echo "Results: $OUTPUT_FILE"
 echo "  $PASS passed, $FAIL failed out of $COUNT"
 
 # Log for the 4-hour cycle tracker
-echo "smoke $(date -Is) passed=$PASS failed=$FAIL total=$COUNT" >> .local/smoke-history.log
+echo "smoke $(date_iso) passed=$PASS failed=$FAIL total=$COUNT" >> .local/smoke-history.log

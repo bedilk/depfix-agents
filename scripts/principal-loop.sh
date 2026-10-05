@@ -5,6 +5,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 export AGENT_ROLE=principal
 
+# macOS compat: GNU coreutils prefixed with 'g'
+timeout() { if command -v gtimeout >/dev/null; then gtimeout "$@"; else command timeout "$@"; fi; }
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 mkdir -p .local research coordination/review
 
 MODEL="claude-opus-4-6"
@@ -12,7 +16,7 @@ MODEL="claude-opus-4-6"
 for round in $(seq 1 8); do
   [ -f "coordination/principal.stop" ] && exit 0
 
-  printf 'principal round %s started %s\n' "$round" "$(date -Is)" >> .local/principal-lifecycle.log
+  printf 'principal round %s started %s\n' "$round" "$(date_iso)" >> .local/principal-lifecycle.log
 
   PROMPT="You are the principal agent in /Users/bedil_karimov/Documents/depfix-agents working on the depfix project.
 
@@ -88,7 +92,7 @@ This is round $round. Print a brief final status (5 lines max): tasks assigned, 
     "$PROMPT" 2>&1 | tee ".local/principal-$round.log"
 
   rc=$?
-  printf 'principal round %s exit %s %s\n' "$round" "$rc" "$(date -Is)" >> .local/principal-lifecycle.log
+  printf 'principal round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/principal-lifecycle.log
 
   [ -f "coordination/principal.stop" ] && exit 0
   [ "$rc" -eq 124 ] && { printf 'principal round %s timed out\n' "$round" >> .local/principal-lifecycle.log; }

@@ -4,6 +4,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 export AGENT_ROLE=researcher
 
+# macOS compat: GNU coreutils prefixed with 'g'
+timeout() { if command -v gtimeout >/dev/null; then gtimeout "$@"; else command timeout "$@"; fi; }
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 mkdir -p .local research
 
 MODEL="claude-sonnet-4-6-1m"
@@ -11,7 +15,7 @@ MODEL="claude-sonnet-4-6-1m"
 for round in $(seq 1 20); do
   [ -f "coordination/researcher.stop" ] && exit 0
 
-  printf 'researcher round %s started %s\n' "$round" "$(date -Is)" >> .local/researcher-lifecycle.log
+  printf 'researcher round %s started %s\n' "$round" "$(date_iso)" >> .local/researcher-lifecycle.log
 
   PROMPT="You are the researcher agent in /Users/bedil_karimov/Documents/depfix-agents working on depfix.
 
@@ -83,7 +87,7 @@ and start on the most valuable one."
     "$PROMPT" 2>&1 | tee ".local/researcher-$round.log"
 
   rc=$?
-  printf 'researcher round %s exit %s %s\n' "$round" "$rc" "$(date -Is)" >> .local/researcher-lifecycle.log
+  printf 'researcher round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/researcher-lifecycle.log
   [ -f "coordination/researcher.stop" ] && exit 0
 
   sleep 30

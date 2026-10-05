@@ -4,6 +4,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 export AGENT_ROLE=implementer
 
+# macOS compat: GNU coreutils prefixed with 'g'
+timeout() { if command -v gtimeout >/dev/null; then gtimeout "$@"; else command timeout "$@"; fi; }
+date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
+
 mkdir -p .local
 
 MODEL="claude-sonnet-4-6"
@@ -11,7 +15,7 @@ MODEL="claude-sonnet-4-6"
 for round in $(seq 1 20); do
   [ -f "coordination/implementer.stop" ] && exit 0
 
-  printf 'implementer round %s started %s\n' "$round" "$(date -Is)" >> .local/implementer-lifecycle.log
+  printf 'implementer round %s started %s\n' "$round" "$(date_iso)" >> .local/implementer-lifecycle.log
 
   PROMPT="You are the implementer agent in /Users/bedil_karimov/Documents/depfix-agents working on depfix.
 
@@ -80,7 +84,7 @@ for tasks with owner=implementer and status=running."
     "$PROMPT" 2>&1 | tee ".local/implementer-$round.log"
 
   rc=$?
-  printf 'implementer round %s exit %s %s\n' "$round" "$rc" "$(date -Is)" >> .local/implementer-lifecycle.log
+  printf 'implementer round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/implementer-lifecycle.log
   [ -f "coordination/implementer.stop" ] && exit 0
 
   sleep 30
