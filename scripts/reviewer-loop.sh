@@ -87,7 +87,7 @@ This is round $round."
 
   timeout 15m claude -p \
     --model "$MODEL" \
-    --permission-mode auto \
+    --dangerously-skip-permissions \
     "$PROMPT" 2>&1 | tee ".local/reviewer-$round.log"
 
   rc=$?
