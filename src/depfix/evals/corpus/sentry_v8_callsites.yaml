@@ -1,0 +1,288 @@
+# Sentry v7→v8 eval cases — proves we catch real migration call sites.
+#
+# Fixture: tests/fixtures/sentry_v7_project/ — a small Express app written
+# against @sentry/node ^7.119.0.  All call_sites cases run deterministically
+# under --no-llm.  The fix_generation cases require LLM and have
+# verified: false until a real LLM run confirms each fix_assertion.
+
+# ---------------------------------------------------------------------------
+# call_sites (5 cases)
+# ---------------------------------------------------------------------------
+
+- id: sentry-v7-startTransaction-call-sites
+  category: call_sites
+  verified: true
+  description: >
+    perf.js calls Sentry.startTransaction() — the canonical v7 performance
+    API removed in v8 (replaced by startSpan).  Scanner must detect the
+    method_call on the @sentry/node binding.
+  fixture: sentry_v7_project
+  provider_id: sentry
+  sdk_packages: ["@sentry/node"]
+  symbols: ["sentry.startTransaction"]
+  expected_call_sites:
+    - symbol_contains: "startTransaction"
+      kind: method_call
+      file_contains: "perf.js"
+      min_confidence: medium
+
+- id: sentry-v7-getCurrentHub-call-sites
+  category: call_sites
+  verified: true
+  description: >
+    hub.js calls Sentry.getCurrentHub() — removed in v8 (use
+    getCurrentScope() instead).  Scanner must trace the @sentry/node binding
+    and report a method_call hit.
+  fixture: sentry_v7_project
+  provider_id: sentry
+  sdk_packages: ["@sentry/node"]
+  symbols: ["sentry.getCurrentHub"]
+  expected_call_sites:
+    - symbol_contains: "getCurrentHub"
+      kind: method_call
+      file_contains: "hub.js"
+      min_confidence: medium
+
+- id: sentry-v7-configureScope-call-sites
+  category: call_sites
+  verified: true
+  description: >
+    hub.js calls Sentry.configureScope() — the v7 scope mutation API
+    replaced by withScope() in v8.  Both the direct Sentry.configureScope
+    call and the hub.configureScope chained call appear in the fixture.
+  fixture: sentry_v7_project
+  provider_id: sentry
+  sdk_packages: ["@sentry/node"]
+  symbols: ["sentry.configureScope"]
+  expected_call_sites:
+    - symbol_contains: "configureScope"
+      kind: method_call
+      file_contains: "hub.js"
+      min_confidence: medium
+
+- id: sentry-v7-integrations-http-call-sites
+  category: call_sites
+  verified: true
+  description: >
+    setup.js constructs `new Sentry.Integrations.Http(...)` — the v7
+    class-based integration pattern removed in v8 in favour of
+    httpIntegration().  Scanner must detect the Integrations.Http usage.
+  fixture: sentry_v7_project
+  provider_id: sentry
+  sdk_packages: ["@sentry/node"]
+  symbols: ["sentry.Integrations.Http"]
+  expected_call_sites:
+    - symbol_contains: "Integrations"
+      kind: method_call
+      file_contains: "setup.js"
+      min_confidence: medium
+
+- id: sentry-v7-handlers-request-call-sites
+  category: call_sites
+  verified: true
+  description: >
+    setup.js calls Sentry.Handlers.requestHandler() — the v7 Express
+    middleware helper removed in v8 (replaced by expressIntegration +
+    setupExpressErrorHandler).  Scanner must detect the Handlers namespace
+    usage.
+  fixture: sentry_v7_project
+  provider_id: sentry
+  sdk_packages: ["@sentry/node"]
+  symbols: ["sentry.Handlers.requestHandler"]
+  expected_call_sites:
+    - symbol_contains: "Handlers"
+      kind: method_call
+      file_contains: "setup.js"
+      min_confidence: medium
+
+# ---------------------------------------------------------------------------
+# fix_generation (5 cases)
+# ---------------------------------------------------------------------------
+
+- id: sentry-v7-startTransaction-fix
+  category: fix_generation
+  verified: false
+  description: >
+    perf.js uses the v7 startTransaction API; fix must replace
+    Sentry.startTransaction() with Sentry.startSpan() using the callback
+    pattern and remove the explicit transaction.finish() calls.
+  fixture: sentry_v7_project
+  target_file: src/perf.js
+  breaking_change:
+    package: "@sentry/node"
+    old_version: "7.119.0"
+    new_version: "8.0.0"
+    old_api: "sentry.startTransaction"
+    new_api: "sentry.startSpan"
+    description: >
+      Sentry v8 replaces startTransaction() with startSpan(), which uses a
+      callback pattern where the span auto-finishes when the callback returns.
+      The explicit .finish() call is no longer needed.
+    migration_guide: >
+      Replace `Sentry.startTransaction({ name, op })` with
+      `Sentry.startSpan({ name, op }, (span) => { ... })`. Move the body of
+      the transaction into the callback. Remove all `.finish()` calls.
+    kind: method_renamed
+    source: manual
+    provider_id: sentry
+    confidence: 0.9
+    examples:
+      - - |
+          const transaction = Sentry.startTransaction({ name: 'process-order', op: 'task' });
+          transaction.setStatus('ok');
+          transaction.finish();
+        - |
+          Sentry.startSpan({ name: 'process-order', op: 'task' }, (span) => {
+            span.setStatus({ code: 1 });
+          });
+  fix_assertion:
+    must_contain:
+      - "startSpan"
+    must_not_contain:
+      - "startTransaction"
+    max_changed_line_ratio: 0.8
+
+- id: sentry-v7-getCurrentHub-fix
+  category: fix_generation
+  verified: false
+  description: >
+    hub.js calls Sentry.getCurrentHub().configureScope() to set tags/user;
+    fix must replace with getCurrentScope() and direct scope mutation.
+  fixture: sentry_v7_project
+  target_file: src/hub.js
+  breaking_change:
+    package: "@sentry/node"
+    old_version: "7.119.0"
+    new_version: "8.0.0"
+    old_api: "sentry.getCurrentHub"
+    new_api: "sentry.getCurrentScope"
+    description: >
+      Sentry v8 removes getCurrentHub() in favour of getCurrentScope().
+      The Hub concept is replaced by the Scope hierarchy; scope methods
+      are called directly on the scope object returned by getCurrentScope().
+    migration_guide: >
+      Replace `Sentry.getCurrentHub()` with `Sentry.getCurrentScope()`.
+      The scope object returned has the same setTag/setUser API.
+      Remove the intermediate `.configureScope()` wrapper.
+    kind: method_renamed
+    source: manual
+    provider_id: sentry
+    confidence: 0.9
+    examples:
+      - - |
+          const hub = Sentry.getCurrentHub();
+          hub.configureScope((scope) => { scope.setTag('region', region); });
+        - |
+          const scope = Sentry.getCurrentScope();
+          scope.setTag('region', region);
+  fix_assertion:
+    must_contain:
+      - "getCurrentScope"
+    must_not_contain:
+      - "getCurrentHub"
+    max_changed_line_ratio: 0.7
+
+- id: sentry-v7-integrations-http-fix
+  category: fix_generation
+  verified: false
+  description: >
+    setup.js uses `new Sentry.Integrations.Http({ tracing: true })` and
+    `new Sentry.Integrations.Express({ app })`; fix must replace both with
+    the v8 function-call forms httpIntegration() and expressIntegration().
+  fixture: sentry_v7_project
+  target_file: src/setup.js
+  breaking_change:
+    package: "@sentry/node"
+    old_version: "7.119.0"
+    new_version: "8.0.0"
+    old_api: "sentry.Integrations.Http"
+    new_api: "sentry.httpIntegration"
+    description: >
+      Sentry v8 removed the class-based Integrations.Http and
+      Integrations.Express constructors. They are replaced by the
+      httpIntegration() and expressIntegration() factory functions.
+    migration_guide: >
+      Replace `new Sentry.Integrations.Http({ tracing: true })` with
+      `Sentry.httpIntegration({ tracing: true })` and
+      `new Sentry.Integrations.Express({ app })` with
+      `Sentry.expressIntegration({ app })`.
+    kind: method_renamed
+    source: manual
+    provider_id: sentry
+    confidence: 0.9
+    examples:
+      - - |
+          new Sentry.Integrations.Http({ tracing: true })
+        - |
+          Sentry.httpIntegration({ tracing: true })
+  fix_assertion:
+    must_contain:
+      - "httpIntegration"
+    must_not_contain:
+      - "new Sentry.Integrations.Http"
+    max_changed_line_ratio: 0.6
+
+- id: sentry-v7-captureException-fix
+  category: fix_generation
+  verified: false
+  description: >
+    breadcrumbs.js passes a scope-data object as the second arg to
+    captureException(); v8 deprecates this in favour of withScope().
+    Fix must wrap the call in Sentry.withScope() and set scope data before
+    the captureException call.
+  fixture: sentry_v7_project
+  target_file: src/breadcrumbs.js
+  breaking_change:
+    package: "@sentry/node"
+    old_version: "7.119.0"
+    new_version: "8.0.0"
+    old_api: "sentry.captureException"
+    new_api: "sentry.withScope"
+    description: >
+      Sentry v8 deprecates passing scope context as the second argument to
+      captureException(). Use withScope() to set user, extras, and tags on
+      the current isolation scope before capturing.
+    migration_guide: >
+      Replace `Sentry.captureException(err, { extra, user, tags })` with
+      `Sentry.withScope((scope) => { scope.setExtra(...); scope.setUser(...);
+      scope.setTag(...); Sentry.captureException(err); })`.
+    kind: param_type_changed
+    source: manual
+    provider_id: sentry
+    confidence: 0.85
+    examples:
+      - - |
+          Sentry.captureException(err, {
+            extra: { requestId },
+            user: { id: userId },
+            tags: { component: 'checkout' }
+          });
+        - |
+          Sentry.withScope((scope) => {
+            scope.setExtra('requestId', requestId);
+            scope.setUser({ id: userId });
+            scope.setTag('component', 'checkout');
+            Sentry.captureException(err);
+          });
+  fix_assertion:
+    must_contain:
+      - "withScope"
+    must_not_contain: []
+    max_changed_line_ratio: 0.8
+
+- id: sentry-v7-startChild-call-sites
+  category: call_sites
+  verified: true
+  description: >
+    perf.js chains transaction.startChild() — the v7 child-span API removed
+    in v8.  After startTransaction is traced, startChild on the result must
+    also be detected as a call site on the sentry transaction binding.
+  fixture: sentry_v7_project
+  provider_id: sentry
+  sdk_packages: ["@sentry/node"]
+  symbols: ["sentry.startTransaction"]
+  expected_call_sites:
+    - symbol_contains: "startTransaction"
+      kind: method_call
+      file_contains: "perf.js"
+      min_confidence: medium
