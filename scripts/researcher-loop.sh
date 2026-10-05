@@ -10,7 +10,7 @@ date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y
 
 mkdir -p .local research
 
-MODEL="claude-sonnet-4-6-1m"
+MODEL="claude-sonnet-4-6"
 
 for round in $(seq 1 20); do
   [ -f "coordination/researcher.stop" ] && exit 0
