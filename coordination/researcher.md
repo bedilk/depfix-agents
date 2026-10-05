@@ -133,10 +133,31 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   `eventId`/`resourceId` removed from events webhook delivery types (v15).
   Evidence: research/shopify-provider-spec.md, commit 4963f8d.
 
+## Round 13 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 13
+- **Segment provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding Segment (#4 in recommended add order,
+  10.5M npm/month for `@segment/analytics-node` + 2.7M/month still on old `analytics-node`).
+  Key finding: TWO SDK generations exist simultaneously — old unscoped `analytics-node` v6 and new
+  scoped `@segment/analytics-node` v3. The package rename IS the breaking change (different constructor
+  signature, promise vs callback API, Node.js >=20 requirement). Also covers browser SDK
+  `@segment/analytics-next` (8.3M/mo) and Python `segment-analytics-python` (3.4M/mo).
+  Breaking changes confirmed: v2.0.0 (dropped Node 14/16), v2.3.0 (Node >=20), v3.0.0 (removed
+  node-fetch, native globalThis.fetch), v1.84.3 analytics-next (resolveAnonymousIdConflicts removed).
+  Evidence: research/segment-provider-spec.md, commit 7b847e2.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
-- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8), datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12).
+- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
+  datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
+  segment spec (round 13).
 - Remaining candidates if principal assigns more work:
   1. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
   2. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
-  3. Segment provider spec (T-8 #4 candidate, 10.5M npm/month, no OpenAPI spec)
+  3. Mixpanel provider spec (T-8 #7, 5.4M npm/month, no OpenAPI spec)
+  4. Bugsnag provider spec (T-8 #8, 5.2M npm/month)
+  5. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
