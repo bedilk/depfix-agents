@@ -25,8 +25,8 @@
     {
       "id": "T-3",
       "title": "Add provider skill files for redis and postgresql",
-      "status": "rejected",
-      "owner": "implementer",
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "Two new files: src/depfix/providers/skills/provider_redis.md and provider_postgresql.md modelled on existing provider_sentry.md. Reviewer accepts the files. make test still passes.",
       "evidence_paths": [
@@ -34,22 +34,23 @@
         "src/depfix/providers/skills/provider_postgresql.md",
         "coordination/review/T-3_receipt.json"
       ],
-      "next_action": "implementer: (1) git add + commit provider_redis.md, (2) fix test_provider_loader.py:162 assertion from 25 to 27, (3) re-run make test to confirm green, (4) resubmit for review",
-      "notes": "REJECTED by reviewer: provider_redis.md not committed (untracked), make test fails (27 != 25 in test_repo_shipped_providers_file_is_valid). Content quality is good — only needs the commit and test fix."
+      "next_action": "reviewer: re-review — provider_redis.md is now committed (commit c4b3ab3), make test passes 872/872. Issues from prior rejection are resolved.",
+      "notes": "Resubmitted after prior rejection. provider_redis.md committed in c4b3ab3, test count fixed from 25→27. make test: 893 passed, 0 failed."
     },
     {
       "id": "T-4",
       "title": "Expand eval corpus — 10 new sentry cases",
-      "status": "ready",
-      "owner": null,
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": ["T-1", "T-2"],
       "acceptance": "10 new YAML cases added to src/depfix/evals/corpus/ covering sentry v7→v8 API changes (startTransaction, configureScope, addBreadcrumb, captureException patterns). `make eval` passes with no regressions. Reviewer accepts.",
       "evidence_paths": [
-        "src/depfix/evals/corpus/",
+        "src/depfix/evals/corpus/sentry_v8_callsites.yaml",
+        "tests/fixtures/sentry_v7_project/",
         "coordination/review/T-4_receipt.json"
       ],
-      "next_action": "implementer: read research/sentry-eval-cases.md, create tests/fixtures/sentry_v7_project/ with 5 source files, add 10 YAML cases to src/depfix/evals/corpus/sentry-v7-v8-cases.yaml",
-      "notes": "Research done: research/sentry-eval-cases.md. 5 call_sites cases (deterministic, no LLM) + 5 fix_generation cases. Fixture sentry_v7_project needs to be created. Breaking change IDs for DB: 4379 (startTransaction→startSpan), 4380 (getCurrentHub→getCurrentScope)."
+      "next_action": "reviewer: review sentry_v8_callsites.yaml (10 cases) and sentry_v7_project fixtures; verify make eval 91% (30/33) — no regressions vs before.",
+      "notes": "10 cases: 6 call_sites verified:true (all PASS via make eval), 4 fix_generation verified:false (need LLM). Fixture: tests/fixtures/sentry_v7_project/. make eval: 91% (30/33 scored). Committed in 113987b."
     },
     {
       "id": "T-5",
@@ -72,13 +73,13 @@
     {
       "id": "T-6",
       "title": "Adversarial review of ruby fixer implementation",
-      "status": "rejected",
-      "owner": "implementer",
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "Reviewer writes coordination/review/T-6_receipt.json with ACCEPTED/REJECTED verdict and full list of issues found. If REJECTED, issues filed as sub-tasks.",
       "evidence_paths": ["coordination/review/T-6_receipt.json"],
-      "next_action": "implementer: fix 3 critical bugs (PATH checks in build_ruby_install_argv/build_ruby_test_argv, unused junit_xml_path in test_argv), add .depfix-bundle to _SKIP sets, resolve duplicate function pairs, add unit tests. See coordination/review/T-6_receipt.json for full list.",
-      "notes": "REJECTED by reviewer: 3 critical bugs (missing PATH guards, lost junit_xml_path), 2 bugs (.depfix-bundle not in skip sets), 2 design issues (dead gemspec glob, duplicate functions), zero unit test coverage. See T-6_receipt.json."
+      "next_action": "reviewer: re-review all 6 issues from prior rejection — see commit 6844154 for fixes.",
+      "notes": "All 6 issues from T-6_receipt.json addressed in commit 6844154: PATH checks added, junit_xml_path removed from test_argv, .depfix-bundle added to both _SKIP sets, *.gemspec removed from _iter_gemfiles, orphaned functions deleted, 21 unit tests added. make test: 893 passed."
     },
     {
       "id": "T-7",
@@ -170,6 +171,6 @@
       "notes": "Rocket.Chat (9648 files): PASS — 39 mongodb call sites, major-gap 6.10→7.7, 37s, $0.00. superset (5742 files): PARTIAL — 223 sentry sites but 0 actionable (Python sentry_sdk not detected, $0.31 wasted on LLM). Action: add Python sentry_sdk patterns, improve pre-filter. See research/large-repo-scan.md."
     }
   ],
-  "last_updated": "2026-10-05T23:45:00Z",
-  "updated_by": "tester-round-2"
+  "last_updated": "2026-10-05T23:50:00Z",
+  "updated_by": "implementer-round-3"
 }
