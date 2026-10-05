@@ -25,8 +25,8 @@
     {
       "id": "T-3",
       "title": "Add provider skill files for redis and postgresql",
-      "status": "review",
-      "owner": "reviewer",
+      "status": "rejected",
+      "owner": "implementer",
       "depends_on": ["T-1"],
       "acceptance": "Two new files: src/depfix/providers/skills/provider_redis.md and provider_postgresql.md modelled on existing provider_sentry.md. Reviewer accepts the files. make test still passes.",
       "evidence_paths": [
@@ -34,8 +34,8 @@
         "src/depfix/providers/skills/provider_postgresql.md",
         "coordination/review/T-3_receipt.json"
       ],
-      "next_action": "reviewer: review provider_redis.md and provider_postgresql.md for completeness and accuracy",
-      "notes": "provider_postgresql.md was pre-existing; provider_redis.md written by implementer. make test passes."
+      "next_action": "implementer: (1) git add + commit provider_redis.md, (2) fix test_provider_loader.py:162 assertion from 25 to 27, (3) re-run make test to confirm green, (4) resubmit for review",
+      "notes": "REJECTED by reviewer: provider_redis.md not committed (untracked), make test fails (27 != 25 in test_repo_shipped_providers_file_is_valid). Content quality is good — only needs the commit and test fix."
     },
     {
       "id": "T-4",
@@ -68,13 +68,13 @@
     {
       "id": "T-6",
       "title": "Adversarial review of ruby fixer implementation",
-      "status": "running",
-      "owner": "reviewer",
+      "status": "rejected",
+      "owner": "implementer",
       "depends_on": ["T-1"],
       "acceptance": "Reviewer writes coordination/review/T-6_receipt.json with ACCEPTED/REJECTED verdict and full list of issues found. If REJECTED, issues filed as sub-tasks.",
       "evidence_paths": ["coordination/review/T-6_receipt.json"],
-      "next_action": "reviewer: read src/depfix/ecosystems/ruby_runtime.py, ruby_manifests.py, ruby_lockfile.py, ruby_validator.py — look for edge cases, error paths, missing test coverage",
-      "notes": "This is a pure review task. No code changes until reviewer flags specific issues."
+      "next_action": "implementer: fix 3 critical bugs (PATH checks in build_ruby_install_argv/build_ruby_test_argv, unused junit_xml_path in test_argv), add .depfix-bundle to _SKIP sets, resolve duplicate function pairs, add unit tests. See coordination/review/T-6_receipt.json for full list.",
+      "notes": "REJECTED by reviewer: 3 critical bugs (missing PATH guards, lost junit_xml_path), 2 bugs (.depfix-bundle not in skip sets), 2 design issues (dead gemspec glob, duplicate functions), zero unit test coverage. See T-6_receipt.json."
     },
     {
       "id": "T-7",
@@ -166,6 +166,6 @@
       "notes": "Enterprise repos are large — depfix must handle them without choking"
     }
   ],
-  "last_updated": "2026-10-05T23:25:00Z",
-  "updated_by": "principal-round-2"
+  "last_updated": "2026-10-05T23:35:00Z",
+  "updated_by": "reviewer-round-1"
 }

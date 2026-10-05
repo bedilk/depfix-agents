@@ -1,0 +1,12 @@
+{
+  "task_id": "T-3",
+  "verdict": "REJECTED",
+  "issues": [
+    "provider_redis.md is untracked — not committed. The implementer must `git add` and commit this file before it can be reviewed as shipped code.",
+    "make test fails: test_repo_shipped_providers_file_is_valid asserts len(enabled)==25 but finds 27. The assertion at tests/unit/test_provider_loader.py:162 must be updated to 27 (redis + postgresql were added to providers.yaml). The acceptance criteria say 'make test still passes' — it doesn't.",
+    "Content quality (informational, not blocking): Both skill files are well-structured and comprehensive. provider_redis.md correctly documents node-redis v3→v4 breaking changes, covers ioredis/node-redis/redis-py/redis-gem call sites, and has a useful 'Do NOT' section. provider_postgresql.md covers pg/psycopg2/psycopg patterns with practical grep-first guidance."
+  ],
+  "tests_run": "make test: 871 passed, 1 failed (test_repo_shipped_providers_file_is_valid: assert 27 == 25)",
+  "reviewer_commit": null,
+  "timestamp": "2026-10-05T23:30:00Z"
+}
