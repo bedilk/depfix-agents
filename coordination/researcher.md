@@ -104,11 +104,25 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Three ecosystems (npm + pypi + rubygems) in one entry. Financial domain = highest per-change pain.
   Evidence: research/plaid-provider-spec.md, commit e206137.
 
+## Round 11 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 11
+- **HubSpot provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding hubspot (#4 in recommended add order,
+  6.3M npm/month). npm `@hubspot/api-client` at v14.0.1, pypi `hubspot-api-client` at v12.0.0.
+  6 major versions in ~3 years (2 per year). No public OpenAPI spec — uses ts_exports_diff + github_release.
+  Key breaking change patterns: method moves (blogPostsApi→basicApi in v13), type changes (number→string
+  for objectId in v11), method renames (get→download in v10), GDPR API removal (v12).
+  Evidence: research/hubspot-provider-spec.md, commit c5a50d7.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
-- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8), datadog spec (round 9), plaid spec (round 10).
+- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8), datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11).
 - Remaining candidates if principal assigns more work:
-  1. HubSpot provider spec (T-8 #5 candidate, 6.3M npm/month, per-product OpenAPI catalog)
-  2. Shopify provider spec (T-8 #10 candidate, 4 quarterly API versions/year, per-version OpenAPI spec)
-  3. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
-  4. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
+  1. Shopify provider spec (T-8 #10 candidate, 4 quarterly API versions/year, per-version OpenAPI spec)
+  2. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
+  3. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
+  4. Segment provider spec (T-8 #4 candidate, 10.5M npm/month, no OpenAPI spec)
