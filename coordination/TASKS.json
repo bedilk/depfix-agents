@@ -95,13 +95,13 @@
     {
       "id": "T-8",
       "title": "Research: rank top 10 API providers by breaking-change frequency",
-      "status": "running",
+      "status": "done",
       "owner": "researcher",
       "depends_on": [],
       "acceptance": "researcher writes research/top-providers-by-breakage.md with a ranked list of 10 API providers (not already in providers.yaml) ordered by: (a) how often they ship breaking changes, (b) how many npm/pypi downloads their SDK has, (c) whether an OpenAPI spec or changelog feed exists. Each entry has: provider name, SDK packages, estimated breaking changes per year, feed URL, rationale for ranking.",
       "evidence_paths": ["research/top-providers-by-breakage.md"],
-      "next_action": "researcher: check providers.yaml for current coverage, then research npm/pypi download counts and changelog frequency for uncovered providers",
-      "notes": "This directly informs which providers to add next — prioritize by user pain (frequent breakers with large install bases)"
+      "next_action": "done",
+      "notes": "Top 3 by volume+breaks: resend (48.7M npm/mo, 2-3/yr, OpenAPI 3.1.2), cloudflare (12.9M, 4-6/yr confirmed minor-version breaks, OpenAPI 3.0.3), datadog (12.7M, 2-3/yr). Plaid ranked #6 but highest break frequency (8-12/yr, v52 rubygems). See research/top-providers-by-breakage.md, commit 6d4b420."
     },
     {
       "id": "T-9",
