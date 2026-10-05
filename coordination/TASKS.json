@@ -14,13 +14,13 @@
     {
       "id": "T-2",
       "title": "Research scan recall: Python vs JS call_site comparison on 3 repos",
-      "status": "running",
+      "status": "done",
       "owner": "researcher",
       "depends_on": [],
       "acceptance": "researcher writes research/scan-recall-comparison.md with exact call_site counts from test_pipeline.sh runs on bedilk/firecrawl (openai+anthropic), bedilk/superset (sentry), and bedilk/depfix-test-sentry-v6-app (sentry). Tables, not prose guesses.",
       "evidence_paths": ["research/scan-recall-comparison.md"],
-      "next_action": "researcher: run scripts/test_pipeline.sh for each repo+provider combo, record columns",
-      "notes": ""
+      "next_action": "done",
+      "notes": "Python openai/anthropic scanner PASS. JS sentry scanner PASS. KEY GAP: Python sentry_sdk not detected (scanner looks for sentry.* not sentry_sdk.*). Superset 223 Python sites are all false positives (SQLAlchemy/threading) — correctly filtered as low confidence. See research/scan-recall-comparison.md."
     },
     {
       "id": "T-3",
