@@ -1,7 +1,7 @@
 # Tester State
 
 ## Current Task
-T-1 complete — full test suite baseline established.
+Round 3 complete — no new tasks. Re-ran make test + make eval to verify T-5 ruby cases before reviewer picks up.
 
 ---
 
@@ -143,6 +143,56 @@ mypy is non-functional due to Python 3.14 + numpy stubs incompatibility. depfix 
 ### Assessment
 
 End-to-end flow (watch → scan → plan) works on all three seed repos. The pipeline correctly identifies call sites and determines drift, but cannot generate fixes for vendored dependencies. To test fix generation, a repo with a real semver-resolved dependency is needed.
+
+---
+
+---
+
+## Round 3 Health Check (2026-10-05)
+
+No new inbox messages. No new implementer commits since round 2. Re-ran full test suite to baseline for T-5 reviewer.
+
+### `make test`
+
+**Result: 893 passed, 0 FAILED, 2 deselected (69.89s)**
+
+Improvement from round 1 (871 passed, 1 FAILED):
+- **T-1 failure FIXED**: `test_repo_shipped_providers_file_is_valid` now passes — implementer corrected provider count assertion from 25 → 27.
+- +21 new unit tests from T-5 (ruby eval fixtures) and implementer changes.
+
+### `make eval`
+
+**Result: 91% pass rate (30/33 scored), 12 skipped of 45 total**
+
+Improvement from round 1 (86%, 19/22 scored, 8 skipped of 30):
+- **5 new ruby call_site cases** (T-5): all PASS ✅
+  - `ruby-call-sites-openai-require-import`
+  - `ruby-call-sites-openai-nested-path-require`
+  - `ruby-call-sites-stripe-require-import`
+  - `ruby-call-sites-sentry-ruby-require`
+  - `ruby-call-sites-unrelated-project-precision`
+- **6 new sentry v7-v8 call_site cases** (T-4 partial): all PASS ✅
+  - `sentry-v7-startTransaction-call-sites`
+  - `sentry-v7-getCurrentHub-call-sites`
+  - `sentry-v7-configureScope-call-sites`
+  - `sentry-v7-integrations-http-call-sites`
+  - `sentry-v7-handlers-request-call-sites`
+  - `sentry-v7-startChild-call-sites`
+- **10 fix_generation cases** still skipped (no LLM in eval mode)
+
+#### Remaining failures (pre-existing, not regressions)
+
+| Case | Status |
+|------|--------|
+| `spec-two-operations-removed-on-one-path` | FAIL — multi-op removal on one path not handled |
+| `spec-request-body-added-new-required-field` | FAIL — new required field in request body not classified |
+| `spec-response-shape-changed-via-field-type` | FAIL — response field type change not classified |
+
+These 3 failures existed in round 1 and are unchanged. Not caused by T-5 or T-4 work.
+
+### T-5 Verification for Reviewer
+
+T-5 ruby eval cases: **10/10 call_site assertions PASS**. No regressions in existing tests. Safe to ACCEPT.
 
 ---
 
