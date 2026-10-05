@@ -88,7 +88,6 @@ This is round $round. Print a brief final status (5 lines max): tasks assigned, 
   timeout 10m claude -p \
     --model "$MODEL" \
     --permission-mode auto \
-    --output-format stream-json \
     "$PROMPT" 2>&1 | tee ".local/principal-$round.log"
 
   rc=$?
