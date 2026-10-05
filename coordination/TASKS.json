@@ -87,7 +87,41 @@
       "next_action": "researcher: check providers.yaml for gaps, search npm/pypi for SDKs with public OpenAPI specs not yet in providers.yaml",
       "notes": ""
     }
+    ,
+    {
+      "id": "T-8",
+      "title": "Research: rank top 10 API providers by breaking-change frequency",
+      "status": "ready",
+      "owner": null,
+      "depends_on": [],
+      "acceptance": "researcher writes research/top-providers-by-breakage.md with a ranked list of 10 API providers (not already in providers.yaml) ordered by: (a) how often they ship breaking changes, (b) how many npm/pypi downloads their SDK has, (c) whether an OpenAPI spec or changelog feed exists. Each entry has: provider name, SDK packages, estimated breaking changes per year, feed URL, rationale for ranking.",
+      "evidence_paths": ["research/top-providers-by-breakage.md"],
+      "next_action": "researcher: check providers.yaml for current coverage, then research npm/pypi download counts and changelog frequency for uncovered providers",
+      "notes": "This directly informs which providers to add next — prioritize by user pain (frequent breakers with large install bases)"
+    },
+    {
+      "id": "T-9",
+      "title": "Audit version drift detection: minor vs major completeness",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "researcher writes research/drift-detection-audit.md documenting: (1) how depfix currently detects minor vs major drift, (2) which code paths handle each, (3) test coverage for drift classification, (4) any gaps where drift would be missed or misclassified. Include file paths and line numbers for every finding.",
+      "evidence_paths": ["research/drift-detection-audit.md"],
+      "next_action": "researcher: read src/depfix/ to trace the version comparison logic from scan through plan, document minor vs major handling",
+      "notes": "Core to the value prop — depfix must reliably distinguish minor bumps (auto-update) from major breaks (needs migration)"
+    },
+    {
+      "id": "T-10",
+      "title": "End-to-end dry-run: full pipeline on 3 seed repos",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "tester runs `depfix pipeline --dry-run --no-pr` on bedilk/seed-openai-v3-to-v4, bedilk/seed-stripe-apiversion, and bedilk/seed-sentry-v7-v8. For each: document what the pipeline found (drifts, call-sites, plan output), whether fixes were generated, whether tests passed. Write coordination/tester.md with full pipeline output.",
+      "evidence_paths": ["coordination/tester.md"],
+      "next_action": "tester: run the full pipeline in dry-run mode on each seed repo, capture all output",
+      "notes": "This proves the end-to-end flow works — from watch through plan. The apply step is dry-run only."
+    }
   ],
-  "last_updated": "2026-10-05T12:00:00Z",
+  "last_updated": "2026-10-05T22:00:00Z",
   "updated_by": "principal-init"
 }

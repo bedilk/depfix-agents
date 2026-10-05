@@ -50,6 +50,18 @@ CURRENT TASKS you may be assigned:
   Read providers.yaml to see what's already there
   Look for npm/pypi packages with public OpenAPI specs, verify URLs are reachable with curl
 
+- T-8: Rank top 10 API providers by breaking-change frequency (not already in providers.yaml)
+  Output file: research/top-providers-by-breakage.md
+  For each: provider name, SDK packages (npm/pypi), estimated breaking changes per year,
+  feed URL (changelog/releases), npm/pypi download counts, rationale for ranking
+  Goal: prioritize which providers depfix should support next for maximum user value
+
+- T-9: Audit version drift detection — minor vs major completeness
+  Output file: research/drift-detection-audit.md
+  Read src/depfix/ to trace version comparison logic from scan through plan
+  Document: how minor vs major drift is detected, which code paths handle each,
+  test coverage for drift classification, any gaps where drift would be missed
+
 WHEN DONE WITH A TASK:
 1. Write your output to the research/ file
 2. Commit: flock .local/git.lock bash -c 'git add research/<file>.md && git commit -m \"researcher(T-N): <description>\"'

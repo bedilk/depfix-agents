@@ -1,7 +1,18 @@
 # depfix Agent Team
 
 Repo: /Users/bedil_karimov/Documents/depfix-agents
-Project: Ongoing development of depfix — the AI-powered breaking-dependency-change fixer.
+Project: Building depfix — the missing application layer connecting API providers to their
+customers' codebases. Like Dependabot, but for APIs.
+
+**The problem:** API communication is broken. Breaking changes ship with little warning, useful
+features go unnoticed, changelogs don't get read. Over 30% of service downtime at AWS was due to
+external API/package changes going unnoticed.
+
+**What depfix does:** watches repos for breaking provider API/SDK version changes, finds version
+drifts (minor bumps + major breaking), locates every affected call-site in code, generates version
+bumps and LLM-written fixes, runs tests to verify, and opens a PR — all automatically.
+
+**Read CONTEXT.md** for the full vision, pipeline details, and domain glossary.
 
 This repo is a working copy of `dependency_check`. All agent work (research, code, tests, reviews)
 happens here. Do not modify /Users/bedil_karimov/Documents/dependency_check directly.
@@ -102,14 +113,24 @@ Format: `{"id":"<uuid>","from":"<role>","to":"<role>","ts":"<iso>","body":{...}}
 
 ## Depfix Domain
 
-Key concepts (full detail in CONTEXT.md and docs/decisions.md):
-- Pipeline: `init → watch → scan → plan → apply`
-- `fix_supported` ecosystems: javascript, python, ruby (Go is scan-only)
+**Mission:** Build the application layer that connects API providers to their customers' codebases.
+When Stripe ships a breaking change, an agent should scan customer codebases, identify affected
+usages, and open a PR with the fix.
+
+**Pipeline:** `init → watch → scan → plan → apply`
+- **Watch**: poll provider feeds for new versions and breaking changes
+- **Scan**: clone repo, find call-sites, detect version drift (minor + major)
+- **Plan**: generate LLM-written fixes for breaking changes, version bumps for minor drift
+- **Apply**: apply fixes, run tests, open PR
+
+**Current state:**
+- 25 providers in `providers.yaml` (stripe, openai, anthropic, sentry, mongodb, etc.)
+- 3 fix-supported ecosystems: JavaScript, Python, Ruby (Go is scan-only)
 - `breaking_change.source` must be a valid `ClassificationSource` enum value
 - `REPORT_ONLY`: removals with no replacement — no LLM fix, no PR
 - Plan artifacts are immutable; `apply` never re-calls the LLM
-- Providers config: `providers.yaml`; 25 providers
-- Test command: `bash scripts/test_pipeline.sh provider:bedilk/repo`
+- 8 seed repos (`bedilk/seed-*`) for controlled testing
+- Test: `bash scripts/test_pipeline.sh provider:bedilk/repo`
 - Unit tests: `make test` (no LLM, no network)
 - LLM_PROVIDER=bedrock, BEDROCK_PROFILE=Bedil
 
@@ -174,13 +195,26 @@ bash scripts/human-review.sh --resume     # restart all agents
 
 ## Initial Task Backlog
 
-See coordination/TASKS.json. Starting tasks (ordered by value):
-1. Run full test suite, report failures (tester)
-2. Expand eval corpus — 10 new sentry cases (implementer + researcher)
-3. Add provider skill files for redis and postgresql (implementer)
-4. Review scan recall: Python vs JS call_site count comparison on 3 repos (researcher)
-5. Add 5 eval cases for ruby ecosystem (implementer)
-6. Adversarial review of the ruby fixer implementation (reviewer)
-7. Research: identify 3 new provider candidates with OpenAPI specs available (researcher)
+See coordination/TASKS.json. Tasks advance depfix toward production-ready "Dependabot for APIs":
+
+**Foundation (do first):**
+1. T-1: Run full test suite, establish baseline health (tester)
+2. T-2: Measure scan recall — are we finding all call-sites? (researcher)
+
+**Broader provider coverage:**
+3. T-3: Add redis + postgresql provider skills (implementer)
+4. T-7: Research 3 new high-value providers with OpenAPI specs (researcher)
+5. T-8: Rank top 10 API providers by breaking-change frequency — prioritize who to add next (researcher)
+
+**Deeper detection accuracy:**
+6. T-4: 10 sentry eval cases — prove we catch real v7→v8 migrations (implementer + researcher)
+7. T-5: 5 ruby eval cases — prove ruby ecosystem detection works (implementer)
+8. T-9: Audit version drift detection — do we catch both minor and major correctly? (researcher)
+
+**Hardened fixers:**
+9. T-6: Adversarial review of ruby fixer — find real bugs before users hit them (reviewer)
+
+**End-to-end proof:**
+10. T-10: Dry-run the full pipeline on 3 seed repos, document what works and what breaks (tester)
 
 Principal assigns and sequences these on first run.

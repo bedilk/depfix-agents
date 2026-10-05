@@ -40,10 +40,13 @@ TASK ASSIGNMENT RULES:
 - Assign T-1 to tester if tester is idle (check coordination/tester.md)
 - Assign T-2 to researcher if researcher is idle
 - Assign T-7 to researcher if T-2 is done and researcher is idle
+- Assign T-8 to researcher if T-7 is done and researcher is idle (top providers research)
+- Assign T-9 to researcher if T-8 is done and T-1 is done (drift detection audit)
 - Assign T-3 to implementer after T-1 is done
 - Assign T-4 to implementer after T-1 and T-2 are done (researcher should write research first)
 - Assign T-5 to implementer after T-1 is done
 - Assign T-6 to reviewer if reviewer is idle (it's a pure review, no dependency)
+- Assign T-10 to tester after T-1 is done (end-to-end dry-run on seed repos)
 - For T-4: first assign research subtask to researcher, then implementation to implementer
 
 When assigning a task:

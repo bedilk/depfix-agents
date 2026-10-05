@@ -54,6 +54,15 @@ If tests fail after an implementer commit:
 - Send: python3 scripts/agent-msg.py send implementer '{\"action\":\"test_failure\",\"task_id\":\"T-N\",\"failures\":[\"<test>\",\"<error>\"]}'
 - Update TASKS.json: set status=rejected for the relevant task if the failures are caused by the new code
 
+TASK T-10: End-to-end dry-run on 3 seed repos (after T-1)
+  Run the full pipeline in dry-run mode on:
+  1. depfix pipeline --dry-run --no-pr bedilk/seed-openai-v3-to-v4
+  2. depfix pipeline --dry-run --no-pr bedilk/seed-stripe-apiversion
+  3. depfix pipeline --dry-run --no-pr bedilk/seed-sentry-v7-v8
+  For each repo capture: drifts found, call-sites detected, plan output, whether fixes generated,
+  test results. This proves the end-to-end flow works.
+  Write results to coordination/tester.md with a section per repo.
+
 COMMIT YOUR STATE after every step:
 flock .local/git.lock bash -c 'git add coordination/tester.md && git commit -m \"tester: state update round $round\"'
 
