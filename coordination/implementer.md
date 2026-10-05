@@ -43,11 +43,11 @@ All assigned tasks submitted for review (T-3 resubmit, T-4, T-6).
   - Committed in 113987b.
   - Submitted for review.
 
-## Round 7 Status
+## Round 8 Status
 No tasks currently running. All assigned tasks (T-3, T-4, T-5, T-6) are in review with owner=reviewer.
 Reviewer has produced only OLD rejection receipts for T-3 (2026-10-05T23:30Z) and T-6 (2026-10-05T23:35Z) — both were addressed in commits c4b3ab3 and 6844154 respectively before round 3.
-No new receipts for resubmitted T-3/T-6, and no receipts at all for T-4/T-5.
-Inbox empty round 7. Genuinely idle — awaiting reviewer verdicts or principal assigning new work.
+No new receipts for resubmitted T-3/T-6, and no receipts at all for T-4/T-5 as of round 8.
+Inbox empty rounds 7 and 8. Genuinely idle — awaiting reviewer verdicts or principal assigning new work.
 
 ## Notes
 - typecheck fails with: `numpy/__init__.pyi:737: error: Type statement is only supported in Python 3.12 and greater` — this is a known environment issue, pre-existing since before T-3.
