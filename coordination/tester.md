@@ -92,3 +92,54 @@ mypy is non-functional due to Python 3.14 + numpy stubs incompatibility. depfix 
   2. New required field in request body → `param_now_required`
   3. Response field type change → `response_shape_changed`
 - **mypy:** Configure mypy to skip numpy stubs (e.g., add `[[tool.mypy.overrides]] module = "numpy.*" ignore_errors = true` to pyproject.toml)
+
+---
+
+## T-10: End-to-End Dry-Run on 3 Seed Repos (Round 1 — 2026-10-05)
+
+**Method:** `bash scripts/test_pipeline.sh <provider>:bedilk/<repo>` (runs scan + plan, no apply, no PR)
+
+### Summary Table
+
+| Repo | Provider | Files Scanned | Call Sites | Actionable | Breaking Changes | Drift From | Drift To | Artifact | Cost |
+|------|----------|--------------|------------|------------|-----------------|------------|----------|----------|------|
+| bedilk/seed-openai-v3-to-v4 | openai | 3 | 1 | 1 | 0 | file:./vendor/openai | 7.28.0 | No | $0.0000 |
+| bedilk/seed-stripe-apiversion | stripe | 4 | 2 | 2 | 0 | file:./vendor/stripe | 23.0.0 | No | $0.0044 |
+| bedilk/seed-sentry-v7-v8 | sentry | 3 | 1 | 1 | 0 | file:./vendor/@sentry__node | 11.4.0 | No | $0.0088 |
+
+### Per-Repo Details
+
+#### 1. bedilk/seed-openai-v3-to-v4 (openai)
+- **Scan:** 3 files, 1 actionable call site — `openai.createChatCompletion` at `src/migration.js:6` (high confidence, method_call)
+- **Drift:** `openai@file:./vendor/openai` → `7.28.0` — decision: `version unresolved` (vendored dep, no lockfile semver)
+- **Plan:** 0 PRs, 0 LLM calls. All other changes had `no_call_sites`.
+- **Status:** Pipeline ran end-to-end without crash. Scan found the expected call site.
+
+#### 2. bedilk/seed-stripe-apiversion (stripe)
+- **Scan:** 4 files, 2 actionable call sites — `stripe.charges.create` at `src/migration.js:6` and `src/recurring-charge.js:6` (both high confidence)
+- **Drift:** `stripe@file:./vendor/stripe` → `23.0.0` — decision: `version unresolved` (vendored dep)
+- **API matches:** `stripe.v2.billing.meterEvents.create → stripe.v2.core.billing.meterEvents.create` and others — all `no_call_sites` except the charges calls
+- **Plan:** 0 PRs, 0 LLM calls. No breaking changes matched the actionable sites.
+- **Cost:** $0.0044 for LLM classification (Bedrock/Haiku)
+- **Status:** Pipeline ran end-to-end. Found 2 call sites correctly.
+
+#### 3. bedilk/seed-sentry-v7-v8 (sentry)
+- **Scan:** 3 files, 1 actionable call site — `sentry.Integrations.Http` at `src/migration.js:6` (high confidence)
+- **Drift:** `@sentry/node@file:./vendor/@sentry__node` → `11.4.0` — decision: `version unresolved` (vendored dep)
+- **Feed symbols:** 498 feed-derived symbols checked; deterministic scan found 1 actionable (skipped agent augmentation)
+- **Plan:** 0 PRs, 0 LLM calls.
+- **Cost:** $0.0088 (Bedrock/Haiku for drift classification)
+- **Status:** Pipeline ran end-to-end. Found the expected call site.
+
+### Observations
+
+- **All three pipelines ran without crashes or fatal errors.**
+- **Call-site detection works correctly** on all three seed repos — each expected call site was found.
+- **No PR artifacts generated** because all three repos use vendored (local path) dependencies (`file:./vendor/...`), which means depfix cannot resolve a semver comparison and outputs `version unresolved`. This is expected behavior, not a bug.
+- **Plan stage executes** but produces 0 PRs (no LLM fix generation without a resolvable version drift).
+- **GitHub App authentication works** (all repos cloned successfully via installation token).
+- **Scan is scan-only** (AST/regex, no LLM) for openai; sentry + stripe use Bedrock/Haiku for classification.
+
+### Assessment
+
+End-to-end flow (watch → scan → plan) works on all three seed repos. The pipeline correctly identifies call sites and determines drift, but cannot generate fixes for vendored dependencies. To test fix generation, a repo with a real semver-resolved dependency is needed.
