@@ -83,20 +83,20 @@
     {
       "id": "T-7",
       "title": "Research: identify 3 new provider candidates with OpenAPI specs",
-      "status": "running",
+      "status": "done",
       "owner": "researcher",
       "depends_on": [],
       "acceptance": "researcher writes research/new-provider-candidates.md with 3 providers: name, npm/pypi package, OpenAPI spec URL (verified reachable), estimated breaking-change rate, candidate test repo.",
       "evidence_paths": ["research/new-provider-candidates.md"],
-      "next_action": "researcher: check providers.yaml for gaps, search npm/pypi for SDKs with public OpenAPI specs not yet in providers.yaml",
-      "notes": ""
+      "next_action": "done",
+      "notes": "3 candidates: resend (48.7M npm/mo, OpenAPI 3.1.2 verified), cloudflare (12.9M npm/mo, OpenAPI 3.0.3, confirmed breaking changes in minor releases), plaid (4.7M npm/mo, OpenAPI 3.0.0, v52 rubygems = extremely high break frequency). All spec URLs 200 OK. See research/new-provider-candidates.md, commit fbff4ea."
     }
     ,
     {
       "id": "T-8",
       "title": "Research: rank top 10 API providers by breaking-change frequency",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "researcher",
       "depends_on": [],
       "acceptance": "researcher writes research/top-providers-by-breakage.md with a ranked list of 10 API providers (not already in providers.yaml) ordered by: (a) how often they ship breaking changes, (b) how many npm/pypi downloads their SDK has, (c) whether an OpenAPI spec or changelog feed exists. Each entry has: provider name, SDK packages, estimated breaking changes per year, feed URL, rationale for ranking.",
       "evidence_paths": ["research/top-providers-by-breakage.md"],
@@ -150,26 +150,26 @@
     {
       "id": "T-13",
       "title": "Real-repo scan: multi-provider test on firecrawl (openai + anthropic)",
-      "status": "ready",
-      "owner": null,
+      "status": "done",
+      "owner": "tester",
       "depends_on": ["T-1"],
       "acceptance": "tester runs: (1) bash scripts/test_pipeline.sh openai:bedilk/firecrawl, (2) bash scripts/test_pipeline.sh anthropic:bedilk/firecrawl, (3) bash scripts/test_pipeline.sh openai,anthropic:bedilk/firecrawl. Compare single-provider vs multi-provider scan. Document call-sites found per provider, any overlap or conflicts. Write to research/multi-provider-scan.md.",
       "evidence_paths": ["research/multi-provider-scan.md"],
-      "next_action": "tester: run all 3 scan variants on firecrawl, compare results",
-      "notes": "Multi-provider scanning is key to the Dependabot-for-APIs vision — most real repos use multiple SDKs"
+      "next_action": "done",
+      "notes": "Multi-provider works correctly. openai: 21 call sites (Python examples). anthropic: 17 call sites, drift 0.20.9→0.131.0 patch-minor, plan artifact generated. Combined scan = sum of singles, no interference. See research/multi-provider-scan.md."
     },
     {
       "id": "T-14",
       "title": "Real-repo scan: MongoDB on Rocket.Chat + Sentry on superset (large repos)",
-      "status": "ready",
-      "owner": null,
+      "status": "done",
+      "owner": "tester",
       "depends_on": ["T-1"],
       "acceptance": "tester runs: (1) bash scripts/test_pipeline.sh mongodb:bedilk/Rocket.Chat, (2) bash scripts/test_pipeline.sh sentry:bedilk/superset. These are large repos (100k+ files). Document: scan time, call-sites found, memory usage if visible, any timeouts or failures. Write to research/large-repo-scan.md.",
       "evidence_paths": ["research/large-repo-scan.md"],
-      "next_action": "tester: run test_pipeline.sh on both large repos, monitor for performance issues",
-      "notes": "Enterprise repos are large — depfix must handle them without choking"
+      "next_action": "done",
+      "notes": "Rocket.Chat (9648 files): PASS — 39 mongodb call sites, major-gap 6.10→7.7, 37s, $0.00. superset (5742 files): PARTIAL — 223 sentry sites but 0 actionable (Python sentry_sdk not detected, $0.31 wasted on LLM). Action: add Python sentry_sdk patterns, improve pre-filter. See research/large-repo-scan.md."
     }
   ],
-  "last_updated": "2026-10-05T23:35:00Z",
-  "updated_by": "reviewer-round-1"
+  "last_updated": "2026-10-05T23:45:00Z",
+  "updated_by": "tester-round-2"
 }
