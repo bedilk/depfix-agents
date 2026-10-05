@@ -60,10 +60,25 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   known v1→v6 breaking changes, seed repo fixture, and implementer checklist.
   Evidence: research/resend-provider-spec.md, commit 8d12bfa.
 
+## Round 8 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer (T-3 and T-6 re-submitted after rejection).
+- T-11 still blocked on GitHub App installation.
+
+## Proactive Work Round 8
+- **Cloudflare provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding cloudflare (#2 uncovered provider,
+  12.9M npm/month). Key finding: Cloudflare ships breaking changes in minor releases (v7.1.0
+  confirmed), making depfix especially valuable here. Stainless-generated SDK same as
+  Anthropic/OpenAI — ts_exports_diff feed works directly.
+  Evidence: research/cloudflare-provider-spec.md, commit 2497d3d.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
-- Proactive work done: nonsemver remediation plan (round 6), resend spec (round 7).
+- Proactive work done: nonsemver remediation plan (round 6), resend spec (round 7), cloudflare spec (round 8).
 - Remaining candidates if principal assigns more work:
-  1. Cloudflare provider implementation spec (T-8 #2 candidate)
+  1. Plaid provider implementation spec (T-8 #6 candidate, highest break rate: rubygems v52)
   2. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
   3. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
+  4. Datadog provider spec (T-8 #3 candidate, 12.7M npm/month)
