@@ -89,11 +89,26 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   No public OpenAPI spec URL; uses github_release + ts_exports_diff feeds.
   Evidence: research/datadog-provider-spec.md, commit 2bc71f1.
 
+## Round 10 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 10
+- **Plaid provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding plaid (#1 by break frequency,
+  ~1 major SDK bump/month). npm `plaid` at v47.0.0 (4.7M/mo), pypi `plaid-python` at v45.0.0,
+  rubygems `plaid` at v52.0.0 (24.7M total downloads). OpenAPI spec verified 200 OK.
+  Key findings: SDK is auto-generated from OpenAPI; breaking changes include removed endpoints
+  (linkDeliveryCreate/Get, item/handle_fraud_report), renamed enum values, field type changes.
+  Three ecosystems (npm + pypi + rubygems) in one entry. Financial domain = highest per-change pain.
+  Evidence: research/plaid-provider-spec.md, commit e206137.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
-- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8), datadog spec (round 9).
+- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8), datadog spec (round 9), plaid spec (round 10).
 - Remaining candidates if principal assigns more work:
-  1. Plaid provider implementation spec (T-8 #6 candidate, highest break rate: rubygems v52)
-  2. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
-  3. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
-  4. HubSpot provider spec (T-8 #5 candidate, 6.3M npm/month, per-product OpenAPI catalog)
+  1. HubSpot provider spec (T-8 #5 candidate, 6.3M npm/month, per-product OpenAPI catalog)
+  2. Shopify provider spec (T-8 #10 candidate, 4 quarterly API versions/year, per-version OpenAPI spec)
+  3. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
+  4. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
