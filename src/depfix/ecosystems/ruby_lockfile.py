@@ -12,7 +12,9 @@ def ruby_lockfile_paths(root: Path) -> list[Path]:
     return [
         path
         for path in root.rglob("Gemfile.lock")
-        if "vendor" not in path.parts and ".bundle" not in path.parts
+        if "vendor" not in path.parts
+        and ".bundle" not in path.parts
+        and ".depfix-bundle" not in path.parts
     ]
 
 

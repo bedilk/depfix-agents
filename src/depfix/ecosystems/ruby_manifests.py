@@ -9,7 +9,7 @@ from pathlib import Path
 from depfix.codemods.lockfile import dependency_drift_policy
 from depfix.core.models import BreakingChange
 
-_SKIP = frozenset({".git", "vendor", "node_modules", ".bundle"})
+_SKIP = frozenset({".git", "vendor", "node_modules", ".bundle", ".depfix-bundle"})
 _GEM_LINE_RE = re.compile(
     r"""^(?P<indent>\s*)gem\s+(?P<q>['"])(?P<name>[\w.-]+)(?P=q)"""
     r"""(?P<constraints>(?:\s*,\s*['"][^'"]*['"])*)"""
@@ -79,11 +79,10 @@ def build_ruby_dependency_drift_bumps(root: Path, change: BreakingChange) -> lis
 
 def _iter_gemfiles(root: Path) -> list[Path]:
     found: list[Path] = []
-    for name in ("Gemfile", "*.gemspec"):
-        for path in sorted(root.rglob(name)):
-            if any(part in _SKIP for part in path.relative_to(root).parts[:-1]):
-                continue
-            found.append(path)
+    for path in sorted(root.rglob("Gemfile")):
+        if any(part in _SKIP for part in path.relative_to(root).parts[:-1]):
+            continue
+        found.append(path)
     return found
 
 

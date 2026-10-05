@@ -351,7 +351,7 @@ def _run_ruby_tests(cwd: Path, *, timeout: float, max_output_bytes: int) -> Test
 
     with tempfile.TemporaryDirectory(prefix="depfix-verify-") as tmp:
         junit = Path(tmp) / "results.xml"
-        argv = test_argv(cwd, junit)
+        argv = test_argv(cwd)
         if argv is None:
             return TestRunResult(
                 framework=TestFramework.RSPEC,

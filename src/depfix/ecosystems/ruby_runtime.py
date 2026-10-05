@@ -37,23 +37,9 @@ def has_gemfile(root: str | Path) -> bool:
     return (Path(root) / "Gemfile").is_file()
 
 
-def install_argv(root: str | Path) -> list[str] | None:
-    """`bundle install` into the in-checkout throwaway path, or None."""
-    if bundler() is None or not has_gemfile(root):
+def build_ruby_install_argv(root: Path, *, frozen: bool = True) -> list[str] | None:
+    if bundler() is None:
         return None
-    return [
-        "bundle",
-        "install",
-        "--path",
-        BUNDLE_PATH,
-        "--jobs",
-        "4",
-        "--retry",
-        "1",
-    ]
-
-
-def build_ruby_install_argv(root: Path, *, frozen: bool = True) -> list[str]:
     argv = ["bundle", "install", "--path", BUNDLE_PATH, "--jobs", "4"]
     if frozen and (root / "Gemfile.lock").is_file():
         argv.append("--frozen")
@@ -78,12 +64,14 @@ def has_test_setup(root: str | Path) -> bool:
     return _has_rspec(root) or _has_minitest(root)
 
 
-def test_argv(root: str | Path, junit_xml_path: str | Path) -> list[str] | None:
+def test_argv(root: str | Path) -> list[str] | None:
     """The test command, framework auto-detected.
 
     RSpec emits JSON to stdout (parsed as structured output). Minitest is
-    asked for JUnit XML via minitest-reporters when available; the plain
-    ``rake test`` fallback still yields aggregate counts.
+    asked for JUnit XML via minitest-reporters env vars when available;
+    the plain ``rake test`` fallback still yields aggregate counts. The
+    caller is responsible for passing ``minitest_junit_env(path)`` as
+    ``extra_env`` when the returned command is not rspec.
     """
     root = Path(root)
     if bundler() is None:
@@ -91,17 +79,6 @@ def test_argv(root: str | Path, junit_xml_path: str | Path) -> list[str] | None:
     if _has_rspec(root):
         return ["bundle", "exec", "rspec", "--format", "json"]
     if _has_minitest(root):
-        # minitest-reporters, if the repo bundles it, honours these env
-        # vars (set by the runner) to write JUnit XML; otherwise the run
-        # still prints a summary line the fallback parser reads.
-        return ["bundle", "exec", "rake", "test"]
-    return None
-
-
-def build_ruby_test_argv(root: Path) -> list[str] | None:
-    if (root / ".rspec").is_file() or (root / "spec").is_dir():
-        return ["bundle", "exec", "rspec", "--format", "json"]
-    if (root / "Rakefile").is_file():
         return ["bundle", "exec", "rake", "test"]
     return None
 
