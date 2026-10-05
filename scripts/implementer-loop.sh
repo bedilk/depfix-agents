@@ -57,12 +57,15 @@ T-5: Add 5 ruby ecosystem eval cases
   - Set status=review, send review request to reviewer
 
 WHEN DONE WITH A TASK:
-1. Run make test — confirm passing
+1. Run the COMMIT GATE: bash scripts/commit-gate.sh
+   This runs make test + make lint + make typecheck + git push.
+   If it fails, FIX THE CODE and re-run. Do NOT submit broken code for review.
 2. Commit all changed files: flock .local/git.lock bash -c 'git add <specific files> && git commit -m \"implementer(T-N): <description>\"'
-3. Update coordination/TASKS.json: status=review, owner=reviewer
-4. Update coordination/implementer.md
-5. Send: python3 scripts/agent-msg.py send reviewer '{\"action\":\"review_request\",\"task_id\":\"T-N\",\"summary\":\"what changed\",\"commit\":\"<sha>\",\"files_changed\":[\"...\"]}'
-6. Send: python3 scripts/agent-msg.py send principal '{\"action\":\"status\",\"task_id\":\"T-N\",\"status\":\"review\",\"reviewer\":\"reviewer\"}'
+3. Run commit gate again after committing: bash scripts/commit-gate.sh
+4. Update coordination/TASKS.json: status=review, owner=reviewer
+5. Update coordination/implementer.md
+6. Send: python3 scripts/agent-msg.py send reviewer '{\"action\":\"review_request\",\"task_id\":\"T-N\",\"summary\":\"what changed\",\"commit\":\"<sha>\",\"files_changed\":[\"...\"]}'
+7. Send: python3 scripts/agent-msg.py send principal '{\"action\":\"status\",\"task_id\":\"T-N\",\"status\":\"review\",\"reviewer\":\"reviewer\"}'
 
 COMMIT YOUR STATE after every step:
 flock .local/git.lock bash -c 'git add coordination/implementer.md && git commit -m \"implementer: state update round $round\"'

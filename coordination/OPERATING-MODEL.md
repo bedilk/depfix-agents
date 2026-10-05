@@ -53,6 +53,36 @@ Examples:
 
 Never `git add -A` or `git add .` — stage only your owned files.
 
+## Commit Gate (mandatory for code changes)
+
+**Every code change must pass all three gates before it can be considered done:**
+
+```
+1. LOCAL TESTS    →  make test + make lint + make typecheck must all pass
+2. COMMIT + PUSH  →  commit under git lock, then push to agents remote
+3. CI             →  GitHub Actions CI must pass (lint, test, eval, docker)
+```
+
+**Who runs the gate:**
+
+- **Implementer**: before setting status=review, run `bash scripts/commit-gate.sh`.
+  If it fails, fix the code and re-run. Do NOT submit broken code for review.
+- **Reviewer**: after ACCEPTING a task, run `bash scripts/commit-gate.sh` to push
+  the accepted code and verify CI. If CI fails, REJECT and reopen.
+- **Tester**: after T-1 baseline and after re-testing implementer commits, run
+  `bash scripts/commit-gate.sh --test-only` to verify local tests still pass.
+
+**The gate script (`scripts/commit-gate.sh`) does:**
+1. `make test` — unit tests
+2. `make lint` — ruff check
+3. `make typecheck` — mypy
+4. `git push agents <branch>` — push to GitHub
+5. Logs the pushed SHA to `.local/push-history.log`
+
+**Rule: no task moves to `done` unless the latest commit has been pushed and CI is green.**
+State files and coordination commits (*.md, TASKS.json) don't need the full gate — only
+code changes in `src/`, `tests/`, `providers.yaml`, `scripts/`, or eval corpus YAML.
+
 ## Rate Limit Observance
 
 Principal and reviewer share the 25 req/min Opus pool:
@@ -107,15 +137,47 @@ Agents may propose new tasks. The protocol:
 
 Only principal may write new tasks to TASKS.json. Other agents propose; principal decides.
 
+## 4-Hour Smoke Test on Real Repos
+
+Every 4 hours (aligned with the human review cycle), depfix scan runs against 5-6 real
+third-party repos to verify the scanner works on production codebases.
+
+**What it does:**
+1. Picks 6 random repos from `real-repos.txt` (popular open-source projects that use provider SDKs)
+2. Runs `scripts/test_pipeline.sh` on each (scan only — no PRs, no mutations)
+3. Writes results to `research/smoke-<timestamp>.md` with a table: repo, provider, files scanned,
+   call-sites found, actionable count, pass/fail
+
+**How to run:**
+```bash
+bash scripts/smoke-real-repos.sh          # 6 random repos
+bash scripts/smoke-real-repos.sh 3        # 3 random repos
+bash scripts/smoke-real-repos.sh --all    # all repos in real-repos.txt
+```
+
+**Real repos in the pool** (from `real-repos.txt`):
+- openai: chatbot-ui, chatgpt-api, openai-cookbook, dify
+- stripe: nextjs-subscription-payments, accept-a-payment, saas-starter-kit
+- sentry: sentry-javascript, cal.com, twenty
+- anthropic: pydantic-ai, anthropic-quickstarts
+- mongodb: parse-server, mongoose, Rocket.Chat
+- discord: discord.js, discord.py
+- slack, firebase, twilio, octokit, langchain, posthog, elasticsearch, and more
+
+**Tester responsibility:** after T-1 is done, tester runs the smoke test every 4 hours
+(principal triggers it). If any scan regresses from a previous run, tester files a bug.
+
 ## Human-in-the-Loop Review
 
 Every 4 hours, `scripts/human-review.sh` pauses all agents and produces a summary for human review.
+The smoke test runs as part of this cycle.
 
 The cycle:
-1. The script creates `.stop` files for all agents (graceful pause after current round)
-2. Generates `coordination/HUMAN-REVIEW.md` with: task status, recent commits, open issues, agent health
-3. Human reviews, edits TASKS.json or AGENTS.md as needed, then runs `bash scripts/human-review.sh --resume`
-4. Resume clears `.stop` files and restarts all agents
+1. The script runs `scripts/smoke-real-repos.sh` (real-repo scan)
+2. Creates `.stop` files for all agents (graceful pause after current round)
+3. Generates `coordination/HUMAN-REVIEW.md` with: task status, smoke results, recent commits, agent health
+4. Human reviews, edits TASKS.json or AGENTS.md as needed, then runs `bash scripts/human-review.sh --resume`
+5. Resume clears `.stop` files and restarts all agents
 
 To run manually at any time: `bash scripts/human-review.sh`
 To schedule automatic 4-hour cycles: `bash scripts/human-review.sh --schedule`

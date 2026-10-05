@@ -111,6 +111,41 @@ Format: `{"id":"<uuid>","from":"<role>","to":"<role>","ts":"<iso>","body":{...}}
 
 ---
 
+## Commit Gate (mandatory)
+
+**Every code change must pass the commit gate before it can be reviewed or marked done.**
+
+```bash
+bash scripts/commit-gate.sh    # runs: make test + make lint + make typecheck + git push
+```
+
+- **Implementer** runs it before submitting for review. Broken code = immediate reject.
+- **Reviewer** runs it after ACCEPTING to push and trigger CI. If CI fails, verdict becomes REJECTED.
+- No task reaches `done` without a pushed commit and passing CI.
+
+State files (*.md, TASKS.json) don't need the gate — only code in `src/`, `tests/`, `providers.yaml`,
+`scripts/`, or eval corpus YAML.
+
+---
+
+## 4-Hour Real-Repo Smoke Test
+
+Every 4 hours, depfix scans 5-6 real third-party repos (not our forks — actual popular open-source
+projects that use provider SDKs) to verify the scanner works on production codebases.
+
+```bash
+bash scripts/smoke-real-repos.sh 6    # picks 6 random repos from real-repos.txt
+```
+
+Repos include: chatbot-ui (openai), cal.com (sentry+prisma), discord.js (discord),
+Rocket.Chat (mongodb), bolt-js (slack), nextjs-subscription-payments (stripe), and 50+ more.
+
+The smoke test runs automatically as part of `scripts/human-review.sh` (the 4-hour cycle).
+Results go to `research/smoke-<timestamp>.md`. Principal triggers tester to run it if the
+last smoke is >4 hours old.
+
+---
+
 ## Depfix Domain
 
 **Mission:** Build the application layer that connects API providers to their customers' codebases.

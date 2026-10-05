@@ -58,7 +58,18 @@ PLIST
   exit 0
 fi
 
-# --- Default: pause + generate review ---
+# --- Default: smoke test + pause + generate review ---
+
+# Run the 4-hour smoke test on real repos BEFORE pausing agents
+echo "Running 4-hour smoke test on real repos..."
+if bash scripts/smoke-real-repos.sh 6; then
+  SMOKE_STATUS="PASSED"
+else
+  SMOKE_STATUS="SOME FAILURES"
+fi
+SMOKE_FILE="$(ls -t research/smoke-*.md 2>/dev/null | head -1)"
+echo ""
+
 echo "Pausing all agents for human review..."
 for role in "${ROLES[@]}"; do
   touch "coordination/$role.stop"
@@ -87,6 +98,22 @@ for t in data['tasks']:
     print(f\"  {t['id']:4s} [{t['status']:8s}] owner={owner:12s} {t['title']}\")
 " 2>/dev/null || echo "  (could not parse TASKS.json)"
   echo '```'
+  echo ""
+
+  echo "## Real-Repo Smoke Test"
+  echo ""
+  echo "Status: **$SMOKE_STATUS**"
+  echo ""
+  if [ -n "$SMOKE_FILE" ] && [ -f "$SMOKE_FILE" ]; then
+    # Include the results table from the smoke test
+    sed -n '/^|/p' "$SMOKE_FILE"
+    echo ""
+    sed -n '/^## Summary/,/^$/p' "$SMOKE_FILE"
+    echo ""
+    echo "Full report: \`$SMOKE_FILE\`"
+  else
+    echo "_No smoke test results found._"
+  fi
   echo ""
 
   echo "## Recent Commits (last 15)"

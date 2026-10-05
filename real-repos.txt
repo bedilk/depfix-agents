@@ -1,0 +1,95 @@
+# Real third-party repos for smoke testing depfix scan.
+# Format: provider:owner/repo
+# These are popular open-source projects that use SDKs from providers.yaml.
+# The smoke test picks 5-6 at random each cycle.
+#
+# RULES:
+# - Only public repos (depfix scan clones them)
+# - Must actually import/use the provider's SDK (not just mention it)
+# - Mix of JS/TS, Python, Ruby ecosystems
+# - Prefer repos with 1k+ stars (real usage, not toy projects)
+
+# --- openai ---
+openai:mckaywrigley/chatbot-ui
+openai:transitive-bullshit/chatgpt-api
+openai:openai/openai-cookbook
+openai:langgenius/dify
+
+# --- stripe ---
+stripe:vercel/nextjs-subscription-payments
+stripe:stripe-samples/accept-a-payment
+stripe:boxyhq/saas-starter-kit
+
+# --- anthropic ---
+anthropic:pydantic/pydantic-ai
+anthropic:anthropics/anthropic-quickstarts
+
+# --- sentry ---
+sentry:getsentry/sentry-javascript
+sentry:calcom/cal.com
+sentry:twentyhq/twenty
+
+# --- supabase ---
+supabase:supabase/supabase
+supabase:calcom/cal.com
+
+# --- prisma ---
+prisma:calcom/cal.com
+prisma:twentyhq/twenty
+prisma:trpc/trpc
+
+# --- mongodb ---
+mongodb:parse-community/parse-server
+mongodb:Automattic/mongoose
+mongodb:RocketChat/Rocket.Chat
+
+# --- redis ---
+redis:bull-board/bull-board
+redis:OptimalBits/bull
+
+# --- slack ---
+slack:slackapi/bolt-js
+slack:slackapi/bolt-python
+
+# --- discord ---
+discord:discordjs/discord.js
+discord:Rapptz/discord.py
+
+# --- firebase ---
+firebase:invertase/react-native-firebase
+firebase:firebase/firebase-js-sdk
+
+# --- twilio ---
+twilio:twilio/twilio-node
+twilio:twilio/twilio-python
+
+# --- octokit ---
+octokit:probot/probot
+octokit:octokit/octokit.js
+
+# --- aws-s3 ---
+aws-s3:localstack/localstack
+aws-s3:minio/minio-py
+
+# --- langchain ---
+langchain:langchain-ai/langchain
+langchain:langchain-ai/langchainjs
+
+# --- posthog ---
+posthog:PostHog/posthog
+posthog:PostHog/posthog-js
+
+# --- elasticsearch ---
+elasticsearch:elastic/elasticsearch-js
+elasticsearch:elastic/elasticsearch-py
+
+# --- sendgrid ---
+sendgrid:sendgrid/sendgrid-nodejs
+sendgrid:sendgrid/sendgrid-python
+
+# --- clerk ---
+clerk:clerk/javascript
+
+# --- vercel-ai ---
+vercel-ai:vercel/ai
+vercel-ai:steven-tey/chathn

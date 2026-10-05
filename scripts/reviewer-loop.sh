@@ -64,7 +64,9 @@ FOR EACH REVIEW:
    - ACCEPTED: set status=done
    - REJECTED: set status=rejected, add issues to task.notes
 6. Commit: flock .local/git.lock bash -c 'git add coordination/review/<task_id>_receipt.json coordination/TASKS.json coordination/reviewer.md && git commit -m \"reviewer(T-N): ACCEPTED/REJECTED\"'
-7. Send verdict: python3 scripts/agent-msg.py send implementer '{\"action\":\"review_verdict\",\"task_id\":\"T-N\",\"verdict\":\"ACCEPTED\",\"issues\":[]}'
+7. If ACCEPTED: run bash scripts/commit-gate.sh to push to remote and verify CI.
+   If CI fails: change verdict to REJECTED, reopen the task.
+8. Send verdict: python3 scripts/agent-msg.py send implementer '{\"action\":\"review_verdict\",\"task_id\":\"T-N\",\"verdict\":\"ACCEPTED\",\"issues\":[]}'
    Also: python3 scripts/agent-msg.py send principal '{\"action\":\"review_verdict\",\"task_id\":\"T-N\",\"verdict\":\"ACCEPTED\"}'
 
 IMPORTANT — Do not rubber stamp:

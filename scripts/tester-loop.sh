@@ -91,6 +91,16 @@ TASK T-14: Large-repo scan — Rocket.Chat + superset (after T-1)
   These are 100k+ file repos. Monitor scan time, call-sites, any failures.
   Write to research/large-repo-scan.md
 
+4-HOUR SMOKE TEST DUTY:
+When principal sends you a message with action=smoke_test, run:
+  bash scripts/smoke-real-repos.sh 6
+This picks 6 random real third-party repos from real-repos.txt and scans them.
+Results go to research/smoke-<timestamp>.md.
+Report the summary to principal:
+  python3 scripts/agent-msg.py send principal '{\"action\":\"smoke_results\",\"file\":\"research/smoke-<timestamp>.md\",\"passed\":N,\"failed\":M}'
+Commit the results:
+  flock .local/git.lock bash -c 'git add research/smoke-*.md && git commit -m \"tester: 4-hour smoke test\"'
+
 COMMIT YOUR STATE after every step:
 flock .local/git.lock bash -c 'git add coordination/tester.md && git commit -m \"tester: state update round $round\"'
 

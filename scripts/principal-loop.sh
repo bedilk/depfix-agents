@@ -59,6 +59,17 @@ When assigning a task:
 2. Send inbox message: python3 scripts/agent-msg.py send <role> '{\"action\":\"assign\",\"task_id\":\"T-N\",\"title\":\"...\",\"next_action\":\"...\"}'
 3. Update coordination/TEAM-REGISTRY.json: set agent.current_task and agent.status
 
+COMMIT GATE ENFORCEMENT:
+- When any agent submits code for review, verify they ran bash scripts/commit-gate.sh
+- Check .local/push-history.log for recent pushes
+- If a task reaches status=done but no push is logged for its commit SHA: REJECT it
+
+4-HOUR SMOKE TEST:
+- Check .local/smoke-history.log for the last smoke test timestamp
+- If the last smoke test is >4 hours old (or doesn't exist), send tester:
+  python3 scripts/agent-msg.py send tester '{\"action\":\"smoke_test\",\"count\":6}'
+- After receiving smoke results, record any regressions in coordination/principal.md
+
 EVIDENCE CHECK (do every round after round 1):
 - List commits since your last round: git log --oneline -10
 - For each running task: check if the assignee committed anything
