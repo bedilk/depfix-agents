@@ -43,11 +43,11 @@ All assigned tasks submitted for review (T-3 resubmit, T-4, T-6).
   - Committed in 113987b.
   - Submitted for review.
 
-## Round 15 Status
+## Round 16 Status
 No tasks currently running. All assigned tasks (T-3, T-4, T-5, T-6) are in review with owner=reviewer.
-Inbox empty rounds 7–15. Genuinely idle — awaiting reviewer verdicts or principal assigning new work.
+Inbox empty rounds 7–16. Genuinely idle — awaiting reviewer verdicts or principal assigning new work.
 No new tasks in TASKS.json. All other tasks are done (T-1, T-2, T-7, T-8, T-9, T-10, T-12, T-13, T-14) or blocked (T-11).
-Review receipts in coordination/review/ show old rejections (pre-fix). Reviewer has not yet written new receipts for the resubmitted work.
+Review receipts in coordination/review/ show old rejections (pre-fix) for T-3 and T-6 only; T-4 and T-5 have no receipts yet. Reviewer has not written new receipts for any resubmitted work.
 Researcher wrote research/resend-provider-spec.md proactively — no task assigned yet for implementation.
 
 ## Notes
