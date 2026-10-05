@@ -40,30 +40,34 @@
     {
       "id": "T-4",
       "title": "Expand eval corpus — 10 new sentry cases",
-      "status": "running",
-      "owner": "researcher",
+      "status": "ready",
+      "owner": null,
       "depends_on": ["T-1", "T-2"],
       "acceptance": "10 new YAML cases added to src/depfix/evals/corpus/ covering sentry v7→v8 API changes (startTransaction, configureScope, addBreadcrumb, captureException patterns). `make eval` passes with no regressions. Reviewer accepts.",
       "evidence_paths": [
         "src/depfix/evals/corpus/",
         "coordination/review/T-4_receipt.json"
       ],
-      "next_action": "researcher: write research/sentry-eval-cases.md with 10 API changes and fixture code examples",
-      "notes": "Researcher should produce research/sentry-eval-cases.md first, then implementer writes the YAML"
+      "next_action": "implementer: read research/sentry-eval-cases.md, create tests/fixtures/sentry_v7_project/ with 5 source files, add 10 YAML cases to src/depfix/evals/corpus/sentry-v7-v8-cases.yaml",
+      "notes": "Research done: research/sentry-eval-cases.md. 5 call_sites cases (deterministic, no LLM) + 5 fix_generation cases. Fixture sentry_v7_project needs to be created. Breaking change IDs for DB: 4379 (startTransaction→startSpan), 4380 (getCurrentHub→getCurrentScope)."
     },
     {
       "id": "T-5",
       "title": "Add 5 eval cases for ruby ecosystem",
-      "status": "running",
-      "owner": "implementer",
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "5 new YAML eval cases covering ruby call-site detection (Gemfile + require patterns). `make eval` passes. Reviewer accepts.",
       "evidence_paths": [
-        "src/depfix/evals/corpus/",
+        "src/depfix/evals/corpus/ruby_callsites.yaml",
+        "tests/fixtures/ruby_openai_project/",
+        "tests/fixtures/ruby_stripe_project/",
+        "tests/fixtures/ruby_sentry_project/",
+        "tests/fixtures/ruby_unrelated_project/",
         "coordination/review/T-5_receipt.json"
       ],
-      "next_action": "researcher: study existing call_sites corpus YAML; implementer: write 5 ruby cases",
-      "notes": ""
+      "next_action": "reviewer: review ruby_callsites.yaml and fixture files; verify make eval shows 10/10 call_sites passing",
+      "notes": "Added ecosystem field to EvalCase + GenericImportScanner routing in runner. Makefile eval now uses PYTHONPATH=src + --corpus-dir. All 5 Ruby cases verified: 10/10 call_sites pass. 3 pre-existing spec_diff failures are not from this task."
     },
     {
       "id": "T-6",
@@ -79,8 +83,8 @@
     {
       "id": "T-7",
       "title": "Research: identify 3 new provider candidates with OpenAPI specs",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "researcher",
       "depends_on": [],
       "acceptance": "researcher writes research/new-provider-candidates.md with 3 providers: name, npm/pypi package, OpenAPI spec URL (verified reachable), estimated breaking-change rate, candidate test repo.",
       "evidence_paths": ["research/new-provider-candidates.md"],
