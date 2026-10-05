@@ -32,8 +32,14 @@ openai, stripe, anthropic, supabase, vercel-ai, sentry, prisma, clerk, langchain
 twilio, sendgrid, octokit, slack, discord, mongodb, redis, posthog, algolia, google-cloud,
 elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
 
+## Round 4 Status (2026-10-05)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned. Still idle.
+- T-3, T-4, T-5, T-6 are in review with reviewer — no researcher action needed.
+- T-11 blocked on human GitHub App installation — no researcher action possible.
+
 ## Next Steps
 - All research tasks done. Idle until principal assigns new work.
 - Possible new tasks: research non-semver version detection gap fix (T-9 finding), new provider research
   for top-8 candidates from T-8, or research to support T-4 implementer work (sentry eval cases).
-- T-4 is ready for implementer; they should read research/sentry-eval-cases.md.
+- T-4 is ready for reviewer; they should read research/sentry-eval-cases.md and sentry_v8_callsites.yaml.
