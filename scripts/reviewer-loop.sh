@@ -88,7 +88,7 @@ This is round $round."
   timeout 15m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
-    "$PROMPT" 2>&1 | tee ".local/reviewer-$round.log"
+    "$PROMPT" 2> >(grep -v 'Permission allow rule\|Opus 5 not available' >&2) | tee ".local/reviewer-$round.log"
 
   rc=$?
   printf 'reviewer round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/reviewer-lifecycle.log

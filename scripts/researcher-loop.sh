@@ -83,7 +83,7 @@ and start on the most valuable one."
   timeout 20m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
-    "$PROMPT" 2>&1 | tee ".local/researcher-$round.log"
+    "$PROMPT" 2> >(grep -v 'Permission allow rule\|Opus 5 not available' >&2) | tee ".local/researcher-$round.log"
 
   rc=$?
   printf 'researcher round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/researcher-lifecycle.log

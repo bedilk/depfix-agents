@@ -88,7 +88,7 @@ This is round $round. Print a brief final status (5 lines max): tasks assigned, 
   timeout 10m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
-    "$PROMPT" 2>&1 | tee ".local/principal-$round.log"
+    "$PROMPT" 2> >(grep -v 'Permission allow rule\|Opus 5 not available' >&2) | tee ".local/principal-$round.log"
 
   rc=$?
   printf 'principal round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/principal-lifecycle.log

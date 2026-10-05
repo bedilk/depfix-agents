@@ -80,7 +80,7 @@ for tasks with owner=implementer and status=running."
   timeout 20m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
-    "$PROMPT" 2>&1 | tee ".local/implementer-$round.log"
+    "$PROMPT" 2> >(grep -v 'Permission allow rule\|Opus 5 not available' >&2) | tee ".local/implementer-$round.log"
 
   rc=$?
   printf 'implementer round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/implementer-lifecycle.log
