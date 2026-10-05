@@ -169,3 +169,17 @@ See `research/real-repo-scan-results.md` for full results.
 Human action needed: install depfix GitHub App on the 6 missing repos (or org-wide on `bedilk`).
 
 The one working repo (Rocket.Chat) proves the scanner scales to large repos — 39 deterministic call sites in 9,648 files without any LLM calls.
+
+---
+
+## T-12: E2E Repo Scan (Round 1 — 2026-10-05)
+
+See `research/e2e-repo-results.md` for full details.
+
+| Repo | Call Sites | Fixes Generated | Status |
+|------|------------|-----------------|--------|
+| depfix-test-sentry-v6-app (sentry) | 31 | ✅ LLM fix for startTransaction→startSpan | **PASS** |
+| depfix-test-openai-v3-chat (openai) | 8 | ❌ major-gap review, no auto-fix | PARTIAL |
+| depfix-test-anthropic-callsites (anthropic) | 2 | ❌ no symbol match | PARTIAL |
+
+Key: sentry e2e test fully proves the fix generation pipeline. Sentry plan generated LLM fixes via Bedrock claude-sonnet-4-6 for performance.js and tracing.js. 8 REPORT_ONLY APIs correctly identified. Cost: $0.0506 total.
