@@ -74,11 +74,26 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Anthropic/OpenAI — ts_exports_diff feed works directly.
   Evidence: research/cloudflare-provider-spec.md, commit 2497d3d.
 
+## Round 9 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 9
+- **Datadog provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding datadog (#3 uncovered provider,
+  12.7M npm/month). Key finding: 64 minor releases at v1.x each ship Removed/Changed items —
+  standard SemVer tooling won't warn on these. Critical upcoming: v2 Preview will split monolithic
+  `@datadog/datadog-api-client` into per-product packages, affecting 100% of call sites.
+  Python 3.10+ minimum added in v2.60.0 — another depfix-detectable breaking change.
+  No public OpenAPI spec URL; uses github_release + ts_exports_diff feeds.
+  Evidence: research/datadog-provider-spec.md, commit 2bc71f1.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
-- Proactive work done: nonsemver remediation plan (round 6), resend spec (round 7), cloudflare spec (round 8).
+- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8), datadog spec (round 9).
 - Remaining candidates if principal assigns more work:
   1. Plaid provider implementation spec (T-8 #6 candidate, highest break rate: rubygems v52)
   2. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
   3. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
-  4. Datadog provider spec (T-8 #3 candidate, 12.7M npm/month)
+  4. HubSpot provider spec (T-8 #5 candidate, 6.3M npm/month, per-product OpenAPI catalog)
