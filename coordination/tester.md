@@ -183,3 +183,43 @@ See `research/e2e-repo-results.md` for full details.
 | depfix-test-anthropic-callsites (anthropic) | 2 | ❌ no symbol match | PARTIAL |
 
 Key: sentry e2e test fully proves the fix generation pipeline. Sentry plan generated LLM fixes via Bedrock claude-sonnet-4-6 for performance.js and tracing.js. 8 REPORT_ONLY APIs correctly identified. Cost: $0.0506 total.
+
+---
+
+## T-13: Multi-Provider Scan — firecrawl (Round 2 — 2026-10-05)
+
+**Repo:** bedilk/firecrawl (1,270 files)
+
+| Run | Provider(s) | Call Sites | Actionable | Drift | Artifact | Cost |
+|-----|-------------|------------|------------|-------|----------|------|
+| Single | openai | 21 | 21 | — | No | $0.0013 |
+| Single | anthropic | 17 | 16 | 0.20.9 → 0.131.0 (patch-minor) | Yes | $0.0000 |
+| Combined | openai + anthropic | 21 + 17 | 21 + 16 | same | Yes | $0.0013 |
+
+**Key findings:**
+- Multi-provider scan is functionally correct — combined results match single-provider runs exactly
+- openai: 21 Python `import openai` calls in examples/ (all high confidence)
+- anthropic: `@anthropic-ai/sdk@0.20.9` drift to 0.131.0 detected; plan artifact generated (real actionable finding)
+- No interference or double-counting between providers
+- scan exit-1 is benign (parallel `make eval` exit code, not a scan failure)
+
+See `research/multi-provider-scan.md` for full details.
+
+---
+
+## T-14: Large-Repo Stress Test (Round 2 — 2026-10-05)
+
+| Repo | Provider | Files | Call Sites | Actionable | Drift | Cost | Scan Time | Status |
+|------|----------|-------|------------|------------|-------|------|-----------|--------|
+| bedilk/Rocket.Chat | mongodb | 9,648 | 39 | 39 | 6.10.0 → 7.7.0 (major-gap) | $0.0000 | ~37s | PASS |
+| bedilk/superset | sentry | 5,742 | 223 | 0 | — | $0.3102 | ~3m47s | PARTIAL |
+
+**Rocket.Chat:** Full PASS. 9,648 files scanned in 37s. 39 deterministic mongodb call sites found. Major-gap (6.x→7.x) triggers human-review mode (correct safety behavior). No OOM, no timeout.
+
+**superset:** Scan completes without crash. 223 raw sentry sites found but all filtered to 0 actionable — superset uses Python `sentry_sdk.*` not JS `@sentry/node`, which is outside the current scanner's detection scope. Cost $0.3102 wasted on LLM-classifying 223 false positives.
+
+**Action needed (implementer):**
+1. Add Python `sentry_sdk.*` import patterns to the sentry provider scanner
+2. Improve pre-LLM false-positive filtering to avoid $0.31/run waste on unmatched sites
+
+See `research/large-repo-scan.md` for full details.
