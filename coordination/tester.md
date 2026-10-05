@@ -351,6 +351,27 @@ No action required from tester this round. All in-flight tasks await reviewer de
 
 ---
 
+## Round 8 Health Check (2026-10-05)
+
+No inbox messages. New commits since round 7: `5fb5f10` (implementer state round 10 — state only), `525d9ef` (implementer state round 9 — state only). No source code, test files, eval corpus, or providers.yaml changed.
+
+### `make test`
+**Result: 893 passed, 0 failed, 2 deselected** — no change from round 7, re-run skipped (no code changes).
+
+### `make eval`
+**Result: 91% pass rate (30/33 scored), 12 skipped of 45 total** — no change from round 7.
+
+### Open tasks
+- **T-3** (redis/postgresql): in review, waiting on reviewer verdict
+- **T-4** (sentry eval cases): in review, waiting on reviewer verdict
+- **T-5** (ruby eval cases): in review, waiting on reviewer verdict
+- **T-6** (ruby fixer adversarial): in review, waiting on reviewer verdict
+- **T-11** (7 forked repos): blocked on GitHub App installation (human action needed)
+
+No action required from tester this round. All in-flight tasks await reviewer decisions.
+
+---
+
 ## T-14: Large-Repo Stress Test (Round 2 — 2026-10-05)
 
 | Repo | Provider | Files | Call Sites | Actionable | Drift | Cost | Scan Time | Status |
