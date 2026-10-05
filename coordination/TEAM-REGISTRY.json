@@ -1,0 +1,71 @@
+{
+  "agents": [
+    {
+      "tag": "principal",
+      "model": "claude-opus-4-6",
+      "mode": "interactive",
+      "script": "scripts/principal-loop.sh",
+      "owns": ["coordination/principal.md", "coordination/TASKS.json dispatch"],
+      "state_file": "coordination/principal.md",
+      "inbox": "coordination/inbox/principal.jsonl",
+      "status": "idle",
+      "current_task": null,
+      "last_active": null
+    },
+    {
+      "tag": "researcher",
+      "model": "claude-sonnet-4-6-1m",
+      "mode": "headless",
+      "script": "scripts/researcher-loop.sh",
+      "owns": ["coordination/researcher.md", "research/"],
+      "state_file": "coordination/researcher.md",
+      "inbox": "coordination/inbox/researcher.jsonl",
+      "status": "idle",
+      "current_task": null,
+      "last_active": null
+    },
+    {
+      "tag": "implementer",
+      "model": "claude-sonnet-4-6",
+      "mode": "headless",
+      "script": "scripts/implementer-loop.sh",
+      "owns": ["coordination/implementer.md", "src/"],
+      "state_file": "coordination/implementer.md",
+      "inbox": "coordination/inbox/implementer.jsonl",
+      "status": "idle",
+      "current_task": null,
+      "last_active": null
+    },
+    {
+      "tag": "reviewer",
+      "model": "claude-opus-4-6",
+      "mode": "interactive",
+      "script": "scripts/reviewer-loop.sh",
+      "owns": ["coordination/reviewer.md", "coordination/review/"],
+      "state_file": "coordination/reviewer.md",
+      "inbox": "coordination/inbox/reviewer.jsonl",
+      "status": "idle",
+      "current_task": null,
+      "last_active": null
+    },
+    {
+      "tag": "tester",
+      "model": "claude-sonnet-4-6",
+      "mode": "headless",
+      "script": "scripts/tester-loop.sh",
+      "owns": ["coordination/tester.md"],
+      "state_file": "coordination/tester.md",
+      "inbox": "coordination/inbox/tester.jsonl",
+      "status": "idle",
+      "current_task": null,
+      "last_active": null
+    }
+  ],
+  "model_limits": {
+    "claude-opus-4-6": {"requests_per_minute": 25, "shared_with": ["claude-opus-4-5"]},
+    "claude-opus-4-5": {"requests_per_minute": 25, "shared_with": ["claude-opus-4-6"]},
+    "claude-sonnet-4-6": {"requests_per_minute": 10000, "shared_with": ["claude-sonnet-4-6-1m"]},
+    "claude-sonnet-4-6-1m": {"requests_per_minute": 10000, "shared_with": ["claude-sonnet-4-6"]}
+  },
+  "notes": "Opus pool (principal+reviewer) must not exceed 25 req/min combined. Space Opus rounds >= 2 min apart. Sonnet agents run freely."
+}

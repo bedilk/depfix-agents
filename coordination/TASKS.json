@@ -1,0 +1,93 @@
+{
+  "tasks": [
+    {
+      "id": "T-1",
+      "title": "Run full test suite and report failures",
+      "status": "ready",
+      "owner": null,
+      "depends_on": [],
+      "acceptance": "tester writes coordination/tester.md with full pytest output, failure count, and any errors with root cause. Commit the report.",
+      "evidence_paths": ["coordination/tester.md"],
+      "next_action": "tester: run `make test` and `make typecheck`, capture full output, summarise failures",
+      "notes": ""
+    },
+    {
+      "id": "T-2",
+      "title": "Research scan recall: Python vs JS call_site comparison on 3 repos",
+      "status": "ready",
+      "owner": null,
+      "depends_on": [],
+      "acceptance": "researcher writes research/scan-recall-comparison.md with exact call_site counts from test_pipeline.sh runs on bedilk/firecrawl (openai+anthropic), bedilk/superset (sentry), and bedilk/depfix-test-sentry-v6-app (sentry). Tables, not prose guesses.",
+      "evidence_paths": ["research/scan-recall-comparison.md"],
+      "next_action": "researcher: run scripts/test_pipeline.sh for each repo+provider combo, record columns",
+      "notes": ""
+    },
+    {
+      "id": "T-3",
+      "title": "Add provider skill files for redis and postgresql",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "Two new files: src/depfix/providers/skills/provider_redis.md and provider_postgresql.md modelled on existing provider_sentry.md. Reviewer accepts the files. make test still passes.",
+      "evidence_paths": [
+        "src/depfix/providers/skills/provider_redis.md",
+        "src/depfix/providers/skills/provider_postgresql.md",
+        "coordination/review/T-3_receipt.json"
+      ],
+      "next_action": "implementer: read provider_sentry.md as template, write both skill files",
+      "notes": ""
+    },
+    {
+      "id": "T-4",
+      "title": "Expand eval corpus — 10 new sentry cases",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1", "T-2"],
+      "acceptance": "10 new YAML cases added to src/depfix/evals/corpus/ covering sentry v7→v8 API changes (startTransaction, configureScope, addBreadcrumb, captureException patterns). `make eval` passes with no regressions. Reviewer accepts.",
+      "evidence_paths": [
+        "src/depfix/evals/corpus/",
+        "coordination/review/T-4_receipt.json"
+      ],
+      "next_action": "researcher: study existing eval YAML format and sentry v7→v8 changelog; implementer: write 10 cases",
+      "notes": "Researcher should produce research/sentry-eval-cases.md first, then implementer writes the YAML"
+    },
+    {
+      "id": "T-5",
+      "title": "Add 5 eval cases for ruby ecosystem",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "5 new YAML eval cases covering ruby call-site detection (Gemfile + require patterns). `make eval` passes. Reviewer accepts.",
+      "evidence_paths": [
+        "src/depfix/evals/corpus/",
+        "coordination/review/T-5_receipt.json"
+      ],
+      "next_action": "researcher: study existing call_sites corpus YAML; implementer: write 5 ruby cases",
+      "notes": ""
+    },
+    {
+      "id": "T-6",
+      "title": "Adversarial review of ruby fixer implementation",
+      "status": "ready",
+      "owner": null,
+      "depends_on": ["T-1"],
+      "acceptance": "Reviewer writes coordination/review/T-6_receipt.json with ACCEPTED/REJECTED verdict and full list of issues found. If REJECTED, issues filed as sub-tasks.",
+      "evidence_paths": ["coordination/review/T-6_receipt.json"],
+      "next_action": "reviewer: read src/depfix/ecosystems/ruby_runtime.py, ruby_manifests.py, ruby_lockfile.py, ruby_validator.py — look for edge cases, error paths, missing test coverage",
+      "notes": "This is a pure review task. No code changes until reviewer flags specific issues."
+    },
+    {
+      "id": "T-7",
+      "title": "Research: identify 3 new provider candidates with OpenAPI specs",
+      "status": "ready",
+      "owner": null,
+      "depends_on": [],
+      "acceptance": "researcher writes research/new-provider-candidates.md with 3 providers: name, npm/pypi package, OpenAPI spec URL (verified reachable), estimated breaking-change rate, candidate test repo.",
+      "evidence_paths": ["research/new-provider-candidates.md"],
+      "next_action": "researcher: check providers.yaml for gaps, search npm/pypi for SDKs with public OpenAPI specs not yet in providers.yaml",
+      "notes": ""
+    }
+  ],
+  "last_updated": "2026-10-05T12:00:00Z",
+  "updated_by": "principal-init"
+}
