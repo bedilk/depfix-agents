@@ -127,6 +127,7 @@ def _parse_case(data: dict[str, Any]) -> EvalCase:
         expected_call_sites=_parse_expected_call_sites(data, case_id),
         forbidden_files=list(data.get("forbidden_files", [])),
         min_recall=float(min_recall) if min_recall is not None else None,
+        ecosystem=str(data.get("ecosystem", "javascript")),
     )
 
 

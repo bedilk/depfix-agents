@@ -1,0 +1,86 @@
+# Ruby ecosystem call-site eval cases.
+# These exercise GenericImportScanner(RUBY) via the `ecosystem: ruby` field
+# (see runner.py's _run_call_sites routing).  All cases run deterministically
+# under --no-llm.
+
+- id: ruby-call-sites-openai-require-import
+  category: call_sites
+  verified: true
+  ecosystem: ruby
+  description: >
+    Single Ruby file that does `require 'openai'`.  The scanner must
+    produce a HIGH-confidence SDK_IMPORT hit — the require pattern is
+    derived mechanically from the gem name so confidence should be HIGH.
+  fixture: ruby_openai_project
+  provider_id: openai
+  sdk_packages: ["openai"]
+  expected_call_sites:
+    - kind: sdk_import
+      symbol_contains: "openai"
+      file_contains: "app.rb"
+      min_confidence: high
+
+- id: ruby-call-sites-openai-nested-path-require
+  category: call_sites
+  verified: true
+  ecosystem: ruby
+  description: >
+    `require 'openai/client'` (a nested gem path).  The regex
+    `require\s+['"]openai(?:['"]|/)` must match the nested form, not just
+    the bare gem name.
+  fixture: ruby_openai_project
+  provider_id: openai
+  sdk_packages: ["openai"]
+  expected_call_sites:
+    - kind: sdk_import
+      symbol_contains: "openai"
+      file_contains: "completions.rb"
+      min_confidence: high
+
+- id: ruby-call-sites-stripe-require-import
+  category: call_sites
+  verified: true
+  ecosystem: ruby
+  description: >
+    Ruby billing file that `require 'stripe'` and then calls
+    `Stripe::Customer.create` and `Stripe::Charge.create`.
+    Import detection must fire for the `require` line.
+  fixture: ruby_stripe_project
+  provider_id: stripe
+  sdk_packages: ["stripe"]
+  expected_call_sites:
+    - kind: sdk_import
+      symbol_contains: "stripe"
+      file_contains: "billing.rb"
+      min_confidence: high
+
+- id: ruby-call-sites-sentry-ruby-require
+  category: call_sites
+  verified: true
+  ecosystem: ruby
+  description: >
+    Ruby file that `require 'sentry-ruby'`.  The gem name contains a
+    hyphen; the regex must match the exact gem name `sentry-ruby`,
+    not just `sentry`.
+  fixture: ruby_sentry_project
+  provider_id: sentry
+  sdk_packages: ["sentry-ruby"]
+  expected_call_sites:
+    - kind: sdk_import
+      symbol_contains: "sentry-ruby"
+      file_contains: "error_handler.rb"
+      min_confidence: high
+
+- id: ruby-call-sites-unrelated-project-precision
+  category: call_sites
+  verified: true
+  ecosystem: ruby
+  description: >
+    A Ruby project that has variables named `openai` and `stripe` but
+    no actual `require 'openai'` or `require 'stripe'` statements.
+    The scanner must produce zero actionable call sites — a false positive
+    here would send the fixer into an unaffected repo.
+  fixture: ruby_unrelated_project
+  provider_id: openai
+  sdk_packages: ["openai"]
+  forbidden_files: ["service.rb"]

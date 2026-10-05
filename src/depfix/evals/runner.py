@@ -229,7 +229,22 @@ class EvalRunner:
             api_base_urls=tuple(case.api_base_urls),
             symbols=tuple(case.symbols),
         )
-        result = self._call_site_scanner.scan(fixture_dir, target)
+        if case.ecosystem != "javascript":
+            from depfix.ecosystems.callsites import GenericImportScanner
+            from depfix.ecosystems.registry import get as get_ecosystem
+
+            spec = get_ecosystem(case.ecosystem)
+            if spec is None:
+                return CaseResult(
+                    case.id,
+                    case.category,
+                    False,
+                    case.verified,
+                    f"unknown ecosystem: {case.ecosystem!r}",
+                )
+            result = GenericImportScanner(spec).scan(fixture_dir, target)
+        else:
+            result = self._call_site_scanner.scan(fixture_dir, target)
         passed, detail = score_call_sites(
             case.expected_call_sites,
             case.forbidden_files,

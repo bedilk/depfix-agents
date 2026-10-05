@@ -49,13 +49,13 @@ run:  ## Run the depfix CLI (pass ARGS="--help")
 	depfix $(ARGS)
 
 eval:  ## Run the eval corpus without an LLM (deterministic spec_diff cases only; CI gate)
-	depfix eval --no-llm --fail-under 1.0 --save .depfix-cache/eval-results/local.json
+	PYTHONPATH=src depfix eval --no-llm --fail-under 1.0 --corpus-dir src/depfix/evals/corpus --save .depfix-cache/eval-results/local.json
 
 eval-full:  ## Run the full eval corpus, including LLM-backed release_notes/fix_generation cases
-	depfix eval --fail-under 1.0 --save .depfix-cache/eval-results/local.json
+	PYTHONPATH=src depfix eval --fail-under 1.0 --corpus-dir src/depfix/evals/corpus --save .depfix-cache/eval-results/local.json
 
 eval-compare:  ## Run the full eval corpus and fail on any per-case regression vs. the last saved report
-	depfix eval --compare .depfix-cache/eval-results/local.json --save .depfix-cache/eval-results/local.json
+	PYTHONPATH=src depfix eval --compare .depfix-cache/eval-results/local.json --corpus-dir src/depfix/evals/corpus --save .depfix-cache/eval-results/local.json
 
 classify:  ## Classify pending change events into breaking changes
 	depfix classify

@@ -101,6 +101,9 @@ class EvalCase:
     expected_call_sites: list[ExpectedCallSite] = field(default_factory=list)
     forbidden_files: list[str] = field(default_factory=list)
     min_recall: float | None = None
+    # "javascript" → binding-aware CallSiteScanner; any other ecosystem id →
+    # GenericImportScanner with the matching EcosystemSpec.
+    ecosystem: str = "javascript"
 
 
 @dataclass
