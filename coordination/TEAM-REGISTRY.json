@@ -32,9 +32,9 @@
       "owns": ["coordination/implementer.md", "src/"],
       "state_file": "coordination/implementer.md",
       "inbox": "coordination/inbox/implementer.jsonl",
-      "status": "idle",
-      "current_task": null,
-      "last_active": null
+      "status": "running",
+      "current_task": "T-5",
+      "last_active": "2026-10-05T23:25:00Z"
     },
     {
       "tag": "reviewer",
@@ -57,8 +57,8 @@
       "state_file": "coordination/tester.md",
       "inbox": "coordination/inbox/tester.jsonl",
       "status": "running",
-      "current_task": "T-1",
-      "last_active": "2026-10-05T23:10:00Z"
+      "current_task": "T-11",
+      "last_active": "2026-10-05T23:25:00Z"
     }
   ],
   "model_limits": {

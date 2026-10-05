@@ -54,8 +54,8 @@
     {
       "id": "T-5",
       "title": "Add 5 eval cases for ruby ecosystem",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "implementer",
       "depends_on": ["T-1"],
       "acceptance": "5 new YAML eval cases covering ruby call-site detection (Gemfile + require patterns). `make eval` passes. Reviewer accepts.",
       "evidence_paths": [
@@ -113,19 +113,19 @@
     {
       "id": "T-10",
       "title": "End-to-end dry-run: full pipeline on 3 seed repos",
-      "status": "ready",
-      "owner": null,
+      "status": "done",
+      "owner": "tester",
       "depends_on": ["T-1"],
       "acceptance": "tester runs `depfix pipeline --dry-run --no-pr` on bedilk/seed-openai-v3-to-v4, bedilk/seed-stripe-apiversion, and bedilk/seed-sentry-v7-v8. For each: document what the pipeline found (drifts, call-sites, plan output), whether fixes were generated, whether tests passed. Write coordination/tester.md with full pipeline output.",
       "evidence_paths": ["coordination/tester.md"],
-      "next_action": "tester: run the full pipeline in dry-run mode on each seed repo, capture all output",
-      "notes": "This proves the end-to-end flow works — from watch through plan. The apply step is dry-run only."
+      "next_action": "done",
+      "notes": "All 3 seed repos scanned successfully. Call-site detection correct on all. No PRs (vendored deps = version unresolved). Pipeline end-to-end works without crash. See coordination/tester.md T-10 section."
     },
     {
       "id": "T-11",
       "title": "Real-repo scan: test all 7 forked repos with test_all_repos.sh",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "tester",
       "depends_on": ["T-1"],
       "acceptance": "tester runs `bash test_all_repos.sh` which tests: bedilk/probot (octokit), bedilk/renovate (octokit), bedilk/bolt-js (slack), bedilk/sentry (slack), bedilk/AtlantaBot (discord), bedilk/guide (discord), bedilk/Rocket.Chat (mongodb). For each repo: record files_scanned, call_sites found, actionable count, and whether plan generated fixes. Write results table to research/real-repo-scan-results.md.",
       "evidence_paths": ["research/real-repo-scan-results.md"],
@@ -166,6 +166,6 @@
       "notes": "Enterprise repos are large — depfix must handle them without choking"
     }
   ],
-  "last_updated": "2026-10-05T23:00:00Z",
-  "updated_by": "principal-init"
+  "last_updated": "2026-10-05T23:25:00Z",
+  "updated_by": "principal-round-2"
 }
