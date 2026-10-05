@@ -143,3 +143,29 @@ mypy is non-functional due to Python 3.14 + numpy stubs incompatibility. depfix 
 ### Assessment
 
 End-to-end flow (watch → scan → plan) works on all three seed repos. The pipeline correctly identifies call sites and determines drift, but cannot generate fixes for vendored dependencies. To test fix generation, a repo with a real semver-resolved dependency is needed.
+
+---
+
+## T-11: Real-Repo Scan — 7 Forked Repos (Round 1 — 2026-10-05)
+
+**Status: BLOCKED** — 6/7 repos require GitHub App installation.
+
+See `research/real-repo-scan-results.md` for full results.
+
+### Summary
+
+| # | Repo | Status | Call Sites | Notes |
+|---|------|--------|------------|-------|
+| 1 | bedilk/probot (octokit) | BLOCKED | — | GitHub App not installed |
+| 2 | bedilk/renovate (octokit) | BLOCKED | — | GitHub App not installed |
+| 3 | bedilk/bolt-js (slack) | BLOCKED | — | GitHub App not installed |
+| 4 | bedilk/sentry (slack) | BLOCKED | — | GitHub App not installed |
+| 5 | bedilk/AtlantaBot (discord) | BLOCKED | — | GitHub App not installed |
+| 6 | bedilk/guide (discord) | BLOCKED | — | GitHub App not installed |
+| 7 | bedilk/Rocket.Chat (mongodb) | **PASS** | 39/9648 files | mongodb 6.10→7.7 major-gap; 0 PRs (no matching breaking API calls) |
+
+### Blocker
+
+Human action needed: install depfix GitHub App on the 6 missing repos (or org-wide on `bedilk`).
+
+The one working repo (Rocket.Chat) proves the scanner scales to large repos — 39 deterministic call sites in 9,648 files without any LLM calls.
