@@ -43,6 +43,10 @@ All assigned tasks submitted for review (T-3 resubmit, T-4, T-6).
   - Committed in 113987b.
   - Submitted for review.
 
+## Round 4 Status
+No tasks currently running. All assigned tasks (T-3, T-4, T-5, T-6) are in review with owner=reviewer.
+Waiting for reviewer verdicts or new task assignments from principal.
+
 ## Notes
 - typecheck fails with: `numpy/__init__.pyi:737: error: Type statement is only supported in Python 3.12 and greater` — this is a known environment issue, pre-existing since before T-3.
 - make eval reports 91% (30/33 scored) due to 3 pre-existing spec_diff failures unrelated to my tasks.
