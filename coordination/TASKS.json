@@ -3,8 +3,8 @@
     {
       "id": "T-1",
       "title": "Run full test suite and report failures",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "tester",
       "depends_on": [],
       "acceptance": "tester writes coordination/tester.md with full pytest output, failure count, and any errors with root cause. Commit the report.",
       "evidence_paths": ["coordination/tester.md"],
@@ -14,8 +14,8 @@
     {
       "id": "T-2",
       "title": "Research scan recall: Python vs JS call_site comparison on 3 repos",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "researcher",
       "depends_on": [],
       "acceptance": "researcher writes research/scan-recall-comparison.md with exact call_site counts from test_pipeline.sh runs on bedilk/firecrawl (openai+anthropic), bedilk/superset (sentry), and bedilk/depfix-test-sentry-v6-app (sentry). Tables, not prose guesses.",
       "evidence_paths": ["research/scan-recall-comparison.md"],
@@ -25,8 +25,8 @@
     {
       "id": "T-3",
       "title": "Add provider skill files for redis and postgresql",
-      "status": "ready",
-      "owner": null,
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "Two new files: src/depfix/providers/skills/provider_redis.md and provider_postgresql.md modelled on existing provider_sentry.md. Reviewer accepts the files. make test still passes.",
       "evidence_paths": [
@@ -34,8 +34,8 @@
         "src/depfix/providers/skills/provider_postgresql.md",
         "coordination/review/T-3_receipt.json"
       ],
-      "next_action": "implementer: read provider_sentry.md as template, write both skill files",
-      "notes": ""
+      "next_action": "reviewer: review provider_redis.md and provider_postgresql.md for completeness and accuracy",
+      "notes": "provider_postgresql.md was pre-existing; provider_redis.md written by implementer. make test passes."
     },
     {
       "id": "T-4",
@@ -68,8 +68,8 @@
     {
       "id": "T-6",
       "title": "Adversarial review of ruby fixer implementation",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "Reviewer writes coordination/review/T-6_receipt.json with ACCEPTED/REJECTED verdict and full list of issues found. If REJECTED, issues filed as sub-tasks.",
       "evidence_paths": ["coordination/review/T-6_receipt.json"],

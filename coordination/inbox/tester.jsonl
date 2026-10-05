@@ -1,0 +1,1 @@
+{"id": "6ee5bb30-0e36-4d5c-8e71-f76be29e2aeb", "from": "principal", "to": "tester", "ts": "2026-10-05T21:12:29.297340+00:00", "acked": false, "body": {"action": "assign", "task_id": "T-1", "title": "Run full test suite and report failures", "next_action": "Run make test and make typecheck, capture full output, summarise failures in coordination/tester.md"}}
