@@ -270,15 +270,35 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - No Python module name mismatch — `auth0-python` installs as `auth0` module (unlike sentry-sdk/ldclient)
   Evidence: research/auth0-provider-spec.md, commit 3a7109c.
 
+## Round 21 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 21
+- **Okta provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding Okta (separate from Auth0).
+  Two SDK lines: `@okta/okta-auth-js` (3.4M npm/month) + `@okta/okta-sdk-nodejs` (1.9M npm/month)
+  + `okta` pypi (864K/month). Total ~5.3M npm/month + 864K pypi/month.
+  Key findings:
+  - **v7 sdk-nodejs: the GIANT migration** — entire API shape changed from `client.getUser(id)` to
+    `client.userApi.getUser({userId:id})`; every management call site broken; highest-value eval case
+  - **v8 auth-js**: `idx.proceed` now requires `step` parameter; access tokens no longer decoded by default
+  - **v8 sdk-nodejs**: `_from`→`fromAddress`, `to`→`toAddress` property renames
+  - 7 auth-js majors since 2018, 8 sdk-nodejs majors since 2019 (~1/year each)
+  - OpenAPI spec public and verified: management-minimal.yaml (200 OK, 3.4MB) at versioned path
+  - Python module is `okta` (no import mismatch)
+  Evidence: research/okta-provider-spec.md, commit 83ea46d.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
-  auth0 spec (round 20).
-- All 10 providers from T-8 top-providers list + LaunchDarkly + Amplitude + Auth0 have implementation specs.
+  auth0 spec (round 20), okta spec (round 21).
+- All 10 providers from T-8 top-providers list + LaunchDarkly + Amplitude + Auth0 + Okta have implementation specs.
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
   2. New provider research beyond completed list
-  3. Next candidates: Square, Intercom, Zendesk, Okta (separate from Auth0), Twitch, Braintree
+  3. Next candidates: Square, Intercom, Zendesk, Braintree, Twitch
