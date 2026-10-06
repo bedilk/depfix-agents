@@ -118,7 +118,7 @@ quote-style = "double"
 # ============================================================================
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["src", "tests"]
 strict_optional = true
 warn_unused_ignores = true
@@ -126,6 +126,10 @@ warn_redundant_casts = true
 check_untyped_defs = true
 ignore_missing_imports = true    # third-party LLM SDK stubs are patchy
 exclude = ["tests/fixtures/", "build/", "dist/"]
+
+[[tool.mypy.overrides]]
+module = ["numpy.*"]
+ignore_errors = true
 
 # ============================================================================
 #  pytest

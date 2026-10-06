@@ -438,6 +438,8 @@ def _install_ruby_dependencies(
     if not (root / "Gemfile").is_file():
         return InstallResult(package_manager="bundler", skipped_reason="no Gemfile found")
     argv = build_ruby_install_argv(root, frozen=frozen)
+    if argv is None:
+        return InstallResult(package_manager="bundler", skipped_reason="bundler not found on PATH")
     from depfix.ecosystems.specs import RUBY
 
     result = run_sandboxed(

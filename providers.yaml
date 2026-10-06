@@ -111,25 +111,23 @@ providers:
     url: https://docs.anthropic.com/en/release-notes/api
   - kind: ts_exports_diff
     package: '@anthropic-ai/sdk'
-  # Fixture: messages.stream() introduced in @anthropic-ai/sdk 0.37 as the
-  # preferred streaming helper. messages.create() still works for non-streaming,
-  # but streaming callers should migrate.
   - kind: fixture_change
     id: anthropic-sdk-stream-api-0.20-0.131
-    package: "@anthropic-ai/sdk"
-    old_token: "0.20.9"
-    new_token: "0.131.0"
+    package: '@anthropic-ai/sdk'
+    old_token: 0.20.9
+    new_token: 0.131.0
     spec_changes:
-      - kind: operation_id_changed
-        severity: breaking
-        subject: "anthropic.messages.create"
-        after: "anthropic.messages.stream"
-        detail: >
-          Replace streaming calls: const stream = client.messages.stream({model,
-          max_tokens, messages}); const msg = await stream.finalMessage();
-          For non-streaming, messages.create() is unchanged.
-          messages.stream() returns a MessageStream — call .finalMessage() to get
-          the completed Message, or iterate with for-await for incremental events.
+    - kind: operation_id_changed
+      severity: breaking
+      subject: anthropic.messages.create
+      after: anthropic.messages.stream
+      detail: 'Replace streaming calls: const stream = client.messages.stream({model,
+        max_tokens, messages}); const msg = await stream.finalMessage(); For non-streaming,
+        messages.create() is unchanged. messages.stream() returns a MessageStream
+        — call .finalMessage() to get the completed Message, or iterate with for-await
+        for incremental events.
+
+        '
 - id: supabase
   name: Supabase
   api_version_scheme: semver
@@ -449,6 +447,41 @@ providers:
     url: https://docs.sendgrid.com/release-notes
   - kind: ts_exports_diff
     package: '@sendgrid/mail'
+- id: resend
+  name: Resend
+  api_version_scheme: semver
+  api_base_urls:
+  - https://api.resend.com
+  sdk_packages:
+  - name: resend
+    ecosystem: npm
+  - name: resend
+    ecosystem: pypi
+  - name: resend
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: resend
+    dist_tag: latest
+    github_repo: resend/resend-node
+  - kind: pypi_dist_tag
+    package: resend
+    github_repo: resend/resend-python
+  - kind: github_release
+    repo: resend/resend-node
+  - kind: openapi_spec
+    url: https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml
+  - kind: security_advisory
+    package: resend
+    ecosystem: npm
+  - kind: security_advisory
+    package: resend
+    ecosystem: pypi
+  - kind: rubygems_dist_tag
+    gem: resend
+    github_repo: resend/resend-ruby
+  - kind: ts_exports_diff
+    package: resend
 - id: octokit
   name: Octokit REST SDK
   api_version_scheme: semver
@@ -751,30 +784,29 @@ providers:
     url: https://node-postgres.com/announcements
   - kind: ts_exports_diff
     package: pg
-  # Fixture: node-postgres 8.23 explicit connection management.
-  # Pool.query() is a convenience wrapper; in 8.23+ explicit connect/release
-  # is required for transaction support and connection error handling.
   - kind: fixture_change
     id: pg-8-pool-query-to-connect-8.16-8.23
-    package: "pg"
-    old_token: "8.16.3"
-    new_token: "8.23.1"
+    package: pg
+    old_token: 8.16.3
+    new_token: 8.23.1
     spec_changes:
-      - kind: operation_id_changed
-        severity: breaking
-        subject: "postgresql.Pool"
-        after: "pg.Pool"
-        detail: >
-          In pg ≥8.23, prefer named imports: import { Pool } from 'pg'
-          instead of the default import pattern. Also use explicit
-          pool.connect() + client.release() for transaction safety.
-      - kind: operation_id_changed
-        severity: breaking
-        subject: "postgresql.query"
-        after: "postgresql.execute"
-        detail: >
-          In pg ≥8.23, pool.execute() (aliased from query) provides
-          clearer intent for parameterised statements with typed results.
+    - kind: operation_id_changed
+      severity: breaking
+      subject: postgresql.Pool
+      after: pg.Pool
+      detail: 'In pg ≥8.23, prefer named imports: import { Pool } from ''pg'' instead
+        of the default import pattern. Also use explicit pool.connect() + client.release()
+        for transaction safety.
+
+        '
+    - kind: operation_id_changed
+      severity: breaking
+      subject: postgresql.query
+      after: postgresql.execute
+      detail: 'In pg ≥8.23, pool.execute() (aliased from query) provides clearer intent
+        for parameterised statements with typed results.
+
+        '
 - id: kafka
   name: Apache Kafka Clients
   api_version_scheme: semver
@@ -843,3 +875,103 @@ providers:
     url: https://raw.githubusercontent.com/rabbitmq/rabbitmq-website/main/asyncapi/rabbitmq.yaml
   - kind: ts_exports_diff
     package: amqplib
+- id: mysql
+  name: Mysql
+  api_version_scheme: semver
+  sdk_packages:
+  - name: mysql
+    ecosystem: npm
+  - name: mysql
+    ecosystem: pypi
+  - name: mysql
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: mysql
+    dist_tag: latest
+    github_repo: mysqljs/mysql
+  - kind: security_advisory
+    package: mysql
+    ecosystem: npm
+  - kind: ts_exports_diff
+    package: mysql
+  - kind: pypi_dist_tag
+    package: mysql
+    github_repo: valhallasw/virtual-mysql-pypi-package
+  - kind: security_advisory
+    package: mysql
+    ecosystem: pypi
+  - kind: rubygems_dist_tag
+    gem: mysql
+    github_repo: luislavena/mysql-gem
+  - kind: github_release
+    repo: luislavena/mysql-gem
+  - kind: github_release
+    repo: mysqljs/mysql
+  - kind: github_release
+    repo: valhallasw/virtual-mysql-pypi-package
+- id: astro
+  name: Astro
+  api_version_scheme: semver
+  sdk_packages:
+  - name: astro
+    ecosystem: npm
+  - name: astro
+    ecosystem: pypi
+  - name: astro
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: astro
+    dist_tag: latest
+    github_repo: withastro/astro
+  - kind: security_advisory
+    package: astro
+    ecosystem: npm
+  - kind: ts_exports_diff
+    package: astro
+  - kind: pypi_dist_tag
+    package: astro
+    github_repo: skulumani/astro
+  - kind: security_advisory
+    package: astro
+    ecosystem: pypi
+  - kind: rubygems_dist_tag
+    gem: astro
+    github_repo: jeremyruppel/astro
+  - kind: github_release
+    repo: jeremyruppel/astro
+  - kind: github_release
+    repo: skulumani/astro
+  - kind: github_release
+    repo: withastro/astro
+- id: cloudflare
+  name: Cloudflare
+  api_version_scheme: semver
+  api_base_urls:
+  - https://api.cloudflare.com/client/v4
+  sdk_packages:
+  - name: cloudflare
+    ecosystem: npm
+  - name: cloudflare
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: cloudflare
+    dist_tag: latest
+    github_repo: cloudflare/cloudflare-typescript
+  - kind: pypi_dist_tag
+    package: cloudflare
+    github_repo: cloudflare/cloudflare-python
+  - kind: github_release
+    repo: cloudflare/cloudflare-typescript
+  - kind: openapi_spec
+    url: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.yaml
+  - kind: security_advisory
+    package: cloudflare
+    ecosystem: npm
+  - kind: security_advisory
+    package: cloudflare
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: cloudflare
