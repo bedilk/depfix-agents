@@ -187,12 +187,29 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Python 2.7/3.5-3.8 support dropped (v5.0.0), Ruby timestamps now milliseconds (v2.3.1).
   Evidence: research/mixpanel-provider-spec.md, commit 47fab2b.
 
+## Round 16 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 16
+- **Bugsnag provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding Bugsnag (#8 in recommended add order,
+  ~15M total npm/month across @bugsnag/js + @bugsnag/node + @bugsnag/browser). All three JS packages
+  version together (currently v9.0.0, released 2026-09-22). Ruby gem: 67.8M total downloads, v6.30.0.
+  Key breaking changes sourced from UPGRADING.md (curl-verified):
+  - v6→v7: `bugsnag(opts)` factory removed → `Bugsnag.start(opts)`; option renames (notifyReleaseStages→enabledReleaseStages, autoNotify→autoDetectErrors); React plugin API change
+  - v7.0→v7.1: TypeScript types breaking change for `Bugsnag.getPlugin('react')`
+  - v7→v8: Node minimum v12.17.0, network breadcrumb `request` → `url`+`method`, partial endpoints config silently drops all events
+  - v8→v9: React Native + Electron only, no core API changes
+  Evidence: research/bugsnag-provider-spec.md, commit aee6250.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
-  segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15).
+  segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
+  bugsnag spec (round 16).
 - Remaining candidates if principal assigns more work:
-  1. Bugsnag provider spec (T-8 #8, 5.2M npm/month)
-  2. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
+  1. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
   3. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
