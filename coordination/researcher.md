@@ -150,14 +150,34 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   node-fetch, native globalThis.fetch), v1.84.3 analytics-next (resolveAnonymousIdConflicts removed).
   Evidence: research/segment-provider-spec.md, commit 7b847e2.
 
+## Round 14 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 14
+- **Python/Ruby drift path test cases + bug discovery** (2026-10-06):
+  Read pypi_manifests.py, ruby_manifests.py, lockfile.py, fix_service.py, and all relevant
+  test files. Wrote 28 specific implementable test cases covering:
+  - `dependency_drift_policy` scope gates (any-minor, any) — 6 cases
+  - `dependency_drift_policy` max_minor_gap gate — 4 cases
+  - `build_ruby_dependency_drift_bumps` — 9 cases (NONE existed before)
+  - PyPI multi-major/multi-file/requirements-dev — 3 cases
+  - fix_service Python and Ruby major vs minor drift — 3 cases
+  - Bug reproduction test: manifest writers ignore Settings drift params — 1 case
+  **Bug found:** `build_pypi_dependency_drift_bumps` and `build_ruby_dependency_drift_bumps`
+  call `dependency_drift_policy(change)` with default parameters, ignoring the `drift_scope`,
+  `drift_max_major_gap`, `drift_max_minor_gap` from Settings. When settings raise `max_major_gap`
+  to allow major drifts, the manifest writers still decline them.
+  Evidence: research/python-ruby-drift-test-cases.md, commit dccd09c.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
-  segment spec (round 13).
+  segment spec (round 13), python/ruby drift test cases + bug (round 14).
 - Remaining candidates if principal assigns more work:
-  1. max_minor_gap test coverage gap — draft specific unit test cases (T-9 Gap 3 MEDIUM)
-  2. Python/Ruby drift path test coverage — draft specific test cases (T-9 Gap 2 HIGH)
-  3. Mixpanel provider spec (T-8 #7, 5.4M npm/month, no OpenAPI spec)
-  4. Bugsnag provider spec (T-8 #8, 5.2M npm/month)
-  5. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
+  1. Mixpanel provider spec (T-8 #7, 5.4M npm/month, no OpenAPI spec)
+  2. Bugsnag provider spec (T-8 #8, 5.2M npm/month)
+  3. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
+  4. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
