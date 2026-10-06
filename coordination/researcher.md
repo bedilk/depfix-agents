@@ -290,15 +290,35 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - Python module is `okta` (no import mismatch)
   Evidence: research/okta-provider-spec.md, commit 83ea46d.
 
+## Round 22 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- Checked providers.yaml: 34 providers now. Implementer has been picking up specs:
+  Resend, Cloudflare, Datadog, Plaid, Auth0, Segment, Shopify all implemented.
+  Remaining unimplemented specs: HubSpot, Mixpanel, Bugsnag, New Relic, LaunchDarkly,
+  Amplitude, Okta (7 specs in queue).
+
+## Proactive Work Round 22
+- **Square provider implementation spec** (2026-10-06):
+  Wrote complete spec for Square payment SDK (#next candidate, 1.5M npm/month).
+  Three ecosystems: npm `square` (1.5M/mo), pypi `squareup` (257K/mo), Ruby `square.rb` (2M total).
+  CRITICAL: Python package/module name mismatch: `squareup` package imports as `square` module.
+  THE major breaking change: v40.0.0 (Jan 2025) — complete Fern SDK migration.
+  `Client` → `SquareClient`, `accessToken` → `token`, all `*Api` properties lose "Api" suffix.
+  Code using `import { Client } from 'square'` after v40 gets undefined (silent failure).
+  Legacy available at `import { Client } from 'square/legacy'`.
+  v40 confirmed by: release notes ("major overhaul") + npm tarball inspection (SquareClient exported, Client not).
+  Evidence: research/square-provider-spec.md, commit 1cd926b.
+  No public OpenAPI spec — uses npm_dist_tag + pypi_dist_tag + github_release feeds.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
-  auth0 spec (round 20), okta spec (round 21).
-- All 10 providers from T-8 top-providers list + LaunchDarkly + Amplitude + Auth0 + Okta have implementation specs.
+  auth0 spec (round 20), okta spec (round 21), square spec (round 22).
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research beyond completed list
-  3. Next candidates: Square, Intercom, Zendesk, Braintree, Twitch
+  2. New provider research: Intercom, Zendesk, Braintree, Twitch
+  3. HubSpot, Mixpanel, Bugsnag, New Relic, LaunchDarkly, Amplitude, Okta still need implementing
