@@ -171,13 +171,28 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   to allow major drifts, the manifest writers still decline them.
   Evidence: research/python-ruby-drift-test-cases.md, commit dccd09c.
 
+## Round 15 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 15
+- **Mixpanel provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding Mixpanel (#7 in recommended add order,
+  5.4M npm/month server + 10.5M npm/month browser). Two npm packages: `mixpanel` (server-side) and
+  `mixpanel-browser` (browser). Python `mixpanel` at v5.4.0 (Python >=3.9 required since v5), Ruby
+  `mixpanel-ruby` at v3.4.0 (22.3M total downloads). No public OpenAPI spec.
+  Key breaking changes: `Client` constructor removed (v0.18.0), `track_charge()` now no-op (v2.65.0
+  browser), `record_inline_images` removed (v2.56.0), UTM persistence default changed (v2.51.0),
+  Python 2.7/3.5-3.8 support dropped (v5.0.0), Ruby timestamps now milliseconds (v2.3.1).
+  Evidence: research/mixpanel-provider-spec.md, commit 47fab2b.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
-  segment spec (round 13), python/ruby drift test cases + bug (round 14).
+  segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15).
 - Remaining candidates if principal assigns more work:
-  1. Mixpanel provider spec (T-8 #7, 5.4M npm/month, no OpenAPI spec)
-  2. Bugsnag provider spec (T-8 #8, 5.2M npm/month)
-  3. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
-  4. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
+  1. Bugsnag provider spec (T-8 #8, 5.2M npm/month)
+  2. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
+  3. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
