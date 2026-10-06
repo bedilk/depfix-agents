@@ -1008,3 +1008,85 @@ providers:
     ecosystem: pypi
   - kind: ts_exports_diff
     package: "@datadog/datadog-api-client"
+- id: plaid
+  name: Plaid
+  api_version_scheme: semver
+  api_base_urls:
+  - https://production.plaid.com
+  - https://sandbox.plaid.com
+  sdk_packages:
+  - name: plaid
+    ecosystem: npm
+  - name: plaid-python
+    ecosystem: pypi
+  - name: plaid
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: plaid
+    dist_tag: latest
+    github_repo: plaid/plaid-node
+  - kind: pypi_dist_tag
+    package: plaid-python
+    github_repo: plaid/plaid-python
+  - kind: rubygems_dist_tag
+    gem: plaid
+    github_repo: plaid/plaid-ruby
+  - kind: github_release
+    repo: plaid/plaid-node
+  - kind: github_release
+    repo: plaid/plaid-python
+  - kind: openapi_spec
+    url: https://raw.githubusercontent.com/plaid/plaid-openapi/master/2020-09-14.yml
+  - kind: security_advisory
+    package: plaid
+    ecosystem: npm
+  - kind: security_advisory
+    package: plaid-python
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: plaid
+- id: auth0
+  name: Auth0
+  api_version_scheme: semver
+  api_base_urls:
+  - https://YOUR_DOMAIN.auth0.com
+  sdk_packages:
+  - name: auth0
+    ecosystem: npm
+  - name: '@auth0/auth0-spa-js'
+    ecosystem: npm
+  - name: '@auth0/auth0-react'
+    ecosystem: npm
+  - name: '@auth0/nextjs-auth0'
+    ecosystem: npm
+  - name: auth0-python
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: auth0
+    dist_tag: latest
+    github_repo: auth0/node-auth0
+  - kind: github_release
+    repo: auth0/node-auth0
+  - kind: npm_dist_tag
+    package: '@auth0/auth0-spa-js'
+    dist_tag: latest
+    github_repo: auth0/auth0-spa-js
+  - kind: npm_dist_tag
+    package: '@auth0/auth0-react'
+    dist_tag: latest
+    github_repo: auth0/auth0-react
+  - kind: pypi_dist_tag
+    package: auth0-python
+    github_repo: auth0/auth0-python
+  - kind: github_release
+    repo: auth0/auth0-python
+  - kind: security_advisory
+    package: auth0
+    ecosystem: npm
+  - kind: security_advisory
+    package: auth0-python
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: auth0
