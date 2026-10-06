@@ -1090,3 +1090,67 @@ providers:
     ecosystem: pypi
   - kind: ts_exports_diff
     package: auth0
+- id: segment
+  name: Twilio Segment SDK (analytics-node + analytics-next)
+  api_version_scheme: semver
+  sdk_packages:
+  - name: "@segment/analytics-node"
+    ecosystem: npm
+  - name: analytics-node
+    ecosystem: npm
+  - name: "@segment/analytics-next"
+    ecosystem: npm
+  - name: segment-analytics-python
+    ecosystem: pypi
+  - name: analytics-python
+    ecosystem: pypi
+  - name: analytics-ruby
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: "@segment/analytics-node"
+    dist_tag: latest
+    github_repo: segmentio/analytics-next
+  - kind: npm_dist_tag
+    package: "@segment/analytics-next"
+    dist_tag: latest
+    github_repo: segmentio/analytics-next
+  - kind: pypi_dist_tag
+    package: segment-analytics-python
+    github_repo: segmentio/analytics-python
+  - kind: github_release
+    repo: segmentio/analytics-next
+  - kind: security_advisory
+    package: "@segment/analytics-node"
+    ecosystem: npm
+  - kind: security_advisory
+    package: segment-analytics-python
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: "@segment/analytics-node"
+- id: shopify
+  name: Shopify API
+  api_version_scheme: semver
+  sdk_packages:
+  - name: '@shopify/shopify-api'
+    ecosystem: npm
+  - name: ShopifyAPI
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: '@shopify/shopify-api'
+    dist_tag: latest
+    github_repo: Shopify/shopify-app-js
+  - kind: pypi_dist_tag
+    package: ShopifyAPI
+    github_repo: Shopify/shopify_python_api
+  - kind: github_release
+    repo: Shopify/shopify-app-js
+  - kind: security_advisory
+    package: '@shopify/shopify-api'
+    ecosystem: npm
+  - kind: security_advisory
+    package: ShopifyAPI
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: '@shopify/shopify-api'
