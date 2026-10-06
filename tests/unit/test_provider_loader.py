@@ -159,7 +159,7 @@ def test_repo_shipped_providers_file_is_valid() -> None:
         "kafka",
         "rabbitmq",
     } <= ids
-    assert len([provider for provider in providers if provider.enabled]) == 34
+    assert len([provider for provider in providers if provider.enabled]) == 36
 
 
 def test_call_site_anchors_are_rejected(tmp_path: Path) -> None:
