@@ -1154,3 +1154,73 @@ providers:
     ecosystem: pypi
   - kind: ts_exports_diff
     package: '@shopify/shopify-api'
+- id: newrelic
+  name: New Relic APM
+  api_version_scheme: semver
+  sdk_packages:
+  - name: newrelic
+    ecosystem: npm
+  - name: newrelic
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: newrelic
+    dist_tag: latest
+    github_repo: newrelic/node-newrelic
+  - kind: pypi_dist_tag
+    package: newrelic
+    github_repo: newrelic/newrelic-python-agent
+  - kind: github_release
+    repo: newrelic/node-newrelic
+  - kind: security_advisory
+    package: newrelic
+    ecosystem: npm
+  - kind: security_advisory
+    package: newrelic
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: newrelic
+- id: bugsnag
+  name: Bugsnag Error Monitoring
+  api_version_scheme: semver
+  sdk_packages:
+  - name: '@bugsnag/js'
+    ecosystem: npm
+  - name: '@bugsnag/node'
+    ecosystem: npm
+  - name: '@bugsnag/browser'
+    ecosystem: npm
+  - name: bugsnag
+    ecosystem: pypi
+  - name: bugsnag
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: '@bugsnag/js'
+    dist_tag: latest
+    github_repo: bugsnag/bugsnag-js
+  - kind: npm_dist_tag
+    package: '@bugsnag/node'
+    dist_tag: latest
+    github_repo: bugsnag/bugsnag-js
+  - kind: pypi_dist_tag
+    package: bugsnag
+    github_repo: bugsnag/bugsnag-python
+  - kind: rubygems_dist_tag
+    gem: bugsnag
+    github_repo: bugsnag/bugsnag-ruby
+  - kind: github_release
+    repo: bugsnag/bugsnag-js
+  - kind: security_advisory
+    package: '@bugsnag/js'
+    ecosystem: npm
+  - kind: security_advisory
+    package: '@bugsnag/node'
+    ecosystem: npm
+  - kind: security_advisory
+    package: bugsnag
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: '@bugsnag/js'
+  - kind: ts_exports_diff
+    package: '@bugsnag/node'
