@@ -219,13 +219,29 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   shim.argsToArray→v14), (4) ESM loader flag change (v11). 14 major npm versions documented.
   Evidence: research/newrelic-provider-spec.md, commit 28477ad.
 
+## Round 18 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 18
+- **LaunchDarkly provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding LaunchDarkly (#11 — beyond T-8 top-10,
+  ~41M combined downloads/month across npm + pypi). Key findings:
+  - ~32M npm/month across 5 packages: `@launchdarkly/node-server-sdk` (11.1M), `launchdarkly-js-client-sdk` (10.7M), `launchdarkly-react-client-sdk` (6.3M), legacy node (1.8M), new js-client (1.8M)
+  - Python `launchdarkly-server-sdk` = 9.4M/month — but CRITICAL: Python module is `ldclient`, NOT `launchdarkly_server_sdk`. Same pattern as sentry-sdk/sentry_sdk.
+  - The 2022 "Contexts migration" (Node.js v7 / Python v8) removed `alias()`, `inlineUsersInEvents`, `getUser()` → `getContext()`, `ldclient.flag` module — all detectable by depfix
+  - Two package renames documented: `launchdarkly-node-server-sdk` → `@launchdarkly/node-server-sdk` (2023), `launchdarkly-js-client-sdk` → `@launchdarkly/js-client-sdk` (2026)
+  Evidence: research/launchdarkly-provider-spec.md, commit 9349332.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
-  bugsnag spec (round 16), newrelic spec (round 17).
-- All 10 providers from T-8 top-providers list now have implementation specs.
+  bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18).
+- All 10 providers from T-8 top-providers list + LaunchDarkly have implementation specs.
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research beyond the original T-8 top-10 list
+  2. New provider research beyond the T-8 top-10 + LaunchDarkly list
+  3. Next candidates: Amplitude, Auth0/Okta, Square, LaunchDarkly React/browser sub-providers
