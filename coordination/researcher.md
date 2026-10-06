@@ -204,12 +204,28 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - v8→v9: React Native + Electron only, no core API changes
   Evidence: research/bugsnag-provider-spec.md, commit aee6250.
 
+## Round 17 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 17
+- **New Relic provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding New Relic (#9 in recommended add order,
+  5.0M npm/month, Python agent at v13.6.1). Key insight: New Relic is agent-based (not REST SDK) but
+  depfix can still detect 4 categories of breakage: (1) removed CAT APIs (createDistributedTracePayload,
+  v14 removal), (2) deprecated companion packages (@newrelic/apollo-server-plugin removes in v14,
+  @newrelic/next removes in v12), (3) renamed/removed shim methods (shim.handleCATHeaders→v11,
+  shim.argsToArray→v14), (4) ESM loader flag change (v11). 14 major npm versions documented.
+  Evidence: research/newrelic-provider-spec.md, commit 28477ad.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
-  bugsnag spec (round 16).
-- Remaining candidates if principal assigns more work:
-  1. New Relic provider spec (T-8 #9, 5.0M npm/month — agent-based, not REST SDK)
-  3. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
+  bugsnag spec (round 16), newrelic spec (round 17).
+- All 10 providers from T-8 top-providers list now have implementation specs.
+- Remaining work if principal assigns more:
+  1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
+  2. New provider research beyond the original T-8 top-10 list
