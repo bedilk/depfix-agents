@@ -234,14 +234,32 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - Two package renames documented: `launchdarkly-node-server-sdk` → `@launchdarkly/node-server-sdk` (2023), `launchdarkly-js-client-sdk` → `@launchdarkly/js-client-sdk` (2026)
   Evidence: research/launchdarkly-provider-spec.md, commit 9349332.
 
+## Round 19 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 19
+- **Amplitude provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding Amplitude (#12 — beyond T-8 top-10 + LaunchDarkly,
+  ~22M combined downloads/month across npm + pypi). Key findings:
+  - @amplitude/analytics-browser: 10.1M/month (new SDK); amplitude-js: 1.1M/month (legacy, still active)
+  - amplitude-analytics (Python): 7.3M/month
+  - THE major migration: amplitude-js → @amplitude/analytics-browser (2022) with full API redesign
+  - API method renames: `logEvent()` → `track()`, `setUserProperties()` → `identify(new Identify())`, `logRevenue()` → `revenue(new Revenue())`
+  - `getInstance()` singleton pattern removed entirely; new SDK is module-level
+  - Python SDK: `amplitude-analytics` imports as `amplitude` (no module name mismatch)
+  - Package-rename detection makes depfix especially valuable: 1.1M/month still on legacy
+  Evidence: research/amplitude-provider-spec.md, commit d4ce948.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
-  bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18).
-- All 10 providers from T-8 top-providers list + LaunchDarkly have implementation specs.
+  bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19).
+- All 10 providers from T-8 top-providers list + LaunchDarkly + Amplitude have implementation specs.
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research beyond the T-8 top-10 + LaunchDarkly list
-  3. Next candidates: Amplitude, Auth0/Okta, Square, LaunchDarkly React/browser sub-providers
+  2. New provider research beyond the T-8 top-10 + LaunchDarkly + Amplitude list
+  3. Next candidates: Auth0/Okta, Square, Intercom, Zendesk
