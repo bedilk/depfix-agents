@@ -252,14 +252,33 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - Package-rename detection makes depfix especially valuable: 1.1M/month still on legacy
   Evidence: research/amplitude-provider-spec.md, commit d4ce948.
 
+## Round 20 Status (2026-10-06)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned from principal. All assigned research tasks remain done.
+- T-3, T-4, T-5, T-6 still in review with reviewer.
+
+## Proactive Work Round 20
+- **Auth0 provider implementation spec** (2026-10-06):
+  Wrote a complete, actionable implementation spec for adding Auth0 (~28M npm/month + 6.6M pypi/month).
+  Key findings:
+  - 5 major Node.js SDK versions in 4 years (v3 Dec 2022, v4 Sep 2023, v5 Sep 2025, v6 Jul 2026, v7 Sep 2026)
+  - 5 minor-version-breaking releases in the Python SDK (v5.2.0-v6.7.0): Python 3.8 dropped, 3.9 dropped, type removals
+  - **Highest minor-version-break rate of any provider researched**: ~11 depfix-relevant breaks/year total
+  - `AuthenticationClient` removal in v7 — the single highest-impact change; any server app doing OAuth with v4/v5/v6 is broken on v7 upgrade
+  - `getTokenSilently()` return type widened (spa-js/react v2.25.0) — TypeScript breaking change in minor version
+  - auth0-python import: `from auth0.management import Auth0` (v4) → `from auth0 import Auth0` (v5+)
+  - No Python module name mismatch — `auth0-python` installs as `auth0` module (unlike sentry-sdk/ldclient)
+  Evidence: research/auth0-provider-spec.md, commit 3a7109c.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
-  bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19).
-- All 10 providers from T-8 top-providers list + LaunchDarkly + Amplitude have implementation specs.
+  bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
+  auth0 spec (round 20).
+- All 10 providers from T-8 top-providers list + LaunchDarkly + Amplitude + Auth0 have implementation specs.
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research beyond the T-8 top-10 + LaunchDarkly + Amplitude list
-  3. Next candidates: Auth0/Okta, Square, Intercom, Zendesk
+  2. New provider research beyond completed list
+  3. Next candidates: Square, Intercom, Zendesk, Okta (separate from Auth0), Twitch, Braintree
