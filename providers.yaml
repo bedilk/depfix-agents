@@ -975,3 +975,36 @@ providers:
     ecosystem: pypi
   - kind: ts_exports_diff
     package: cloudflare
+- id: datadog
+  name: Datadog
+  api_version_scheme: semver
+  api_base_urls:
+  - https://api.datadoghq.com
+  - https://api.datadoghq.eu
+  - https://api.us3.datadoghq.com
+  - https://api.us5.datadoghq.com
+  sdk_packages:
+  - name: "@datadog/datadog-api-client"
+    ecosystem: npm
+  - name: datadog-api-client
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: "@datadog/datadog-api-client"
+    dist_tag: latest
+    github_repo: DataDog/datadog-api-client-typescript
+  - kind: pypi_dist_tag
+    package: datadog-api-client
+    github_repo: DataDog/datadog-api-client-python
+  - kind: github_release
+    repo: DataDog/datadog-api-client-typescript
+  - kind: github_release
+    repo: DataDog/datadog-api-client-python
+  - kind: security_advisory
+    package: "@datadog/datadog-api-client"
+    ecosystem: npm
+  - kind: security_advisory
+    package: datadog-api-client
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: "@datadog/datadog-api-client"
