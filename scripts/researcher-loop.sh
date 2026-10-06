@@ -80,6 +80,9 @@ flock .local/git.lock bash -c 'git add coordination/researcher.md && git commit 
 This is round $round. If you have no assigned task, check TASKS.json for ready research tasks
 and start on the most valuable one."
 
+  # Safety: never push to dependency_check
+  git remote get-url --push origin 2>/dev/null | grep -q DISABLED || git remote set-url --push origin DISABLED_DO_NOT_PUSH_TO_DEPENDENCY_CHECK
+
   timeout 20m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
@@ -89,7 +92,12 @@ and start on the most valuable one."
   printf 'researcher round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/researcher-lifecycle.log
   [ -f "coordination/researcher.stop" ] && exit 0
 
-  sleep 30
+  if grep -q "429\|rate.limit\|overloaded\|Too Many Requests" ".local/researcher-$round.log" 2>/dev/null; then
+    printf 'researcher round %s: 429 detected — sleeping 30 min\n' "$round" >> .local/researcher-lifecycle.log
+    sleep 1800
+  else
+    sleep 30
+  fi
 done
 
 [ -f "coordination/researcher.stop" ] || exec bash scripts/researcher-loop.sh

@@ -110,6 +110,9 @@ flock .local/git.lock bash -c 'git add coordination/tester.md && git commit -m \
 
 This is round $round."
 
+  # Safety: never push to dependency_check
+  git remote get-url --push origin 2>/dev/null | grep -q DISABLED || git remote set-url --push origin DISABLED_DO_NOT_PUSH_TO_DEPENDENCY_CHECK
+
   timeout 15m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
@@ -119,7 +122,12 @@ This is round $round."
   printf 'tester round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/tester-lifecycle.log
   [ -f "coordination/tester.stop" ] && exit 0
 
-  sleep 60
+  if grep -q "429\|rate.limit\|overloaded\|Too Many Requests" ".local/tester-$round.log" 2>/dev/null; then
+    printf 'tester round %s: 429 detected — sleeping 30 min\n' "$round" >> .local/tester-lifecycle.log
+    sleep 1800
+  else
+    sleep 60
+  fi
 done
 
 [ -f "coordination/tester.stop" ] || exec bash scripts/tester-loop.sh

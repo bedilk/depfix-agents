@@ -77,6 +77,9 @@ flock .local/git.lock bash -c 'git add coordination/implementer.md && git commit
 This is round $round. Work on your assigned task. If no task assigned yet, check TASKS.json
 for tasks with owner=implementer and status=running."
 
+  # Safety: never push to dependency_check
+  git remote get-url --push origin 2>/dev/null | grep -q DISABLED || git remote set-url --push origin DISABLED_DO_NOT_PUSH_TO_DEPENDENCY_CHECK
+
   timeout 20m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
@@ -86,7 +89,12 @@ for tasks with owner=implementer and status=running."
   printf 'implementer round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/implementer-lifecycle.log
   [ -f "coordination/implementer.stop" ] && exit 0
 
-  sleep 30
+  if grep -q "429\|rate.limit\|overloaded\|Too Many Requests" ".local/implementer-$round.log" 2>/dev/null; then
+    printf 'implementer round %s: 429 detected — sleeping 30 min\n' "$round" >> .local/implementer-lifecycle.log
+    sleep 1800
+  else
+    sleep 30
+  fi
 done
 
 [ -f "coordination/implementer.stop" ] || exec bash scripts/implementer-loop.sh

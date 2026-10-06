@@ -187,8 +187,76 @@ print(sum(1 for m in msgs if not m.get('acked')))
 
 echo ""
 echo "Review summary written to: $REVIEW_FILE"
+
+# --- Open a PR with all changes from the last 4 hours ---
+echo ""
+echo "Opening PR for the last 4 hours of changes..."
+
+# Find the commit from ~4 hours ago on the agents remote
+SINCE_SHA=$(git log agents/main --since="4 hours ago" --format="%H" 2>/dev/null | tail -1)
+if [ -z "$SINCE_SHA" ]; then
+  # Fallback: last 20 commits
+  SINCE_SHA=$(git log agents/main --format="%H" 2>/dev/null | sed -n '20p')
+fi
+
+# Collect what changed
+COMMITS=$(git log agents/main "${SINCE_SHA}^..agents/main" --oneline 2>/dev/null || git log agents/main -20 --oneline 2>/dev/null)
+TASKS_DONE=$(python3 -c "
+import json; from pathlib import Path
+data = json.loads(Path('coordination/TASKS.json').read_text())
+done = [t for t in data['tasks'] if t['status']=='done']
+print('\n'.join(f\"- {t['id']}: {t['title']}\" for t in done))
+" 2>/dev/null || echo "  (none)")
+
+PR_BRANCH="review/$(date +%Y%m%d-%H%M)"
+
+# Create branch, commit the review file, push, open PR
+git checkout -b "$PR_BRANCH" 2>/dev/null || git checkout "$PR_BRANCH" 2>/dev/null
+git add "$REVIEW_FILE" coordination/TASKS.json coordination/principal.md 2>/dev/null || true
+git commit -m "review: 4-hour human-in-the-loop checkpoint $(date_iso)" 2>/dev/null || true
+git push agents "$PR_BRANCH" 2>/dev/null
+
+PR_URL=$(gh pr create \
+  --title "4-Hour Review: $(date +'%Y-%m-%d %H:%M') — Agent Progress" \
+  --base main \
+  --head "$PR_BRANCH" \
+  --body "$(cat <<PREOF
+## 4-Hour Agent Team Summary
+
+**Smoke Test:** ${SMOKE_STATUS}
+
+## Tasks Completed
+${TASKS_DONE}
+
+## Recent Commits (last 4 hours)
+\`\`\`
+${COMMITS}
+\`\`\`
+
+## Full Review
+See \`${REVIEW_FILE}\` for the complete status including agent logs, inbox messages, and smoke test results.
+
+---
+**Next steps:**
+- Review task progress and add/reprioritize tasks in \`coordination/TASKS.json\`
+- Resume agents: \`bash scripts/human-review.sh --resume\`
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+PREOF
+)" 2>&1)
+
+git checkout main 2>/dev/null || true
+
+echo ""
+if echo "$PR_URL" | grep -q "github.com"; then
+  echo "PR opened: $PR_URL"
+else
+  echo "PR creation output: $PR_URL"
+fi
+
 echo ""
 echo "Next steps:"
 echo "  1. Read $REVIEW_FILE"
-echo "  2. Edit TASKS.json or AGENTS.md as needed"
-echo "  3. Resume: bash scripts/human-review.sh --resume"
+echo "  2. Review PR and merge if satisfied"
+echo "  3. Edit TASKS.json or AGENTS.md as needed"
+echo "  4. Resume: bash scripts/human-review.sh --resume"

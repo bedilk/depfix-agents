@@ -76,12 +76,16 @@ Never `git add -A` or `git add .` — stage only your owned files.
 1. `make test` — unit tests
 2. `make lint` — ruff check
 3. `make typecheck` — mypy
-4. `git push agents <branch>` — push to GitHub
-5. Logs the pushed SHA to `.local/push-history.log`
+4. `git push agents <branch>` — push to depfix-agents on GitHub (**never** to origin/dependency_check)
+5. Waits up to 10 minutes for CI to pass — polls `gh run list` every 30s
+6. Exits 3 if CI fails; the calling agent must fix failures and re-run the gate
 
 **Rule: no task moves to `done` unless the latest commit has been pushed and CI is green.**
 State files and coordination commits (*.md, TASKS.json) don't need the full gate — only
 code changes in `src/`, `tests/`, `providers.yaml`, `scripts/`, or eval corpus YAML.
+
+**FORBIDDEN: `git push origin ...` — origin push is disabled (points to dependency_check).**
+All pushes go to `agents` remote only.
 
 ## Rate Limit Observance
 
@@ -92,6 +96,10 @@ Principal and reviewer share the 25 req/min Opus pool:
 
 Researcher, implementer, tester: run on Sonnet 4.6. No effective rate limit. 
 Can run multiple concurrent rounds on different tasks (see run-team.sh).
+
+**429 / Overloaded handling:** If any round receives a 429 error, the loop script automatically
+sleeps 30 minutes before retrying. Agents must save state to their *.md file before this sleep
+so no work is lost.
 
 ## Research Directory Layout
 

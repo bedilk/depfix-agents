@@ -111,20 +111,39 @@ Format: `{"id":"<uuid>","from":"<role>","to":"<role>","ts":"<iso>","body":{...}}
 
 ---
 
+## Boundary: depfix-agents ONLY
+
+**CRITICAL: This repo (`depfix-agents`) is the ONLY repo agents may write to or push from.**
+
+- `git push agents <branch>` — ONLY allowed push command
+- `git push origin ...` — FORBIDDEN. The `origin` push URL is intentionally disabled.
+- Do NOT cd into `/Users/bedil_karimov/Documents/dependency_check` or edit any file there.
+- `dependency_check` is read-only reference material; treat it like a third-party library.
+
+Every loop script enforces this with: `git remote set-url --push origin DISABLED_...`
+
+---
+
 ## Commit Gate (mandatory)
 
 **Every code change must pass the commit gate before it can be reviewed or marked done.**
 
 ```bash
-bash scripts/commit-gate.sh    # runs: make test + make lint + make typecheck + git push
+bash scripts/commit-gate.sh    # runs: make test + make lint + make typecheck + git push agents + CI check
 ```
 
 - **Implementer** runs it before submitting for review. Broken code = immediate reject.
 - **Reviewer** runs it after ACCEPTING to push and trigger CI. If CI fails, verdict becomes REJECTED.
-- No task reaches `done` without a pushed commit and passing CI.
+- No task reaches `done` without a pushed commit and **passing CI** (commit-gate waits for CI result).
+- If CI fails, the commit-gate exits with code 3 — treat this as a REJECTED task and fix the failures.
 
 State files (*.md, TASKS.json) don't need the gate — only code in `src/`, `tests/`, `providers.yaml`,
 `scripts/`, or eval corpus YAML.
+
+## Rate Limit Handling
+
+If any LLM call returns a 429 error (rate limit / overloaded), the loop script automatically waits
+30 minutes before retrying. Do not spin. Write your current state to your *.md file before sleeping.
 
 ---
 

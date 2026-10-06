@@ -16,6 +16,11 @@ cd "$(dirname "$0")/.." || exit 1
 # macOS compat
 date_iso() { if command -v gdate >/dev/null; then gdate -Iseconds; else date +%Y-%m-%dT%H:%M:%S%z; fi; }
 
+# Safety: never push to dependency_check (origin). Only push to agents remote.
+if git remote get-url --push origin 2>/dev/null | grep -qv DISABLED; then
+  git remote set-url --push origin DISABLED_DO_NOT_PUSH_TO_DEPENDENCY_CHECK
+fi
+
 ROLE="${AGENT_ROLE:-unknown}"
 LOG=".local/commit-gate.log"
 mkdir -p .local
@@ -74,10 +79,34 @@ else
   exit 2
 fi
 
-# --- Step 5: Report CI status (non-blocking) ---
-# CI runs on GitHub Actions. We log the push SHA so it can be checked later.
+# --- Step 5: Check CI status ---
 SHA=$(git rev-parse HEAD)
-log "Pushed $SHA — CI will run on GitHub Actions"
+log "Pushed $SHA — checking CI on GitHub Actions..."
 echo "$(date_iso) $SHA $ROLE push-ok" >> .local/push-history.log
+
+# Wait up to 10 min for CI to start and complete
+CI_STATUS="unknown"
+for attempt in $(seq 1 20); do
+  sleep 30
+  CI_STATUS=$(gh run list --commit "$SHA" --json conclusion,status --jq '.[0] | if .status == "completed" then .conclusion else .status end' 2>/dev/null || echo "unknown")
+  log "CI check $attempt/20: $CI_STATUS"
+  if [[ "$CI_STATUS" == "success" ]]; then
+    log "CI PASSED for $SHA"
+    echo "$(date_iso) $SHA $ROLE ci-pass" >> .local/push-history.log
+    break
+  elif [[ "$CI_STATUS" == "failure" || "$CI_STATUS" == "cancelled" ]]; then
+    log "CI FAILED ($CI_STATUS) for $SHA — marking gate as failed"
+    echo "$(date_iso) $SHA $ROLE ci-fail:$CI_STATUS" >> .local/push-history.log
+    # Show failed steps
+    gh run list --commit "$SHA" --json databaseId --jq '.[0].databaseId' 2>/dev/null | xargs -I{} gh run view {} --log-failed 2>/dev/null | tail -30 | tee -a "$LOG" || true
+    exit 3
+  fi
+  # Keep going if still in_progress / queued
+done
+
+if [[ "$CI_STATUS" != "success" ]]; then
+  log "CI did not complete in 10 min (status: $CI_STATUS) — continuing anyway"
+  echo "$(date_iso) $SHA $ROLE ci-timeout:$CI_STATUS" >> .local/push-history.log
+fi
 
 exit 0

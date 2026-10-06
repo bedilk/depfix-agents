@@ -85,6 +85,9 @@ COMMIT YOUR WORK:
 
 This is round $round. Print a brief final status (5 lines max): tasks assigned, tasks completed, any stalls found."
 
+  # Safety: never push to dependency_check
+  git remote get-url --push origin 2>/dev/null | grep -q DISABLED || git remote set-url --push origin DISABLED_DO_NOT_PUSH_TO_DEPENDENCY_CHECK
+
   timeout 10m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
@@ -96,8 +99,14 @@ This is round $round. Print a brief final status (5 lines max): tasks assigned, 
   [ -f "coordination/principal.stop" ] && exit 0
   [ "$rc" -eq 124 ] && { printf 'principal round %s timed out\n' "$round" >> .local/principal-lifecycle.log; }
 
-  # Respect Opus rate limit: 120s between rounds
-  sleep 120
+  # Handle 429 rate limit: if log shows 429, wait 30 minutes
+  if grep -q "429\|rate.limit\|overloaded\|Too Many Requests" ".local/principal-$round.log" 2>/dev/null; then
+    printf 'principal round %s: 429 detected — sleeping 30 min\n' "$round" >> .local/principal-lifecycle.log
+    sleep 1800
+  else
+    # Respect Opus rate limit: 120s between rounds
+    sleep 120
+  fi
 done
 
 # Re-exec to keep running indefinitely

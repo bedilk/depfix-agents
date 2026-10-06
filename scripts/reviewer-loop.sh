@@ -85,6 +85,9 @@ Update coordination/reviewer.md after every round.
 
 This is round $round."
 
+  # Safety: never push to dependency_check
+  git remote get-url --push origin 2>/dev/null | grep -q DISABLED || git remote set-url --push origin DISABLED_DO_NOT_PUSH_TO_DEPENDENCY_CHECK
+
   timeout 15m claude -p \
     --model "$MODEL" \
     --dangerously-skip-permissions \
@@ -94,8 +97,13 @@ This is round $round."
   printf 'reviewer round %s exit %s %s\n' "$round" "$rc" "$(date_iso)" >> .local/reviewer-lifecycle.log
   [ -f "coordination/reviewer.stop" ] && exit 0
 
-  # 120s sleep to respect Opus rate limit and interleave with principal
-  sleep 120
+  if grep -q "429\|rate.limit\|overloaded\|Too Many Requests" ".local/reviewer-$round.log" 2>/dev/null; then
+    printf 'reviewer round %s: 429 detected — sleeping 30 min\n' "$round" >> .local/reviewer-lifecycle.log
+    sleep 1800
+  else
+    # 120s sleep to respect Opus rate limit and interleave with principal
+    sleep 120
+  fi
 done
 
 [ -f "coordination/reviewer.stop" ] || exec bash scripts/reviewer-loop.sh
