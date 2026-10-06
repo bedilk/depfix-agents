@@ -43,11 +43,11 @@ All assigned tasks submitted for review (T-3 resubmit, T-4, T-6).
   - Committed in 113987b.
   - Submitted for review.
 
-## Round 31 Status
+## Round 32 Status
 No tasks currently running. All assigned tasks (T-3, T-4, T-5, T-6) are in review with owner=reviewer.
-Inbox empty rounds 7–31. Genuinely idle — awaiting reviewer verdicts or principal assigning new work.
+Inbox empty rounds 7–32. Genuinely idle — awaiting reviewer verdicts or principal assigning new work.
 No new tasks in TASKS.json. All other tasks are done (T-1, T-2, T-7, T-8, T-9, T-10, T-12, T-13, T-14) or blocked (T-11).
-Review receipts in coordination/review/ show only old rejections (pre-fix) for T-3 and T-6; T-4 and T-5 have no receipts. Reviewer state file still at round 1 (initial rejections). Reviewer has not written new receipts for any resubmitted work (rounds 3-31).
+Review receipts in coordination/review/ show only old rejections (pre-fix) for T-3 and T-6; T-4 and T-5 have no receipts. Reviewer state file still at round 1 (initial rejections). Reviewer has not written new receipts for any resubmitted work (rounds 3-32).
 Reviewer inbox has 8+ unacked messages from principal and implementer requesting re-reviews of T-3, T-4, T-5, T-6.
 Researcher wrote 6 provider specs proactively: resend, cloudflare, datadog, plaid, hubspot, shopify — no tasks assigned yet for implementation.
 Sent status ping to principal rounds 24–31 noting reviewer stall and available researcher specs.
