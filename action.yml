@@ -1,0 +1,114 @@
+name: 'depfix — Dependabot for APIs'
+description: 'Detects breaking API/SDK changes, locates every affected call-site, generates LLM-written fixes, runs your tests, and opens a PR.'
+author: 'Bedil Karimov & Tohir Saidzoda'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  provider:
+    description: 'Provider to scan (e.g. openai, stripe, sentry). Comma-separated for multiple.'
+    required: false
+    default: ''
+  repo:
+    description: 'Repository to scan (owner/name). Defaults to current repo.'
+    required: false
+    default: ${{ github.repository }}
+  mode:
+    description: 'Pipeline stage: scan, plan, or apply'
+    required: false
+    default: 'plan'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  llm-provider:
+    description: 'LLM provider: bedrock, gemini, ollama'
+    required: false
+    default: 'bedrock'
+  api-key:
+    description: 'API key for LLM provider (GOOGLE_API_KEY, etc.)'
+    required: false
+  github-token:
+    description: 'GitHub token for PR creation'
+    required: false
+    default: ${{ github.token }}
+  auto-pr:
+    description: 'Automatically open a PR when apply finds fixes'
+    required: false
+    default: 'true'
+  dry-run:
+    description: 'Run in dry-run mode (no PRs, no writes)'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install depfix
+      shell: bash
+      run: pip install depfix
+
+    - name: Initialize depfix
+      shell: bash
+      run: depfix init --offline --keep-state
+
+    - name: Run depfix
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GOOGLE_API_KEY: ${{ inputs.api-key }}
+      run: |
+        MODE="${{ inputs.mode }}"
+        REPO="${{ inputs.repo }}"
+        PROVIDER="${{ inputs.provider }}"
+        DRY_RUN="${{ inputs.dry-run }}"
+
+        PROVIDER_FLAG=""
+        if [ -n "$PROVIDER" ]; then
+          PROVIDER_FLAG="--provider $PROVIDER"
+        fi
+
+        DRY_FLAG=""
+        if [ "$DRY_RUN" = "true" ]; then
+          DRY_FLAG="--dry-run --no-pr"
+        fi
+
+        case "$MODE" in
+          scan)
+            depfix scan --repo "$REPO" $PROVIDER_FLAG $DRY_FLAG
+            ;;
+          plan)
+            depfix scan --repo "$REPO" $PROVIDER_FLAG
+            depfix plan "$REPO" $PROVIDER_FLAG --force $DRY_FLAG
+            ;;
+          apply)
+            depfix scan --repo "$REPO" $PROVIDER_FLAG
+            depfix plan "$REPO" $PROVIDER_FLAG --force
+            depfix apply "$REPO" $PROVIDER_FLAG $DRY_FLAG
+            ;;
+        esac
+
+    - name: Generate summary
+      if: always()
+      shell: bash
+      run: |
+        echo "## depfix results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+        echo "| Repository | \`${{ inputs.repo }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Provider | \`${{ inputs.provider }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Mode | \`${{ inputs.mode }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Dry run | \`${{ inputs.dry-run }}\` |" >> $GITHUB_STEP_SUMMARY
