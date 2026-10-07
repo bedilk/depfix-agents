@@ -355,6 +355,22 @@ run_one() {
     depfix plan "$repo" --provider "$provider" --force > "$plan_log" 2>&1 \
         || echo "  (plan exited $?) — see $plan_log"
 
+    # apply: if plan produced a PR artifact, run apply to create the PR
+    local apply_log="$LOG_DIR/${short}.${provider}.apply.log"
+    if grep -qE "Plan artifact:|Upgrade plan:|Version drift \([^)]*PR planned" "$plan_log" 2>/dev/null; then
+        echo "[apply] $repo / $provider — PR artifact found, creating PR..."
+        depfix apply "$repo" --provider "$provider" > "$apply_log" 2>&1 \
+            || echo "  (apply exited $?) — see $apply_log"
+        if grep -qE "PR created|pull request|github.com/.*/pull/" "$apply_log" 2>/dev/null; then
+            echo "  ✓ PR created"
+        else
+            echo "  ✗ apply ran but no PR created — see $apply_log"
+        fi
+    else
+        echo "[apply] $repo / $provider — no PR artifact, skipping apply"
+        echo "no plan artifact" > "$apply_log"
+    fi
+
     local row
     row=$("$PYTHON" "$PARSER" "$repo" "$provider" "$scan_log" "$plan_log")
     printf '%s\n' "$row" >> "$SUMMARY"
