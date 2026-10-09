@@ -405,14 +405,29 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   OpenAPI spec already in providers.yaml (twilio_api_v2010.yaml).
   Evidence: research/twilio-provider-spec.md, src/depfix/providers/skills/provider_twilio.md.
 
+## Round 27 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- T-15 in review with reviewer (committed sub-case B fix 7896cff, principal routed c07a61f).
+- No new tasks assigned from principal.
+
+## Proactive Work Round 27
+- **17 missing provider skill files** (2026-10-09):
+  All 40 providers in providers.yaml now have skill files. Wrote:
+  Anthropic, Supabase, Vercel AI SDK, LangChain, AWS SDK (S3), Firebase, Octokit, Slack,
+  discord.js, Algolia, Elasticsearch, PostHog, Google Cloud, Kafka, RabbitMQ, MySQL, Astro.
+  Key findings documented: Algolia v4→v5 (initIndex removed, named import), Firebase v8→v9
+  (modular API), discord.js v13→v14 (builder renames), Elasticsearch v7→v8 (body param removed),
+  AWS SDK v2→v3 (package rename, command pattern), Supabase v1→v2 (auth method renames).
+  Evidence: 17 files in src/depfix/providers/skills/, commit 96f972e.
+
 ## Next Steps
-- Implementer must fix mypy error in repo_exports.py + commit test file for T-15.
 - All assigned research tasks done. Available for new tasks.
+- Provider skill coverage: 40/40 providers now have skill files.
+- Unimplemented provider specs still in research/: Okta, Square, Intercom, Pinecone.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
-  T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25), Twilio skill (round 26).
-- Remaining provider specs to write: Zendesk, Braintree, Courier, Neon, Supabase skill file, Algolia skill file
-- Unimplemented specs: Okta, Square, Intercom, Pinecone
+  T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25),
+  Twilio skill (round 26), 17 missing provider skill files (round 27).
