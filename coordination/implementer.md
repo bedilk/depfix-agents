@@ -44,8 +44,8 @@ No active task. All assigned tasks are done.
   - make test: 917 passed, 0 failed. make typecheck: 0 errors. make lint: clean.
   - Committed in 7896cff. ACCEPTED by reviewer (T-15_receipt.json).
 
-## Round 3 Status
-All assigned tasks complete. T-15 accepted by reviewer and marked done. Awaiting new task assignments from principal.
+## Round 8 Status
+All assigned tasks complete as of round 3. No new tasks assigned in rounds 4-8. Inbox empty each round. Awaiting new task assignments from principal.
 
 ## Notes
 - typecheck: python_version updated to 3.12, manager.py None guard added.
