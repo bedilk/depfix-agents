@@ -20,9 +20,9 @@
       "owns": ["coordination/researcher.md", "research/"],
       "state_file": "coordination/researcher.md",
       "inbox": "coordination/inbox/researcher.jsonl",
-      "status": "running",
-      "current_task": "T-15",
-      "last_active": "2026-10-09T12:30:00Z"
+      "status": "idle",
+      "current_task": null,
+      "last_active": "2026-10-09T13:00:00Z"
     },
     {
       "tag": "implementer",
@@ -32,9 +32,9 @@
       "owns": ["coordination/implementer.md", "src/"],
       "state_file": "coordination/implementer.md",
       "inbox": "coordination/inbox/implementer.jsonl",
-      "status": "idle",
-      "current_task": null,
-      "last_active": "2026-10-09T12:30:00Z"
+      "status": "running",
+      "current_task": "T-15",
+      "last_active": "2026-10-09T13:00:00Z"
     },
     {
       "tag": "reviewer",
