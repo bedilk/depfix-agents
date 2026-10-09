@@ -897,6 +897,48 @@ See `research/large-repo-scan.md` for full details.
 
 ---
 
+## Round 54 Health Check (2026-10-09)
+
+### Inbox
+Principal message: run smoke test + check T-15 status. Acked.
+
+### T-15 Status
+Implementer committed T-15 code at `20d5564` (`_augment_with_repo_exports` in orchestrator + new `src/depfix/sources/repo_exports.py`). **Verified: 909 tests pass (16 new T-15 tests, all PASS).** T-15 is currently in `review` status, waiting on reviewer.
+
+### `make test`
+**Result: 909 passed, 0 failed, 2 deselected (66.16s)** — +16 new T-15 unit tests from `tests/unit/test_repo_aware_exports.py`.
+
+All 16 T-15 unit tests pass:
+- call_site_uses_export (5 tests: exact match, member prefix, wrong provider, partial name no match, no provider prefix)
+- installed_version_for (3 tests: resolved, missing package, unresolved)
+- augment_with_repo_exports logic (5 tests: no installed version, no matching callsites, matching callsite creates synthetic change, multiple callsites one change, multiple removed exports)
+- Integration: synthetic_change_is_actionable_via_assess_scan_change
+- Edge: empty_removed_exports_returns_empty_changes, diff_returns_none_skips_gracefully
+
+### `make eval`
+**Result: 91% pass rate (30/33 scored), 12 skipped of 45 total** — same 3 pre-existing spec_diff failures, no regressions.
+
+### Smoke Test (principal-triggered)
+Ran `bash scripts/smoke-real-repos.sh 6`. Fixed 2 script bugs this round:
+1. `mapfile` → `while read` (bash 3.2 compat — macOS doesn't have bash 4+)
+2. `grep -oP` → `grep -oE` (macOS grep doesn't support Perl regex)
+
+**Result: 6 PASS (pipeline exit), BUT all 6 scans exited with code 1 (GitHub App not installed on third-party repos)**
+
+Repos tested: OptimalBits/bull (redis), RocketChat/Rocket.Chat (mongodb), langchain-ai/langchainjs (langchain), localstack/localstack (aws-s3), firebase/firebase-js-sdk (firebase), PostHog/posthog-js (posthog).
+
+Root cause: All `real-repos.txt` repos are third-party repos without the depfix GitHub App installed. Feed watch worked (detected 5 breaking changes across mongodb/langchain/aws-s3), but scan couldn't clone repos → 0 files scanned, 0 call sites.
+
+**Human action needed:** Install GitHub App on third-party repos in `real-repos.txt`, or add bedilk forks that already have the App (e.g., `bedilk/Rocket.Chat`).
+
+See `research/smoke-20261009-142842.md` for full results.
+
+### Open tasks
+- **T-15** (repo-version-aware ts_exports diff): in review — 909 tests pass, waiting on reviewer
+- **T-11** (7 forked repos): blocked on GitHub App installation (human action needed)
+
+---
+
 ## Round 53 Health Check (2026-10-09)
 
 No inbox messages. No new commits since round 52 — HEAD is still `26036ad` (my own round 52 state commit). No src/, tests/, providers.yaml, scripts/, or eval corpus changes.
