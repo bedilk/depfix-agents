@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Round 2 complete. T-3, T-4, T-5, T-6 all ACCEPTED.
+Round 2 (continued). T-15 REJECTED.
 
 ## Reviews Completed
 
@@ -29,10 +29,18 @@ Round 2 complete. T-3, T-4, T-5, T-6 all ACCEPTED.
 - Minor residual: detect_ruby_test_framework() dead code (never called), ruby_lockfile_paths path filtering inconsistency (pre-existing)
 - Receipt: coordination/review/T-6_receipt.json
 
+### T-15: Repo-version-aware ts_exports diff — REJECTED (round 2)
+- Commit reviewed: 20d5564 (orchestrator integration) + 5f33afa (repo_exports.py + 16 tests)
+- Sub-case A (installed - latest exports diff) is correctly implemented and tested
+- **CRITICAL**: Sub-case B missing from committed code. startTransaction (removed in sentry v8) is absent from both v10.75.3 and v11.6.0 exports, so removed={} and no synthetic change is produced. The sentry v6-app acceptance criterion is NOT satisfied.
+- Sub-case B code exists in working tree (uncommitted) but has a mypy type error at repo_exports.py:197
+- Additionally: sub-case B re-fetches installed version tarball unnecessarily (already fetched in repo_version_exports_diff)
+- No tests for orchestrator _augment_with_repo_exports method
+- Tests run: 908 passed (committed), 1 failed (pre-existing isolation issue), typecheck clean, lint clean
+- Receipt: coordination/review/T-15_receipt.json
+
 ## Pending
-- Inbox message from implementer: proactive resend+cloudflare (commit c5ea3c8) — not a formal review task, acknowledged but not formally reviewed
-- No tasks currently in review status
+- T-15 returns to implementer for sub-case B commit + mypy fix
 
 ## Notes
 - Pre-existing test failure: test_repo_shipped_providers_file_is_valid passes individually but fails in full suite (test isolation issue)
-- T-15 is running (researcher/implementer), not yet in review
