@@ -173,8 +173,8 @@
     {
       "id": "T-15",
       "title": "Repo-version-aware ts_exports diff: detect old-API removals across multiple major versions",
-      "status": "ready",
-      "owner": "unassigned",
+      "status": "running",
+      "owner": "researcher",
       "depends_on": ["T-9"],
       "acceptance": "When depfix scan finds call sites for a provider AND the repo's lockfile resolves a semver version for that SDK, depfix compares that installed version's TypeScript exports against the latest version's exports. Symbols that (a) exist in the installed version, (b) are absent from the latest, and (c) match an observed call site, produce a synthetic BreakingChange record so plan/apply can act on them. Verified on: (1) bedilk/depfix-test-sentry-v6-app — sentry.startTransaction must become actionable, (2) bedilk/seed-openai-v3-to-v4 — openai.createChatCompletion must become actionable (if version resolves). make test passes, no regressions.",
       "evidence_paths": [
@@ -182,10 +182,10 @@
         "src/depfix/scanners/matching.py",
         "tests/unit/test_repo_aware_exports.py"
       ],
-      "next_action": "principal: assign researcher (investigate) then implementer (build). See task notes for full diagnosis, file paths, and implementation sketch.",
+      "next_action": "researcher: produce research/repo-version-aware-exports.md — exact file/line analysis and actionable implementation spec for implementer.",
       "notes": "HUMAN DIRECTIVE — top priority.\n\n## Problem\nThe ts_exports_diff feed only compares consecutive versions (or previous-major → current on first poll). Repos on much older SDK versions (sentry v6, openai v3) use APIs removed many majors ago. These removals never appear as BreakingChange records, so plan produces 0 PRs even though scan correctly finds the call sites.\n\n## Evidence (manual pipeline run 2026-10-08)\n- bedilk/depfix-test-sentry-v6-app: 31 call sites found (startTransaction etc), @sentry/node@10.75.3 in lockfile, latest 11.6.0. Plan: 0 PRs. Cause: startTransaction removed in v8, feed compared 10.76.1→11.5.0 — already gone.\n- bedilk/seed-openai-v3-to-v4: 1 call site (openai.createChatCompletion), manifest is file:./vendor/openai (unresolvable). Plan: 0 PRs. Cause: createChatCompletion removed in v4, feed compared 7.30.0→7.30.1.\n\n## Root cause (4 files)\n1. src/depfix/sources/ts_exports.py:171 — _previous_major_release() only goes back 1 major. Sentry v10→v11 can't see v7→v8 removals.\n2. src/depfix/scanners/matching.py:43 — assess_scan_change() requires a pre-existing BreakingChange record. No record = NO_CALL_SITES.\n3. src/depfix/catalog/learned.py:128 — _detected_entry() marks symbols as non_actionable when no BreakingChange matches.\n4. src/depfix/catalog/detections.py:135 — build_anchor_detection() exists as an escape hatch but only for agent-discovered anchors, not deterministic scanner.\n\n## Implementation sketch\nThe _exports_for(version) method in ts_exports.py already fetches exports for ANY npm version by downloading the tarball. The fix:\n1. In the scan flow (after call sites are found and the lockfile resolves an installed version), call _exports_for(installed_version) and _exports_for(latest_version).\n2. Compute removed = installed_exports - latest_exports.\n3. For each call site symbol that matches a removed export, create a synthetic BreakingChange (source=spec_diff, kind=method_removed) with old_version=installed, new_version=latest.\n4. Feed these into the normal assess_scan_change pipeline so plan can process them.\n5. This should live in a new function in scanners/repo.py or a helper called from the scan orchestration, NOT in the feed poll path (which is stateless and doesn't know the repo's version).\n\n## Rate limit warning\nPrincipal and reviewer share a 25 req/min Opus budget. Keep rounds spaced ≥3 min apart. Researcher and implementer use Sonnet (no practical cap) — they should do the heavy lifting. Principal dispatches and checks; reviewer reviews. Do not run principal+reviewer in tight loops.\n\n## Test repos\n- bedilk/depfix-test-sentry-v6-app (sentry provider) — startTransaction must become actionable after this fix\n- bedilk/seed-openai-v3-to-v4 (openai provider) — createChatCompletion should become actionable IF version resolves (it uses file:./vendor/openai which is unresolvable; this is a known limitation, not a blocker for this task)"
     }
   ],
-  "last_updated": "2026-10-09T00:15:00Z",
-  "updated_by": "human"
+  "last_updated": "2026-10-09T12:30:00Z",
+  "updated_by": "principal"
 }
