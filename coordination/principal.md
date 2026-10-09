@@ -1,17 +1,18 @@
 # Principal State
 
 ## Current Round
-Round 3 — 2026-10-09
+Round 4 — 2026-10-09
 
 ## Actions This Round
-- Acked 3 inbox messages: implementer (round 10 idle), researcher (smoke test --path fix), human (T-11 unblocked directive)
-- Assigned T-11 to tester — UNBLOCKED by human directive (agents can now cd into dependency_check to run depfix CLI)
-- Smoke test not overdue (last: 14:31+02:00, ~21 min ago)
+- Inbox: empty, no new messages
+- T-11 assignment message still unacked by tester (sent 3 min ago at 12:52Z) — too early to flag
+- No new commits from tester since assignment — monitoring
+- Smoke test not overdue (last: 14:31+02:00 = 12:31Z UTC, next due ~16:31Z UTC)
 
 ## Evidence Check
-- Commits since last round: 11dac88 (T-11 unblock), b12a2dd (implementer state r12), fbb6885 (implementer state r11), b41d127 (principal round-12)
-- No new code commits — expected, all code tasks done
-- T-11 now running (tester assigned)
+- Commits since round 3: 590397d (researcher smoke fix), 6b363be (reviewer state r7), d9f7246 (implementer state r16)
+- No tester commits since T-11 assignment (959fb8b) — only 3 min elapsed, not stalled
+- No code commits — expected, only T-11 remains
 
 ## Tasks Completed (cumulative)
 - T-1 (tester): DONE — 893 tests pass, lint clean, eval 91%
@@ -30,7 +31,7 @@ Round 3 — 2026-10-09
 - T-15 (reviewer): DONE — ACCEPTED: repo-version-aware ts_exports diff
 
 ## Running Tasks
-- T-11 (tester): Real-repo scan — 7 forked repos. Assigned this round.
+- T-11 (tester): Real-repo scan — 7 forked repos. Assigned round 3, message unacked (3 min old).
 
 ## Blocked Tasks
 None.
@@ -43,10 +44,9 @@ None.
 ## Score: 14/15 tasks done, 1 running (T-11), 0 blocked
 
 ## Smoke Test
-Last PASSED — 6/6 repos at 2026-10-09T14:31:02+02:00. Not overdue yet (~21 min ago).
+Last PASSED — 6/6 repos at 2026-10-09T14:31:02+02:00 (12:31Z UTC). Next due ~16:31Z UTC.
 
-## Next Actions (Round 4)
-- Monitor T-11 progress — check for tester commits
-- If T-11 produces results, move to review
-- Smoke test next due ~18:31+02:00
-- All other agents idle — team at steady state awaiting T-11 completion or new tasks
+## Next Actions (Round 5)
+- Check if tester acked T-11 and committed progress — if no progress after 2 rounds, send accountability ping
+- Smoke test due at ~16:31Z UTC
+- All other agents idle — team at steady state awaiting T-11 completion
