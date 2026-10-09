@@ -27,16 +27,20 @@ if [[ ! -f "$REPOS_FILE" ]]; then
   exit 1
 fi
 
-# Parse real-repos.txt: skip comments and blank lines
-mapfile -t ALL_REPOS < <(grep -v '^\s*#' "$REPOS_FILE" | grep -v '^\s*$')
+# Parse real-repos.txt: skip comments and blank lines (bash 3.2 compat, no mapfile)
+ALL_REPOS=()
+while IFS= read -r _line; do ALL_REPOS+=("$_line"); done \
+  < <(grep -v '^\s*#' "$REPOS_FILE" | grep -v '^\s*$')
 
 if [[ "$COUNT" == "--all" ]]; then
   SELECTED=("${ALL_REPOS[@]}")
   COUNT=${#SELECTED[@]}
 else
-  # Shuffle and pick $COUNT
+  # Shuffle and pick $COUNT (bash 3.2 compat)
   SELECTED=()
-  mapfile -t SHUFFLED < <(printf '%s\n' "${ALL_REPOS[@]}" | sort -R)
+  SHUFFLED=()
+  while IFS= read -r _line; do SHUFFLED+=("$_line"); done \
+    < <(printf '%s\n' "${ALL_REPOS[@]}" | sort -R)
   for i in $(seq 0 $(( COUNT - 1 ))); do
     [[ $i -ge ${#SHUFFLED[@]} ]] && break
     SELECTED+=("${SHUFFLED[$i]}")
@@ -79,10 +83,10 @@ for entry in "${SELECTED[@]}"; do
   end_ts=$(date +%s)
   elapsed=$(( end_ts - start_ts ))
 
-  # Extract metrics from log
-  files=$(grep -oP 'files scanned: \K[0-9]+' "$scan_log" 2>/dev/null | tail -1 || echo "?")
-  sites=$(grep -oP 'call sites: \K[0-9]+' "$scan_log" 2>/dev/null | tail -1 || echo "?")
-  actionable=$(grep -oP '[0-9]+ actionable' "$scan_log" 2>/dev/null | grep -oP '[0-9]+' | tail -1 || echo "?")
+  # Extract metrics from log (macOS grep -E compat, no -P/\K)
+  files=$(grep -oE 'files scanned: [0-9]+' "$scan_log" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || true)
+  sites=$(grep -oE 'call sites: [0-9]+' "$scan_log" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || true)
+  actionable=$(grep -oE '[0-9]+ actionable' "$scan_log" 2>/dev/null | grep -oE '^[0-9]+' | tail -1 || true)
 
   [ -z "$files" ] && files="?"
   [ -z "$sites" ] && sites="?"
