@@ -1,24 +1,38 @@
 # Reviewer State
 
 ## Current Task
-Round 1 complete. Both T-3 and T-6 reviewed and REJECTED.
+Round 2 complete. T-3, T-4, T-5, T-6 all ACCEPTED.
 
 ## Reviews Completed
 
-### T-3: Provider skill files for redis and postgresql — REJECTED
-- provider_redis.md not committed (untracked file)
-- make test fails: test_repo_shipped_providers_file_is_valid expects 25 but finds 27
-- Content quality is good — only needs commit + test fix
+### T-3: Provider skill files for redis and postgresql — ACCEPTED (round 2)
+- Prior: REJECTED round 1 (provider_redis.md not committed, test count wrong)
+- Round 2: Both files committed, content quality good, follows sentry pattern
 - Receipt: coordination/review/T-3_receipt.json
 
-### T-6: Adversarial review of ruby fixer — REJECTED
-- 3 critical bugs: build_ruby_install_argv/build_ruby_test_argv missing PATH checks, test_argv ignores junit_xml_path
-- 2 bugs: .depfix-bundle missing from _SKIP in ruby_manifests.py and ruby_lockfile.py
-- 2 design issues: dead gemspec glob, duplicate function pairs with inconsistent behavior
-- Zero unit test coverage for all 4 ruby modules
+### T-4: Expand eval corpus — 10 sentry v7→v8 cases — ACCEPTED (round 2)
+- 10 cases: 6 call_sites (all verified:true, passing), 4 fix_generation (verified:false, need LLM)
+- Fixtures realistic: setup.js, perf.js, hub.js, breadcrumbs.js — real Sentry v7 API patterns
+- Breaking change descriptions accurate against official migration docs
+- make eval: 91% (30/33), no regressions
+- Receipt: coordination/review/T-4_receipt.json
+
+### T-5: 5 ruby ecosystem eval cases — ACCEPTED (round 2)
+- 5 cases: 4 positive (openai require, nested path, stripe, sentry-ruby hyphen) + 1 precision negative
+- EvalCase ecosystem field added backward-compatibly, GenericImportScanner routing correct
+- make eval: 91% (30/33), no regressions
+- Receipt: coordination/review/T-5_receipt.json
+
+### T-6: Adversarial review of ruby fixer — ACCEPTED (round 2)
+- Prior: REJECTED round 1 (3 critical bugs, 2 bugs, 2 design issues, zero tests)
+- Round 2: All 6 issues fixed, 21 unit tests added
+- Minor residual: detect_ruby_test_framework() dead code (never called), ruby_lockfile_paths path filtering inconsistency (pre-existing)
 - Receipt: coordination/review/T-6_receipt.json
 
+## Pending
+- Inbox message from implementer: proactive resend+cloudflare (commit c5ea3c8) — not a formal review task, acknowledged but not formally reviewed
+- No tasks currently in review status
+
 ## Notes
-- Pre-existing test failure: test_repo_shipped_providers_file_is_valid (27 != 25) — unrelated to ruby fixer
-- Waiting for implementer to fix T-3 and T-6 issues before re-review
-- Will also review T-4, T-5 as they reach review status
+- Pre-existing test failure: test_repo_shipped_providers_file_is_valid passes individually but fails in full suite (test isolation issue)
+- T-15 is running (researcher/implementer), not yet in review

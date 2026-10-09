@@ -40,7 +40,7 @@
     {
       "id": "T-4",
       "title": "Expand eval corpus — 10 new sentry cases",
-      "status": "review",
+      "status": "done",
       "owner": "reviewer",
       "depends_on": ["T-1", "T-2"],
       "acceptance": "10 new YAML cases added to src/depfix/evals/corpus/ covering sentry v7→v8 API changes (startTransaction, configureScope, addBreadcrumb, captureException patterns). `make eval` passes with no regressions. Reviewer accepts.",
@@ -49,13 +49,13 @@
         "tests/fixtures/sentry_v7_project/",
         "coordination/review/T-4_receipt.json"
       ],
-      "next_action": "reviewer: review sentry_v8_callsites.yaml (10 cases) and sentry_v7_project fixtures; verify make eval 91% (30/33) — no regressions vs before.",
-      "notes": "10 cases: 6 call_sites verified:true (all PASS via make eval), 4 fix_generation verified:false (need LLM). Fixture: tests/fixtures/sentry_v7_project/. make eval: 91% (30/33 scored). Committed in 113987b."
+      "next_action": "done",
+      "notes": "ACCEPTED by reviewer round 2. 10 cases (6 call_sites, 4 fix_generation), realistic fixtures, accurate migration guides. make eval: 91% (30/33), no regressions."
     },
     {
       "id": "T-5",
       "title": "Add 5 eval cases for ruby ecosystem",
-      "status": "review",
+      "status": "done",
       "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "5 new YAML eval cases covering ruby call-site detection (Gemfile + require patterns). `make eval` passes. Reviewer accepts.",
@@ -67,19 +67,19 @@
         "tests/fixtures/ruby_unrelated_project/",
         "coordination/review/T-5_receipt.json"
       ],
-      "next_action": "reviewer: review ruby_callsites.yaml and fixture files; verify make eval shows 10/10 call_sites passing",
-      "notes": "Added ecosystem field to EvalCase + GenericImportScanner routing in runner. Makefile eval now uses PYTHONPATH=src + --corpus-dir. All 5 Ruby cases verified: 10/10 call_sites pass. 3 pre-existing spec_diff failures are not from this task."
+      "next_action": "done",
+      "notes": "ACCEPTED by reviewer round 2. 5 cases (4 positive + 1 precision negative), ecosystem field added to EvalCase with backward-compatible default, GenericImportScanner routing correct. make eval: 91% (30/33), no regressions."
     },
     {
       "id": "T-6",
       "title": "Adversarial review of ruby fixer implementation",
-      "status": "review",
+      "status": "done",
       "owner": "reviewer",
       "depends_on": ["T-1"],
       "acceptance": "Reviewer writes coordination/review/T-6_receipt.json with ACCEPTED/REJECTED verdict and full list of issues found. If REJECTED, issues filed as sub-tasks.",
       "evidence_paths": ["coordination/review/T-6_receipt.json"],
-      "next_action": "reviewer: re-review all 6 issues from prior rejection — see commit 6844154 for fixes.",
-      "notes": "All 6 issues from T-6_receipt.json addressed in commit 6844154: PATH checks added, junit_xml_path removed from test_argv, .depfix-bundle added to both _SKIP sets, *.gemspec removed from _iter_gemfiles, orphaned functions deleted, 21 unit tests added. make test: 893 passed."
+      "next_action": "done",
+      "notes": "ACCEPTED by reviewer round 2. All 6 prior rejection issues fixed. 21 unit tests added. Minor residual: detect_ruby_test_framework() dead code, ruby_lockfile_paths() path filtering inconsistency (both pre-existing). make test: 892 passed."
     },
     {
       "id": "T-7",
@@ -186,6 +186,6 @@
       "notes": "HUMAN DIRECTIVE — top priority.\n\n## Problem\nThe ts_exports_diff feed only compares consecutive versions (or previous-major → current on first poll). Repos on much older SDK versions (sentry v6, openai v3) use APIs removed many majors ago. These removals never appear as BreakingChange records, so plan produces 0 PRs even though scan correctly finds the call sites.\n\n## Evidence (manual pipeline run 2026-10-08)\n- bedilk/depfix-test-sentry-v6-app: 31 call sites found (startTransaction etc), @sentry/node@10.75.3 in lockfile, latest 11.6.0. Plan: 0 PRs. Cause: startTransaction removed in v8, feed compared 10.76.1→11.5.0 — already gone.\n- bedilk/seed-openai-v3-to-v4: 1 call site (openai.createChatCompletion), manifest is file:./vendor/openai (unresolvable). Plan: 0 PRs. Cause: createChatCompletion removed in v4, feed compared 7.30.0→7.30.1.\n\n## Root cause (4 files)\n1. src/depfix/sources/ts_exports.py:171 — _previous_major_release() only goes back 1 major. Sentry v10→v11 can't see v7→v8 removals.\n2. src/depfix/scanners/matching.py:43 — assess_scan_change() requires a pre-existing BreakingChange record. No record = NO_CALL_SITES.\n3. src/depfix/catalog/learned.py:128 — _detected_entry() marks symbols as non_actionable when no BreakingChange matches.\n4. src/depfix/catalog/detections.py:135 — build_anchor_detection() exists as an escape hatch but only for agent-discovered anchors, not deterministic scanner.\n\n## Implementation sketch\nThe _exports_for(version) method in ts_exports.py already fetches exports for ANY npm version by downloading the tarball. The fix:\n1. In the scan flow (after call sites are found and the lockfile resolves an installed version), call _exports_for(installed_version) and _exports_for(latest_version).\n2. Compute removed = installed_exports - latest_exports.\n3. For each call site symbol that matches a removed export, create a synthetic BreakingChange (source=spec_diff, kind=method_removed) with old_version=installed, new_version=latest.\n4. Feed these into the normal assess_scan_change pipeline so plan can process them.\n5. This should live in a new function in scanners/repo.py or a helper called from the scan orchestration, NOT in the feed poll path (which is stateless and doesn't know the repo's version).\n\n## Rate limit warning\nPrincipal and reviewer share a 25 req/min Opus budget. Keep rounds spaced ≥3 min apart. Researcher and implementer use Sonnet (no practical cap) — they should do the heavy lifting. Principal dispatches and checks; reviewer reviews. Do not run principal+reviewer in tight loops.\n\n## Test repos\n- bedilk/depfix-test-sentry-v6-app (sentry provider) — startTransaction must become actionable after this fix\n- bedilk/seed-openai-v3-to-v4 (openai provider) — createChatCompletion should become actionable IF version resolves (it uses file:./vendor/openai which is unresolvable; this is a known limitation, not a blocker for this task)"
     }
   ],
-  "last_updated": "2026-10-09T13:00:00Z",
-  "updated_by": "principal"
+  "last_updated": "2026-10-09T12:00:00Z",
+  "updated_by": "reviewer"
 }

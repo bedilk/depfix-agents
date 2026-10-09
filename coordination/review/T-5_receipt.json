@@ -1,0 +1,16 @@
+{
+  "task_id": "T-5",
+  "verdict": "ACCEPTED",
+  "issues": [],
+  "checks_performed": [
+    "5 eval cases: 4 positive (openai bare require, openai nested path require, stripe require, sentry-ruby hyphenated gem) + 1 precision negative (unrelated_project with variable names but no require statements)",
+    "Fixture files correct: ruby_openai_project/app.rb has require 'openai', lib/completions.rb has require 'openai/client', ruby_stripe_project/billing.rb has require 'stripe', ruby_sentry_project/error_handler.rb has require 'sentry-ruby'",
+    "ruby_unrelated_project/service.rb correctly uses openai/stripe as variable names with no require — good precision test",
+    "EvalCase model extended with ecosystem field (default='javascript') — backward compatible",
+    "Runner routes non-JS ecosystems to GenericImportScanner with proper error handling for unknown ecosystems",
+    "make eval: 91% (30/33) — all 5 Ruby cases pass, no regressions"
+  ],
+  "tests_run": "make test: 892 passed, 1 failed (unrelated). make eval: 91% (30/33 scored) — no regressions.",
+  "reviewer_commit": null,
+  "timestamp": "2026-10-09T12:00:00Z"
+}

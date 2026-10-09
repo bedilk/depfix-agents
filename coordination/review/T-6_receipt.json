@@ -1,25 +1,22 @@
 {
   "task_id": "T-6",
-  "verdict": "REJECTED",
+  "verdict": "ACCEPTED",
+  "prior_verdict": "REJECTED (2026-10-05) — 3 critical bugs, 2 bugs, 2 design issues, zero test coverage",
   "issues": [
-    "CRITICAL: build_ruby_install_argv() (ruby_runtime.py:56) does not check if bundler is on PATH — returns ['bundle', ...] even when `shutil.which('bundle')` would return None. Caller will get FileNotFoundError. Compare with install_argv() which correctly guards on bundler().",
-    "CRITICAL: build_ruby_test_argv() (ruby_runtime.py:101) same bug — no PATH check for bundler before returning ['bundle', 'exec', ...]. Will crash at runtime if bundle is missing.",
-    "CRITICAL: test_argv() (ruby_runtime.py:81) accepts junit_xml_path parameter but never uses it — JUnit test report paths are silently discarded. Compare with python_runtime.py:111 which passes --junit-xml={junit_xml_path}. The verify subsystem expects structured test output at this path and will get nothing.",
-    "BUG: _SKIP in ruby_manifests.py:13 is {'.git', 'vendor', 'node_modules', '.bundle'} but ruby_runtime.py installs gems to '.depfix-bundle' (BUNDLE_PATH). _iter_gemfiles will traverse .depfix-bundle/ and could match gemspecs inside installed gems, attempting to rewrite third-party code. Must add '.depfix-bundle' to _SKIP.",
-    "BUG: ruby_lockfile_paths() (ruby_lockfile.py:12) filters 'vendor' and '.bundle' but not '.depfix-bundle' — same issue. Could find Gemfile.lock inside the gem install cache.",
-    "DESIGN: _iter_gemfiles iterates *.gemspec files but _GEM_LINE_RE only matches Gemfile `gem 'name'` syntax, not gemspec `spec.add_dependency 'name'` syntax. Gemspec files are found but never rewritten — silent no-op that gives false confidence. Either add gemspec regex support or remove *.gemspec from the glob.",
-    "DESIGN: Duplicate function pairs with inconsistent behavior: install_argv() vs build_ruby_install_argv() (different retry/frozen/PATH-check semantics), test_argv() vs build_ruby_test_argv() (different detection heuristics for minitest). One pair should be canonical; the other should be removed or made a wrapper.",
-    "COVERAGE: Zero dedicated unit tests for ruby_runtime.py, ruby_manifests.py, ruby_lockfile.py, and ruby_validator.py. The only ruby tests are in test_ecosystems_manifests.py testing scan_ruby_dependencies (a different module). Every bug listed above would have been caught by basic unit tests."
+    "Minor: detect_ruby_test_framework() at ruby_runtime.py:101 is dead code (never called). Not a bug, but should be cleaned up.",
+    "Minor: ruby_lockfile_paths() filters on path.parts (absolute path) while _iter_gemfiles() filters on path.relative_to(root).parts — inconsistent but pre-existing, not introduced by T-6 fix."
   ],
-  "tests_run": "make test: 871 passed, 1 failed (pre-existing failure in test_provider_loader.py, unrelated to ruby fixer)",
-  "files_reviewed": [
-    "src/depfix/ecosystems/ruby_runtime.py",
-    "src/depfix/ecosystems/ruby_manifests.py",
-    "src/depfix/ecosystems/ruby_lockfile.py",
-    "src/depfix/ecosystems/ruby_validator.py",
-    "src/depfix/ecosystems/python_runtime.py (reference comparison)",
-    "src/depfix/codemods/lockfile.py (dependency_drift_policy used by ruby_manifests)"
+  "checks_performed": [
+    "Issue 1 (PATH checks): FIXED — build_ruby_install_argv and test_argv both check bundler() is None, smoke_argv checks ruby() is None, try_refresh_ruby_lockfile checks shutil.which('bundle'), validate_ruby_syntax checks shutil.which('ruby')",
+    "Issue 2 (unused junit_xml_path): FIXED — parameter removed from test_argv, runner.py updated to call test_argv(cwd) without it, minitest_junit_env used separately via extra_env",
+    "Issue 3 (.depfix-bundle in _SKIP): FIXED — added to ruby_manifests._SKIP frozenset",
+    "Issue 4 (.depfix-bundle in lockfile): FIXED — added '.depfix-bundle' not in path.parts filter",
+    "Issue 5 (dead gemspec glob): FIXED — _iter_gemfiles now only uses root.rglob('Gemfile')",
+    "Issue 6 (orphaned functions): PARTIALLY FIXED — build_ruby_test_argv deleted but detect_ruby_test_framework survives as dead code (minor, non-blocking)",
+    "21 unit tests added covering: install_argv (3 tests), test_argv (5 tests), has_gemfile (2 tests), has_test_setup (3 tests), _iter_gemfiles (3 tests), lockfile_paths (2 tests), validator (1 test)",
+    "Compared with python_runtime.py for consistency: same pattern of shutil.which checks, None returns, Path handling"
   ],
+  "tests_run": "make test: 892 passed, 1 failed (unrelated provider count test). 21 new ruby tests all pass.",
   "reviewer_commit": null,
-  "timestamp": "2026-10-05T23:35:00Z"
+  "timestamp": "2026-10-09T12:00:00Z"
 }

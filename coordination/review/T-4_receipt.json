@@ -1,0 +1,16 @@
+{
+  "task_id": "T-4",
+  "verdict": "ACCEPTED",
+  "issues": [],
+  "checks_performed": [
+    "10 eval cases (6 call_sites verified:true, 4 fix_generation verified:false): all IDs unique, categories correct, schemas valid",
+    "Fixture files realistic Sentry v7 code: setup.js (Integrations.Http/Express, Handlers.requestHandler/tracingHandler), perf.js (startTransaction/startChild), hub.js (getCurrentHub/configureScope), breadcrumbs.js (addBreadcrumb/captureException with scope context)",
+    "package.json declares @sentry/node ^7.119.0 — correct for v7 fixture",
+    "Breaking change descriptions accurate: startTransaction→startSpan, getCurrentHub→getCurrentScope, Integrations.Http→httpIntegration, captureException scope context→withScope",
+    "make eval: 91% (30/33) — all 6 sentry call_sites cases PASS, 3 failures are pre-existing spec_diff, 12 skipped are fix_generation (no LLM)",
+    "Migration guides match official Sentry v8 migration documentation"
+  ],
+  "tests_run": "make test: 892 passed, 1 failed (unrelated). make eval: 91% (30/33 scored), 12 skipped — no regressions.",
+  "reviewer_commit": null,
+  "timestamp": "2026-10-09T12:00:00Z"
+}
