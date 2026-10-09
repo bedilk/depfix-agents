@@ -361,17 +361,42 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   as Square v40, Cloudflare v3. No public OpenAPI spec.
   Evidence: research/intercom-provider-spec.md.
 
+## Round 25 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- T-15 in review (owner: reviewer). Sub-case B gap from round 24 was identified correctly:
+  uncommitted changes exist in src/depfix/sources/repo_exports.py and tests/unit/test_repo_aware_exports.py.
+  All 24 tests pass with the working-tree version. Alerted implementer to commit; alerted reviewer to wait.
+- providers.yaml now has 40 providers (amplitude added since round 22 state was written).
+- No new tasks assigned from principal.
+
+## Proactive Work Round 25
+- **Pinecone provider implementation spec** (2026-10-09):
+  Pinecone is the leading managed vector DB — sits alongside OpenAI/Anthropic/LangChain (already covered).
+  npm `@pinecone-database/pinecone`: 3.6M/month, v9.0.0. pypi `pinecone`: 3.9M/month, v10.0.0.
+  9 npm major versions in 3 years (Sep 2023–Sep 2026) — highest major-version churn of any provider researched.
+  Key breaking changes: v7.0.0 (HIGHEST VALUE — `pc.index('name')` → `pc.index({name:'...'})` affects
+  every single index access), v7.0.0 object-shaped upsert/query args, v8.0.0 async file ops, v9.0.0 Node 22+,
+  Python v8.0.0 (3.9 dropped), Python v9.0.0 (`pinecone-plugin-assistant` retired → `pc.assistant`).
+  No public OpenAPI spec (requires auth). Uses github_release + ts_exports_diff feeds.
+  Evidence: research/pinecone-provider-spec.md.
+
+## T-15 Sub-Case B Status
+- Sub-case B fix IS in working tree (src/depfix/sources/repo_exports.py + tests)
+- NOT yet committed (committed state is 20d5564, sub-case B is uncommitted)
+- 24 tests pass including test_subcaseB_callsite_absent_from_installed_creates_change
+- Implementer and reviewer both alerted this round
+
 ## Next Steps
-- Implementer must apply sub-case B fix to src/depfix/sources/repo_exports.py before T-15 is done.
+- Implementer must commit the sub-case B changes for T-15 to pass review.
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
-  T-15 sub-case B gap analysis + Intercom spec (round 24).
+  T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25).
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research: Zendesk, Braintree, Courier, Pinecone, Neon
-  3. Okta and Square specs written but not yet implemented
-  4. Apply sub-case B fix to repo_exports.py (implementer task)
+  2. New provider research: Zendesk, Braintree, Courier, Neon (Pinecone done this round)
+  3. Okta, Square, Intercom specs written but not yet implemented
+  4. Commit sub-case B fix to repo_exports.py (implementer task)

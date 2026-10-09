@@ -80,6 +80,19 @@ def _call_site_uses_export(symbol: str, provider_id: str, export_name: str) -> b
     return after_provider == export_name or after_provider.startswith(f"{export_name}.")
 
 
+def _export_name_from_symbol(symbol: str, provider_id: str) -> str | None:
+    """Extract the top-level export name from a provider-namespaced symbol.
+
+    E.g. ``"sentry.hub.captureMessage"`` → ``"hub"``.
+    Returns ``None`` when ``symbol`` doesn't start with ``provider_id.``.
+    """
+    prefix = f"{provider_id}."
+    if not symbol.startswith(prefix):
+        return None
+    after = symbol[len(prefix):]
+    return after.split(".")[0]
+
+
 def repo_version_exports_diff(
     package: str,
     installed_version: str,
@@ -145,9 +158,8 @@ def synthetic_changes_for_scan(
             continue
 
         latest_version, removed_exports = diff
-        if not removed_exports:
-            continue
 
+        # Sub-case A: export existed in installed version but is absent in latest.
         for site in result.actionable_sites:
             for export_name in removed_exports:
                 old_api = f"{provider_id}.{export_name}"
@@ -173,5 +185,40 @@ def synthetic_changes_for_scan(
                         )
                     )
                     seen_old_apis.add(old_api)
+
+        # Sub-case B: call site uses an export absent from the installed version.
+        # The API was removed BEFORE the installed version — the code calls a ghost
+        # API that has not existed since an earlier major.  We must detect this
+        # separately because installed-exports - latest-exports is empty when both
+        # versions lack the symbol (e.g. sentry startTransaction: removed in v8,
+        # repo lockfile is v10, latest is v11).
+        installed_exports = _exports_for_version(package, installed, http, npm.base_url)
+        for site in result.actionable_sites:
+            export_name = _export_name_from_symbol(site.symbol, provider_id)
+            if export_name is None:
+                continue
+            old_api = f"{provider_id}.{export_name}"
+            if old_api in seen_old_apis:
+                continue
+            if installed_exports is not None and export_name not in installed_exports:
+                changes.append(
+                    BreakingChange(
+                        package=package,
+                        old_version="0.0.0",
+                        new_version=installed,
+                        old_api=old_api,
+                        new_api="",
+                        description=(
+                            f"{export_name} is not exported by {package}@{installed}; "
+                            f"it was removed in an earlier major version"
+                        ),
+                        migration_guide="",
+                        kind=ChangeKind.METHOD_REMOVED,
+                        source=ClassificationSource.SPEC_DIFF,
+                        provider_id=provider_id,
+                        confidence=0.9,
+                    )
+                )
+                seen_old_apis.add(old_api)
 
     return changes

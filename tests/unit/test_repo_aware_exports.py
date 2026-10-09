@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from depfix.core.models import ChangeKind, ClassificationSource
 from depfix.scanners.matching import ScanMatchStatus, assess_scan_change
 from depfix.scanners.models import (
@@ -18,6 +20,7 @@ from depfix.scanners.models import (
 )
 from depfix.sources.repo_exports import (
     _call_site_uses_export,
+    _export_name_from_symbol,
     _installed_version_for,
     synthetic_changes_for_scan,
 )
@@ -280,6 +283,130 @@ def test_diff_returns_none_skips_gracefully() -> None:
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=None,  # network error or already latest
+    ):
+        changes = synthetic_changes_for_scan(
+            result,
+            provider_id="sentry",
+            npm_packages=["@sentry/node"],
+            http=MagicMock(),
+            npm=MagicMock(),
+        )
+
+    assert changes == []
+
+
+# ─── _export_name_from_symbol ─────────────────────────────────────────────────
+
+
+def test_export_name_from_symbol_top_level() -> None:
+    assert _export_name_from_symbol("sentry.startTransaction", "sentry") == "startTransaction"
+
+
+def test_export_name_from_symbol_nested() -> None:
+    # "hub" is the top-level export; captureMessage is a method on it
+    assert _export_name_from_symbol("sentry.hub.captureMessage", "sentry") == "hub"
+
+
+def test_export_name_from_symbol_wrong_provider() -> None:
+    assert _export_name_from_symbol("stripe.createPaymentIntent", "sentry") is None
+
+
+def test_export_name_from_symbol_no_prefix() -> None:
+    assert _export_name_from_symbol("startTransaction", "sentry") is None
+
+
+# ─── sub-case B ───────────────────────────────────────────────────────────────
+
+
+def test_subcaseB_callsite_absent_from_installed_creates_change() -> None:
+    """Covers the sentry v6-app scenario: startTransaction removed in v8,
+    repo lockfile is v10, code still calls startTransaction."""
+    result = _scan(symbol="sentry.startTransaction", resolved_version="10.75.3")
+
+    with patch(
+        "depfix.sources.repo_exports.repo_version_exports_diff",
+        return_value=("11.6.0", set()),  # empty removed set — sub-case A finds nothing
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"captureException", "addBreadcrumb"},  # no startTransaction
+    ):
+        changes = synthetic_changes_for_scan(
+            result,
+            provider_id="sentry",
+            npm_packages=["@sentry/node"],
+            http=MagicMock(),
+            npm=MagicMock(),
+        )
+
+    assert len(changes) == 1
+    ch = changes[0]
+    assert ch.old_api == "sentry.startTransaction"
+    assert ch.kind is ChangeKind.METHOD_REMOVED
+    assert ch.old_version == "0.0.0"
+    assert ch.new_version == "10.75.3"
+    assert ch.confidence == pytest.approx(0.9)
+    assert ch.source is ClassificationSource.SPEC_DIFF
+
+
+def test_subcaseB_export_present_in_installed_no_change() -> None:
+    """When the installed version exports the called symbol, sub-case B must not fire."""
+    result = _scan(symbol="sentry.captureException", resolved_version="10.75.3")
+
+    with patch(
+        "depfix.sources.repo_exports.repo_version_exports_diff",
+        return_value=("11.6.0", set()),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"captureException", "addBreadcrumb"},
+    ):
+        changes = synthetic_changes_for_scan(
+            result,
+            provider_id="sentry",
+            npm_packages=["@sentry/node"],
+            http=MagicMock(),
+            npm=MagicMock(),
+        )
+
+    assert changes == []
+
+
+def test_subcaseB_no_duplicate_when_subcaseA_already_created_change() -> None:
+    """Sub-case A and B should not both fire for the same old_api."""
+    result = _scan(symbol="sentry.startTransaction", resolved_version="10.75.3")
+
+    # Sub-case A: startTransaction IS in removed_exports (would fire sub-case A)
+    # Sub-case B: startTransaction absent from installed (would fire sub-case B)
+    # Only one change must be produced.
+    with patch(
+        "depfix.sources.repo_exports.repo_version_exports_diff",
+        return_value=("11.6.0", {"startTransaction"}),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value=set(),  # startTransaction absent from installed too
+    ):
+        changes = synthetic_changes_for_scan(
+            result,
+            provider_id="sentry",
+            npm_packages=["@sentry/node"],
+            http=MagicMock(),
+            npm=MagicMock(),
+        )
+
+    assert len(changes) == 1
+    # Sub-case A fires first, so old_version should be installed version not 0.0.0
+    assert changes[0].old_version == "10.75.3"
+
+
+def test_subcaseB_installed_exports_fetch_fails_skips_gracefully() -> None:
+    """When _exports_for_version returns None for installed version, sub-case B is skipped."""
+    result = _scan(symbol="sentry.startTransaction", resolved_version="10.75.3")
+
+    with patch(
+        "depfix.sources.repo_exports.repo_version_exports_diff",
+        return_value=("11.6.0", set()),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value=None,  # fetch failed
     ):
         changes = synthetic_changes_for_scan(
             result,

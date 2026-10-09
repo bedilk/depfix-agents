@@ -1224,3 +1224,142 @@ providers:
     package: '@bugsnag/js'
   - kind: ts_exports_diff
     package: '@bugsnag/node'
+- id: launchdarkly
+  name: LaunchDarkly
+  api_version_scheme: semver
+  sdk_packages:
+  - name: '@launchdarkly/node-server-sdk'
+    ecosystem: npm
+  - name: launchdarkly-node-server-sdk
+    ecosystem: npm
+  - name: launchdarkly-js-client-sdk
+    ecosystem: npm
+  - name: '@launchdarkly/js-client-sdk'
+    ecosystem: npm
+  - name: launchdarkly-react-client-sdk
+    ecosystem: npm
+  - name: launchdarkly-server-sdk
+    ecosystem: pypi
+  - name: launchdarkly-server-sdk
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: '@launchdarkly/node-server-sdk'
+    dist_tag: latest
+    github_repo: launchdarkly/js-core
+  - kind: npm_dist_tag
+    package: launchdarkly-node-server-sdk
+    dist_tag: latest
+    github_repo: launchdarkly/node-server-sdk
+  - kind: pypi_dist_tag
+    package: launchdarkly-server-sdk
+    github_repo: launchdarkly/python-server-sdk
+  - kind: github_release
+    repo: launchdarkly/js-core
+  - kind: github_release
+    repo: launchdarkly/python-server-sdk
+  - kind: rubygems_dist_tag
+    gem: launchdarkly-server-sdk
+  - kind: ts_exports_diff
+    package: '@launchdarkly/node-server-sdk'
+- id: hubspot
+  name: HubSpot API Client
+  api_version_scheme: semver
+  sdk_packages:
+  - name: '@hubspot/api-client'
+    ecosystem: npm
+  - name: hubspot-api-client
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: '@hubspot/api-client'
+    dist_tag: latest
+    github_repo: HubSpot/hubspot-api-nodejs
+  - kind: pypi_dist_tag
+    package: hubspot-api-client
+    github_repo: HubSpot/hubspot-api-python
+  - kind: github_release
+    repo: HubSpot/hubspot-api-nodejs
+  - kind: security_advisory
+    package: '@hubspot/api-client'
+    ecosystem: npm
+  - kind: security_advisory
+    package: hubspot-api-client
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: '@hubspot/api-client'
+- id: mixpanel
+  name: Mixpanel Analytics SDK
+  api_version_scheme: semver
+  sdk_packages:
+  - name: mixpanel
+    ecosystem: npm
+  - name: mixpanel-browser
+    ecosystem: npm
+  - name: mixpanel
+    ecosystem: pypi
+  - name: mixpanel-ruby
+    ecosystem: rubygems
+  feeds:
+  - kind: npm_dist_tag
+    package: mixpanel
+    dist_tag: latest
+    github_repo: mixpanel/mixpanel-node
+  - kind: npm_dist_tag
+    package: mixpanel-browser
+    dist_tag: latest
+    github_repo: mixpanel/mixpanel-js
+  - kind: pypi_dist_tag
+    package: mixpanel
+    github_repo: mixpanel/mixpanel-python
+  - kind: rubygems_dist_tag
+    gem: mixpanel-ruby
+    github_repo: mixpanel/mixpanel-ruby
+  - kind: github_release
+    repo: mixpanel/mixpanel-node
+  - kind: github_release
+    repo: mixpanel/mixpanel-js
+  - kind: security_advisory
+    package: mixpanel
+    ecosystem: npm
+  - kind: security_advisory
+    package: mixpanel-browser
+    ecosystem: npm
+  - kind: security_advisory
+    package: mixpanel
+    ecosystem: pypi
+  - kind: ts_exports_diff
+    package: mixpanel-browser
+- id: amplitude
+  name: Amplitude
+  api_version_scheme: semver
+  sdk_packages:
+  - name: '@amplitude/analytics-browser'
+    ecosystem: npm
+  - name: '@amplitude/analytics-node'
+    ecosystem: npm
+  - name: amplitude-js
+    ecosystem: npm
+  - name: amplitude-analytics
+    ecosystem: pypi
+  feeds:
+  - kind: npm_dist_tag
+    package: '@amplitude/analytics-browser'
+    dist_tag: latest
+    github_repo: amplitude/Amplitude-TypeScript
+  - kind: npm_dist_tag
+    package: '@amplitude/analytics-node'
+    dist_tag: latest
+    github_repo: amplitude/Amplitude-TypeScript
+  - kind: pypi_dist_tag
+    package: amplitude-analytics
+    github_repo: amplitude/Amplitude-Python
+  - kind: github_release
+    repo: amplitude/Amplitude-TypeScript
+  - kind: security_advisory
+    package: '@amplitude/analytics-browser'
+    ecosystem: npm
+  - kind: ts_exports_diff
+    package: '@amplitude/analytics-browser'
+  - kind: ts_exports_diff
+    package: '@amplitude/analytics-node'
