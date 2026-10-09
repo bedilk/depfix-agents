@@ -420,6 +420,21 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   AWS SDK v2→v3 (package rename, command pattern), Supabase v1→v2 (auth method renames).
   Evidence: 17 files in src/depfix/providers/skills/, commit 96f972e.
 
+## Round 28 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned. T-15 remains done/accepted.
+- Smoke test is running every 4 hours but producing 0/N successful scans (GitHub App blocker).
+
+## Proactive Work Round 28
+- **Smoke test fix via --path mode** (2026-10-09):
+  Root cause: smoke-real-repos.sh calls test_pipeline.sh → depfix scan --repo → GitHub App
+  required even for public repos → 100% failure rate.
+  Key discovery: `depfix scan --path <dir>` (cli.py:2546, implemented at 1702-1705) bypasses
+  the GitHub App entirely — just needs a local directory. Fix: `git clone --depth=1` the public
+  repo, then `depfix scan --path <tmpdir>`. NO source code changes needed.
+  Also documented: add 5 bedilk/ forks with known call-site baselines to real-repos.txt.
+  Evidence: research/smoke-test-path-fix.md, commit bdd5de7.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Provider skill coverage: 40/40 providers now have skill files.
@@ -430,4 +445,5 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
   T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25),
-  Twilio skill (round 26), 17 missing provider skill files (round 27).
+  Twilio skill (round 26), 17 missing provider skill files (round 27),
+  smoke test --path fix (round 28).
