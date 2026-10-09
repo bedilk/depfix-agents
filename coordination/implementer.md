@@ -1,7 +1,7 @@
 # Implementer State
 
 ## Current Task
-T-15 submitted for review (commit 20d5564).
+T-15 resubmitted for review (commit 7896cff) — sub-case B fix applied.
 
 ## Completed Work
 - T-3: Added provider_redis.md skill file covering ioredis, node-redis v3/v4 (with breaking-change notes), redis-py, redis gem.
@@ -43,32 +43,33 @@ T-15 submitted for review (commit 20d5564).
   - Committed in 113987b.
   - Submitted for review.
 
-## Round 54 Status (T-15)
-Implemented T-15: repo-version-aware ts_exports diff (commit 20d5564).
+## Round 55 Status (T-15 — sub-case B fix)
+Researcher identified a BLOCKER: sub-case A (installed - latest) misses the case where an
+API was removed BEFORE the installed version. E.g. sentry.startTransaction removed in v8,
+but lockfile has v10. Both v10 and v11 lack startTransaction, so installed - latest = {},
+no synthetic change created, 0 PRs.
 
-### What was already done (by principal, commit 5f33afa):
-- Created src/depfix/sources/repo_exports.py with:
-  - `_tarball_url`, `_exports_for_version` helpers (reuse ts_exports._names_in_dts)
-  - `_installed_version_for(result, package)` — extracts resolved version from scan deps
-  - `_call_site_uses_export(symbol, provider_id, export_name)` — matching helper
-  - `repo_version_exports_diff(package, installed, http, npm)` → `(latest, removed_set) | None`
-  - `synthetic_changes_for_scan(result, *, provider_id, npm_packages, http, npm)` → `list[BreakingChange]`
-- Created tests/unit/test_repo_aware_exports.py with 16 unit tests
-
-### What I added (commit 20d5564):
-- Added `Orchestrator._augment_with_repo_exports(changes, repo_full_name, commit_sha)` to runner.py
-  - Called in `_run_repo_body` after `_prescan_providers`, before `_match_filter_and_cap`
-  - Uses scan_cache to get scan results per provider
-  - Only runs for providers with npm packages
-  - Adds synthetic METHOD_REMOVED BreakingChange records that have call-site evidence
-  - All failures handled gracefully (network errors → log + skip)
-- Fixed 1 lint error in test file (extra blank line → import sort violation)
+### What I added (commit 7896cff):
+- Added `_export_name_from_symbol(symbol, provider_id) -> str | None` helper
+  - Inverse of `_call_site_uses_export`: extracts top-level export name from a
+    provider-namespaced symbol (e.g. "sentry.hub.captureMessage" → "hub")
+- Modified `synthetic_changes_for_scan` in `src/depfix/sources/repo_exports.py`:
+  - Removed `if not removed_exports: continue` early exit (blocked sub-case B)
+  - After sub-case A loop, added sub-case B:
+    - Calls `_exports_for_version(package, installed, ...)` directly
+    - For each actionable call site whose export is absent from installed_exports,
+      creates BreakingChange(old_version="0.0.0", new_version=installed, confidence=0.9)
+    - `seen_old_apis` shared between A and B prevents duplicates
+- Added 8 unit tests in `tests/unit/test_repo_aware_exports.py`:
+  - 4 tests for `_export_name_from_symbol`
+  - 4 tests for sub-case B: creates change, doesn't fire if export present,
+    no duplicate when A fires, graceful when fetch fails
 
 ### Gates
-- make test: 909 passed (16 new tests), 0 failed
+- make test: 917 passed, 0 failed
 - make lint: clean
 - make typecheck: 0 errors
-- Pushed: 20d5564 to agents/main
+- Pushed: 7896cff to agents/main
 
 ## Notes
 - typecheck now FIXED: python_version updated to 3.12, manager.py None guard added.
