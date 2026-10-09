@@ -1,13 +1,15 @@
 # Real third-party repos for smoke testing depfix scan.
 # Format: provider:owner/repo
-# These are popular open-source projects that use SDKs from providers.yaml.
+# These are popular open-source projects that USE SDKs from providers.yaml
+# as a CUSTOMER/DEPENDENCY — NOT the SDK source code itself.
 # The smoke test picks 5-6 at random each cycle.
 #
 # RULES:
-# - Only public repos (depfix scan clones them)
-# - Must actually import/use the provider's SDK (not just mention it)
+# - Only public repos (depfix scan clones them via git clone --depth=1)
+# - Must IMPORT/USE the provider's SDK as a dependency (not be the SDK itself)
 # - Mix of JS/TS, Python, Ruby ecosystems
 # - Prefer repos with 1k+ stars (real usage, not toy projects)
+# - DO NOT add SDK source repos (e.g. discordjs/discord.js is the SDK, not a customer)
 
 # --- openai ---
 openai:mckaywrigley/chatbot-ui
@@ -25,13 +27,14 @@ anthropic:pydantic/pydantic-ai
 anthropic:anthropics/anthropic-quickstarts
 
 # --- sentry ---
-sentry:getsentry/sentry-javascript
+# Note: getsentry/sentry-javascript is the SDK itself — NOT included
 sentry:calcom/cal.com
 sentry:twentyhq/twenty
 
 # --- supabase ---
-supabase:supabase/supabase
+# Note: supabase/supabase is the monorepo — NOT included (would scan SDK internals)
 supabase:calcom/cal.com
+supabase:supabase-community/supabase-kt
 
 # --- prisma ---
 prisma:calcom/cal.com
@@ -48,48 +51,60 @@ redis:bull-board/bull-board
 redis:OptimalBits/bull
 
 # --- slack ---
-slack:slackapi/bolt-js
-slack:slackapi/bolt-python
+# Note: slackapi/bolt-js and bolt-python ARE the SDK — replaced with customer apps
+slack:calcom/cal.com
+slack:n8n-io/n8n
 
 # --- discord ---
-discord:discordjs/discord.js
-discord:Rapptz/discord.py
+# Note: discordjs/discord.js and Rapptz/discord.py ARE the SDK — replaced with bots
+discord:Rapptz/RoboDanny
+discord:nicehash/NiceHashQuickMiner
 
 # --- firebase ---
+# Note: firebase/firebase-js-sdk IS the SDK — replaced with customer app
 firebase:invertase/react-native-firebase
-firebase:firebase/firebase-js-sdk
+firebase:expo/expo
 
 # --- twilio ---
-twilio:twilio/twilio-node
-twilio:twilio/twilio-python
+# Note: twilio/twilio-node and twilio-python ARE the SDK — replaced with customer apps
+twilio:calcom/cal.com
+twilio:frappe/frappe
 
 # --- octokit ---
+# Note: octokit/octokit.js IS the SDK — probot is a bot framework that uses it
 octokit:probot/probot
-octokit:octokit/octokit.js
+octokit:github/codeql-action
 
 # --- aws-s3 ---
 aws-s3:localstack/localstack
 aws-s3:minio/minio-py
 
 # --- langchain ---
-langchain:langchain-ai/langchain
-langchain:langchain-ai/langchainjs
+# Note: langchain-ai/langchain and langchainjs ARE the SDK — replaced with customer apps
+langchain:geekan/MetaGPT
+langchain:imartinez/privateGPT
 
 # --- posthog ---
-posthog:PostHog/posthog
-posthog:PostHog/posthog-js
+# Note: PostHog/posthog and posthog-js ARE the SDK — replaced with customer apps
+posthog:calcom/cal.com
+posthog:twentyhq/twenty
 
 # --- elasticsearch ---
-elasticsearch:elastic/elasticsearch-js
-elasticsearch:elastic/elasticsearch-py
+# Note: elastic/elasticsearch-js and elasticsearch-py ARE the SDK — replaced with customer apps
+elasticsearch:medusajs/medusa
+elasticsearch:zulip/zulip
 
 # --- sendgrid ---
-sendgrid:sendgrid/sendgrid-nodejs
-sendgrid:sendgrid/sendgrid-python
+# Note: sendgrid/sendgrid-nodejs and sendgrid-python ARE the SDK — replaced with customer apps
+sendgrid:calcom/cal.com
+sendgrid:gristlabs/grist-core
 
 # --- clerk ---
-clerk:clerk/javascript
+# Note: clerk/javascript IS the SDK — replaced with customer apps
+clerk:steven-tey/dub
+clerk:calcom/cal.com
 
 # --- vercel-ai ---
-vercel-ai:vercel/ai
+# Note: vercel/ai IS the SDK — replaced with customer apps
 vercel-ai:steven-tey/chathn
+vercel-ai:mckaywrigley/chatbot-ui
