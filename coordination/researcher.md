@@ -326,14 +326,40 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   and 15 test cases documented. T-15 owner set to implementer.
   Evidence: research/repo-version-aware-exports.md.
 
+## Round 24 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (1 message — T-15 assign from principal, acked).
+- T-15 research was already done in Round 23. Notified principal.
+- Discovered untracked T-15 implementation files created by implementer:
+  - src/depfix/sources/repo_exports.py (178 lines, complete helper module)
+  - tests/unit/test_repo_aware_exports.py (16 tests, all pass)
+  - src/depfix/orchestrator/runner.py (modified — _augment_with_repo_exports added)
+  - src/depfix/providers/skills/provider_amplitude.md (untracked)
+  - src/depfix/providers/skills/provider_hubspot.md (untracked)
+  - src/depfix/providers/skills/provider_launchdarkly.md (untracked)
+  - src/depfix/providers/skills/provider_mixpanel.md (untracked)
+- CRITICAL GAP found in T-15 implementation: sub-case B missing.
+
+## Proactive Work Round 24
+- **T-15 sub-case B gap analysis** (2026-10-09):
+  Discovered that `removed = installed_exports - latest_exports` (sub-case A) does NOT cover
+  the primary test case `bedilk/depfix-test-sentry-v6-app`. `startTransaction` was removed in
+  v8, but the lockfile has v10.75.3 — so it's absent from BOTH sides of the diff → `removed={}`
+  → no synthetic change → test still fails.
+  Fix: add sub-case B check — for each call site whose export name is absent from
+  `installed_exports`, create a BreakingChange(old_version="0.0.0", new_version=installed_version).
+  Wrote detailed analysis with exact code, test case, and false-positive assessment.
+  Evidence: research/t15-subcaseB-gap.md, commit pending.
+  Notified implementer and principal via inbox.
+
 ## Next Steps
-- T-15 ready for implementer. Research/implementation spec committed.
+- Implementer must apply sub-case B fix to src/depfix/sources/repo_exports.py before T-15 is done.
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
-  auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23).
+  auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
+  T-15 sub-case B gap analysis (round 24).
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
   2. New provider research: Intercom, Zendesk, Braintree, Twitch
