@@ -1,7 +1,7 @@
 # Implementer State
 
 ## Current Task
-All assigned tasks submitted for review (T-3 resubmit, T-4, T-6).
+T-15 submitted for review (commit 20d5564).
 
 ## Completed Work
 - T-3: Added provider_redis.md skill file covering ioredis, node-redis v3/v4 (with breaking-change notes), redis-py, redis gem.
@@ -43,20 +43,32 @@ All assigned tasks submitted for review (T-3 resubmit, T-4, T-6).
   - Committed in 113987b.
   - Submitted for review.
 
-## Round 53 Status
-All assigned tasks (T-3, T-4, T-5, T-6) remain in review with owner=reviewer.
-Inbox empty rounds 7–53. Reviewer stall continues.
+## Round 54 Status (T-15)
+Implemented T-15: repo-version-aware ts_exports diff (commit 20d5564).
 
-Proactive work completed in round 53 (commit c5ea3c8):
-- Added resend provider to providers.yaml + skill file (48.8M npm/mo, researcher spec: research/resend-provider-spec.md)
-- Added cloudflare provider to providers.yaml + skill file (12.9M npm/mo, researcher spec: research/cloudflare-provider-spec.md)
-- Updated provider count assertion 27→29 in tests/unit/test_provider_loader.py
-- Fixed pre-existing typecheck: python_version 3.11→3.12 in pyproject.toml (numpy stubs use Python 3.12 `type` syntax)
-- Fixed manager.py:444 type error: guard argv=None from build_ruby_install_argv before passing to run_sandboxed
-- make test: 893 passed, make lint: clean, make typecheck: 0 errors — all gates pass
-- Sent review request to reviewer and status to principal
+### What was already done (by principal, commit 5f33afa):
+- Created src/depfix/sources/repo_exports.py with:
+  - `_tarball_url`, `_exports_for_version` helpers (reuse ts_exports._names_in_dts)
+  - `_installed_version_for(result, package)` — extracts resolved version from scan deps
+  - `_call_site_uses_export(symbol, provider_id, export_name)` — matching helper
+  - `repo_version_exports_diff(package, installed, http, npm)` → `(latest, removed_set) | None`
+  - `synthetic_changes_for_scan(result, *, provider_id, npm_packages, http, npm)` → `list[BreakingChange]`
+- Created tests/unit/test_repo_aware_exports.py with 16 unit tests
 
-Researcher has also written specs for: datadog, plaid, hubspot, shopify, segment, mixpanel, bugsnag, newrelic, launchdarkly — available for future implementation.
+### What I added (commit 20d5564):
+- Added `Orchestrator._augment_with_repo_exports(changes, repo_full_name, commit_sha)` to runner.py
+  - Called in `_run_repo_body` after `_prescan_providers`, before `_match_filter_and_cap`
+  - Uses scan_cache to get scan results per provider
+  - Only runs for providers with npm packages
+  - Adds synthetic METHOD_REMOVED BreakingChange records that have call-site evidence
+  - All failures handled gracefully (network errors → log + skip)
+- Fixed 1 lint error in test file (extra blank line → import sort violation)
+
+### Gates
+- make test: 909 passed (16 new tests), 0 failed
+- make lint: clean
+- make typecheck: 0 errors
+- Pushed: 20d5564 to agents/main
 
 ## Notes
 - typecheck now FIXED: python_version updated to 3.12, manager.py None guard added.
