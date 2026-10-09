@@ -1,19 +1,19 @@
 # Principal State
 
 ## Current Round
-Round 8 — 2026-10-09T15:15:00Z
+Round 9 — 2026-10-09T15:30:00Z
 
 ## Actions This Round
-- Acked 1 inbox message (researcher round_done: Pinecone spec written, sub-case B flagged)
-- **T-15 REJECTED by reviewer** (commit 39a88fa) — sub-case B not committed, mypy error, double tarball fetch
-- Sent implementer rejection fix instructions with explicit steps
-- Updated TEAM-REGISTRY: implementer → running T-15, reviewer → idle
-- Reviewer stall RESOLVED — reviewer completed T-15 review this round
+- Acked 2 inbox messages: reviewer T-15 REJECTED (already known), implementer T-15 re-submission (commit 7896cff)
+- Implementer fixed sub-case B and re-submitted: 917 tests pass, sub-case B detection added
+- Routed T-15 back to reviewer for re-review (status=review, owner=reviewer)
+- Sent reviewer review_request with commit 7896cff details
+- Updated TEAM-REGISTRY: implementer → idle, reviewer → running T-15
 
 ## Evidence Check
-- New commits since last round: 39a88fa (reviewer T-15 REJECTED), 8b6bc7b (researcher Pinecone spec)
-- Reviewer is now active — stall resolved after priority ping
-- Implementer needs to commit sub-case B code, fix mypy, re-submit
+- New commits since round 8: 7896cff (implementer sub-case B fix), cf728a6 (tester state), ead3c6d (implementer state), 1423e89 (researcher proactive specs)
+- Implementer committed real code change (sub-case B detection) — not just state updates
+- 917 tests pass per implementer and tester state updates
 
 ## Tasks Completed (cumulative)
 - T-1 (tester): DONE — 893 tests pass, lint clean, eval 91%
@@ -32,23 +32,24 @@ Round 8 — 2026-10-09T15:15:00Z
 - T-15 research phase (researcher): DONE — spec at research/repo-version-aware-exports.md
 
 ## Running Tasks
-- T-15 (implementer): REJECTED → back to implementer for sub-case B fix. Fix instructions sent.
+- T-15 (reviewer): re-reviewing implementer's sub-case B fix (commit 7896cff)
 
 ## Blocked Tasks
 - T-11 (tester): BLOCKED — GitHub App not installed on 6/7 repos. Human action needed.
 
 ## Idle Agents
 - Researcher: idle (all research tasks done, proactive specs written)
+- Implementer: idle (T-15 re-submitted, awaiting reviewer verdict)
 - Tester: idle (smoke passed, awaiting new assignment)
-- Reviewer: idle (T-15 review complete)
 
-## Score: 13/15 tasks done, 1 rejected (implementer fixing), 1 blocked (human action)
+## Score: 13/15 tasks done, 1 in review (T-15), 1 blocked (T-11 human action)
 
 ## Smoke Test
 PASSED — 6/6 repos at 2026-10-09T14:31:02. No regressions. Next smoke due ~18:31.
 
-## Next Actions (Round 9)
-- Check for implementer T-15 re-submission (should commit sub-case B + mypy fix)
-- If implementer submits: route back to reviewer
+## Next Actions (Round 10)
+- Check for reviewer T-15 verdict
+- If ACCEPTED: T-15 → done, score becomes 14/15
+- If REJECTED: relay issues to implementer for another fix cycle
 - T-11 remains blocked on human action (GitHub App installation)
-- Consider triggering smoke test if >4hrs since last run
+- Smoke test not due yet (next ~18:31)
