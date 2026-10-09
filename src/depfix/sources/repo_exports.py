@@ -194,13 +194,13 @@ def synthetic_changes_for_scan(
         # repo lockfile is v10, latest is v11).
         installed_exports = _exports_for_version(package, installed, http, npm.base_url)
         for site in result.actionable_sites:
-            export_name = _export_name_from_symbol(site.symbol, provider_id)
-            if export_name is None:
+            b_name: str | None = _export_name_from_symbol(site.symbol, provider_id)
+            if b_name is None:
                 continue
-            old_api = f"{provider_id}.{export_name}"
+            old_api = f"{provider_id}.{b_name}"
             if old_api in seen_old_apis:
                 continue
-            if installed_exports is not None and export_name not in installed_exports:
+            if installed_exports is not None and b_name not in installed_exports:
                 changes.append(
                     BreakingChange(
                         package=package,
@@ -209,7 +209,7 @@ def synthetic_changes_for_scan(
                         old_api=old_api,
                         new_api="",
                         description=(
-                            f"{export_name} is not exported by {package}@{installed}; "
+                            f"{b_name} is not exported by {package}@{installed}; "
                             f"it was removed in an earlier major version"
                         ),
                         migration_guide="",

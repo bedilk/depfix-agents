@@ -140,6 +140,9 @@ def test_no_matching_callsites_returns_empty() -> None:
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=("11.6.0", {"startTransaction", "configureScope"}),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"captureException", "startTransaction", "configureScope"},  # installed has all three
     ):
         changes = synthetic_changes_for_scan(
             result,
@@ -158,6 +161,9 @@ def test_matching_callsite_creates_synthetic_change() -> None:
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=("11.6.0", {"startTransaction", "configureScope"}),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"startTransaction", "configureScope"},
     ):
         changes = synthetic_changes_for_scan(
             result,
@@ -194,6 +200,9 @@ def test_multiple_callsites_for_same_export_produces_one_change() -> None:
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=("11.6.0", {"startTransaction"}),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"startTransaction"},
     ):
         changes = synthetic_changes_for_scan(
             result,
@@ -220,6 +229,9 @@ def test_multiple_removed_exports_each_matched_produces_multiple_changes() -> No
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=("11.6.0", {"startTransaction", "configureScope"}),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"startTransaction", "configureScope"},
     ):
         changes = synthetic_changes_for_scan(
             result,
@@ -244,6 +256,9 @@ def test_synthetic_change_is_actionable_via_assess_scan_change() -> None:
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=("11.6.0", {"startTransaction"}),
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"startTransaction"},
     ):
         changes = synthetic_changes_for_scan(
             result,
@@ -265,6 +280,9 @@ def test_empty_removed_exports_returns_empty_changes() -> None:
     with patch(
         "depfix.sources.repo_exports.repo_version_exports_diff",
         return_value=("11.6.0", set()),  # no removals
+    ), patch(
+        "depfix.sources.repo_exports._exports_for_version",
+        return_value={"startTransaction"},  # startTransaction present in installed
     ):
         changes = synthetic_changes_for_scan(
             result,
@@ -374,7 +392,7 @@ def test_subcaseB_no_duplicate_when_subcaseA_already_created_change() -> None:
     """Sub-case A and B should not both fire for the same old_api."""
     result = _scan(symbol="sentry.startTransaction", resolved_version="10.75.3")
 
-    # Sub-case A: startTransaction IS in removed_exports (would fire sub-case A)
+    # Sub-case A: startTransaction IS in removed_exports (fires sub-case A)
     # Sub-case B: startTransaction absent from installed (would fire sub-case B)
     # Only one change must be produced.
     with patch(
