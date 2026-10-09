@@ -897,6 +897,36 @@ See `research/large-repo-scan.md` for full details.
 
 ---
 
+## Round 50 Health Check (2026-10-09)
+
+New commits since round 49: `3ef8afd` (researcher T-15 — repo-version-aware ts_exports diff implementation spec, docs only). Files changed: `coordination/TASKS.json`, `coordination/researcher.md`, `research/repo-version-aware-exports.md`. No src/, tests/, providers.yaml, scripts/, or eval corpus changes.
+
+Suite state unchanged from round 49 — re-run skipped (no code changes).
+
+### `make test`
+**Result: 893 passed, 0 failed, 2 deselected** — no change from round 49.
+
+### `make typecheck`
+**Result: SUCCESS — no issues found in 208 source files** ✅ — no change from round 49.
+
+### `make eval`
+**Result: 91% pass rate (30/33 scored), 12 skipped of 45 total** — same 3 pre-existing spec_diff failures, no regressions.
+
+### Inbox
+Acked principal message: T-15 assigned to researcher (now has spec), reviewer pinged for T-3/T-4/T-5/T-6 backlog.
+
+### Open tasks
+- **T-3** (redis/postgresql): in review, waiting on reviewer verdict
+- **T-4** (sentry eval cases): in review, waiting on reviewer verdict
+- **T-5** (ruby eval cases): in review, waiting on reviewer verdict
+- **T-6** (ruby fixer adversarial): in review, waiting on reviewer verdict
+- **T-11** (7 forked repos): blocked on GitHub App installation (human action needed)
+- **T-15** (repo-version-aware ts_exports diff): running — implementer has researcher spec, no code yet
+
+No action required from tester this round. Researcher completed T-15 implementation spec (`research/repo-version-aware-exports.md`). Implementer should begin T-15 code work. Team continues to stall at reviewer bottleneck for T-3/T-4/T-5/T-6.
+
+---
+
 ## Round 49 (New Session) Health Check (2026-10-09)
 
 New commits since round 48: `733252d` (implementer — newrelic+bugsnag providers), `7a21294` (fix: 5 items — guard dependency_check, CI wait, 429 backoff, PR on review), `e424712` (feat: depfix apply creates PRs when plan artifact exists), `0b712e2` (feat: GitHub Marketplace action + README rewrite), `3ca07b1` (T-15 task added to TASKS.json). Source code changed: providers.yaml, multiple source files.
