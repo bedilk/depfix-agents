@@ -897,6 +897,33 @@ See `research/large-repo-scan.md` for full details.
 
 ---
 
+## Round 51 Health Check (2026-10-09)
+
+New commit since round 50: `7c5fcab` (principal round-4 — assign T-15 to implementer, escalate stalled reviewer, coordination only). No src/, tests/, providers.yaml, scripts/, or eval corpus changes.
+
+Suite state unchanged from round 50 — re-run skipped (no code changes).
+
+### `make test`
+**Result: 893 passed, 0 failed, 2 deselected** — no change from round 50.
+
+### `make typecheck`
+**Result: SUCCESS — no issues found in 208 source files** ✅ — no change from round 50.
+
+### `make eval`
+**Result: 91% pass rate (30/33 scored), 12 skipped of 45 total** — same 3 pre-existing spec_diff failures, no regressions.
+
+### Inbox
+No messages.
+
+### Open tasks
+- **T-15** (repo-version-aware ts_exports diff): running — implementer assigned, no code committed yet
+- **T-3, T-4, T-5, T-6**: all done (reviewer accepted all in round 2)
+- **T-11** (7 forked repos): blocked on GitHub App installation (human action needed)
+
+No action required from tester this round. Waiting on implementer to commit T-15 code.
+
+---
+
 ## Round 50 Health Check (2026-10-09)
 
 New commits since round 49: `3ef8afd` (researcher T-15 — repo-version-aware ts_exports diff implementation spec, docs only). Files changed: `coordination/TASKS.json`, `coordination/researcher.md`, `research/repo-version-aware-exports.md`. No src/, tests/, providers.yaml, scripts/, or eval corpus changes.
