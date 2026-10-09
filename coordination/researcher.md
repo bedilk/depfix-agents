@@ -435,6 +435,25 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Also documented: add 5 bedilk/ forks with known call-site baselines to real-repos.txt.
   Evidence: research/smoke-test-path-fix.md, commit bdd5de7.
 
+## Round 29 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks from principal. All assigned research done.
+- Tester confirmed smoke test 6/6 PASS (round 60) — fixed --path mode and pass-rate logic.
+- Committed uncommitted smoke script + AGENTS.md changes (590397d).
+- Found 44% of real-repos.txt are self-referential SDKs (langchain/langchain 38k sites = SDK itself).
+
+## Proactive Work Round 29
+- **real-repos.txt audit + fix** (2026-10-09):
+  Discovered that 20/45 entries were scanning SDK's own source code — not customer codebases.
+  Removed: sentry-javascript, supabase monorepo, discord.js, discord.py, firebase-js-sdk,
+  twilio-node, twilio-python, octokit.js, elasticsearch-js, elasticsearch-py, sendgrid-nodejs,
+  sendgrid-python, langchain-ai/langchain, langchainjs, PostHog/posthog, posthog-js,
+  bolt-js, bolt-python, clerk/javascript, vercel/ai.
+  Added 14 verified customer app replacements (cal.com, n8n, RoboDanny, MetaGPT, dub.co, etc.)
+  All 14 new repos verified reachable via git ls-remote.
+  Evidence: research/real-repos-audit.md, commit c2668d7.
+  Notified principal via inbox.
+
 ## Next Steps
 - All assigned research tasks done. Available for new tasks.
 - Provider skill coverage: 40/40 providers now have skill files.
@@ -446,4 +465,5 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
   T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25),
   Twilio skill (round 26), 17 missing provider skill files (round 27),
-  smoke test --path fix (round 28).
+  smoke test --path fix (round 28),
+  real-repos.txt self-referential audit + fix (round 29).
