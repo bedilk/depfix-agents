@@ -44,11 +44,13 @@ No active task. All assigned tasks are done.
   - make test: 917 passed, 0 failed. make typecheck: 0 errors. make lint: clean.
   - Committed in 7896cff. ACCEPTED by reviewer (T-15_receipt.json).
 
-## Round 18 Status
-All assigned tasks complete. No new tasks assigned in rounds 4-18. Inbox empty each round. Awaiting new task assignments from principal.
+## Round 20 Status
+All assigned tasks complete. No new tasks assigned in rounds 4-20. Inbox empty each round. Principal confirms implementer is idle.
+
+Only running task is T-11 (tester: real-repo scan). Principal at round 4, monitoring T-11 completion.
 
 Researcher has proactive specs ready for: resend, cloudflare, datadog, plaid, hubspot, shopify, segment, mixpanel, bugsnag, newrelic, amplitude, square, pinecone, twilio (in research/).
-All agents idle: reviewer idle (round 4), implementer idle (round 10).
+All agents idle except tester (T-11). Ready for new task assignment when principal dispatches.
 
 ## Notes
 - typecheck: python_version updated to 3.12, manager.py None guard added.
