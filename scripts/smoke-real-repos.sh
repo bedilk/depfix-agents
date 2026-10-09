@@ -29,8 +29,9 @@ fi
 
 # Parse real-repos.txt: skip comments and blank lines (bash 3.2 compat, no mapfile)
 ALL_REPOS=()
-while IFS= read -r _line; do ALL_REPOS+=("$_line"); done \
-  < <(grep -v '^\s*#' "$REPOS_FILE" | grep -v '^\s*$')
+while IFS= read -r line; do
+  ALL_REPOS+=("$line")
+done < <(grep -v '^\s*#' "$REPOS_FILE" | grep -v '^\s*$')
 
 if [[ "$COUNT" == "--all" ]]; then
   SELECTED=("${ALL_REPOS[@]}")
@@ -39,8 +40,9 @@ else
   # Shuffle and pick $COUNT (bash 3.2 compat)
   SELECTED=()
   SHUFFLED=()
-  while IFS= read -r _line; do SHUFFLED+=("$_line"); done \
-    < <(printf '%s\n' "${ALL_REPOS[@]}" | sort -R)
+  while IFS= read -r line; do
+    SHUFFLED+=("$line")
+  done < <(printf '%s\n' "${ALL_REPOS[@]}" | sort -R)
   for i in $(seq 0 $(( COUNT - 1 ))); do
     [[ $i -ge ${#SHUFFLED[@]} ]] && break
     SELECTED+=("${SHUFFLED[$i]}")
@@ -74,16 +76,27 @@ for entry in "${SELECTED[@]}"; do
   start_ts=$(date +%s)
   scan_log=".local/smoke-${provider}-$(echo "$repo" | tr '/' '-').log"
 
-  # Run scan via test_pipeline.sh (handles init, clone, scan)
-  if timeout 10m bash scripts/test_pipeline.sh "$entry" > "$scan_log" 2>&1; then
-    exit_code=0
+  # Clone publicly, scan with --path (no GitHub App required)
+  tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/smoke-XXXXXX")
+  clone_log="$tmpdir/clone.log"
+
+  if timeout 3m git clone --depth=1 --quiet "https://github.com/$repo.git" "$tmpdir/repo" \
+       > "$clone_log" 2>&1; then
+    if timeout 10m depfix scan --path "$tmpdir/repo" --provider "$provider" \
+         > "$scan_log" 2>&1; then
+      exit_code=0
+    else
+      exit_code=$?
+    fi
   else
     exit_code=$?
+    echo "git clone failed: $(cat "$clone_log")" >> "$scan_log"
   fi
+  rm -rf "$tmpdir"
   end_ts=$(date +%s)
   elapsed=$(( end_ts - start_ts ))
 
-  # Extract metrics from log (macOS grep -E compat, no -P/\K)
+  # Extract metrics from log (macOS grep -E compat, no -P)
   files=$(grep -oE 'files scanned: [0-9]+' "$scan_log" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || true)
   sites=$(grep -oE 'call sites: [0-9]+' "$scan_log" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || true)
   actionable=$(grep -oE '[0-9]+ actionable' "$scan_log" 2>/dev/null | grep -oE '^[0-9]+' | tail -1 || true)
