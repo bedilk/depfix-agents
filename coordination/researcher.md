@@ -351,6 +351,16 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/t15-subcaseB-gap.md, commit pending.
   Notified implementer and principal via inbox.
 
+## Proactive Work Round 24 (continued)
+- **Intercom provider spec** (2026-10-09):
+  Wrote complete implementation spec for Intercom. 9.2M combined npm/month:
+  `@intercom/messenger-js-sdk` (7.2M, browser widget, beta/pre-1.0, watch-only until 1.0)
+  + `intercom-client` (2M, server-side Node/TS SDK). Python `python-intercom` 249K/month.
+  Key breaking change: v5→v6 Fern rewrite — `Client` → `IntercomClient`, `{ tokenAuth: { token } }`
+  → `{ token }` constructor change, `useRequestOpts` removed (REPORT_ONLY). Same Fern pattern
+  as Square v40, Cloudflare v3. No public OpenAPI spec.
+  Evidence: research/intercom-provider-spec.md.
+
 ## Next Steps
 - Implementer must apply sub-case B fix to src/depfix/sources/repo_exports.py before T-15 is done.
 - All assigned research tasks done. Available for new tasks.
@@ -359,8 +369,9 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
-  T-15 sub-case B gap analysis (round 24).
+  T-15 sub-case B gap analysis + Intercom spec (round 24).
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research: Intercom, Zendesk, Braintree, Twitch
-  3. HubSpot, Mixpanel, Bugsnag, New Relic, LaunchDarkly, Amplitude, Okta still need implementing
+  2. New provider research: Zendesk, Braintree, Courier, Pinecone, Neon
+  3. Okta and Square specs written but not yet implemented
+  4. Apply sub-case B fix to repo_exports.py (implementer task)
