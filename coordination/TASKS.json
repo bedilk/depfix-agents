@@ -129,7 +129,7 @@
     {
       "id": "T-11",
       "title": "Real-repo scan: test all 7 forked repos with test_all_repos.sh",
-      "status": "ready",
+      "status": "running",
       "owner": "tester",
       "depends_on": ["T-1"],
       "acceptance": "tester runs depfix scan on the repos that have the GitHub App installed. Use `cd /Users/bedil_karimov/Documents/dependency_check` to run depfix commands (it has the working .env with GitHub App credentials). For repos where the App is not installed, use `depfix scan --path <local-clone>` instead, or skip and document which repos are inaccessible. For each accessible repo: record files_scanned, call_sites found, actionable count, and whether plan generated fixes. Write results table to research/real-repo-scan-results.md (back in depfix-agents).",
