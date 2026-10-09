@@ -311,13 +311,29 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/square-provider-spec.md, commit 1cd926b.
   No public OpenAPI spec — uses npm_dist_tag + pypi_dist_tag + github_release feeds.
 
+## Round 23 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- T-15 was ready/unassigned. Claimed it, read all 4 root-cause files + orchestrator + models.
+- Wrote complete research spec: research/repo-version-aware-exports.md
+
+## Proactive Work Round 23
+- **T-15 implementation spec** (2026-10-09):
+  Traced root cause to 4 exact files/lines. Key finding: `TsExportsSource._exports_for(version)`
+  at ts_exports.py:185 already fetches exports for ANY npm version — the escape hatch exists.
+  Integration point: inject synthetic changes in `Orchestrator._run_repo_body` after
+  `_prescan_providers` and before `_match_filter_and_cap`. Full code for
+  `src/depfix/scanners/version_exports.py`, runner.py modifications, config key,
+  and 15 test cases documented. T-15 owner set to implementer.
+  Evidence: research/repo-version-aware-exports.md.
+
 ## Next Steps
+- T-15 ready for implementer. Research/implementation spec committed.
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
-  auth0 spec (round 20), okta spec (round 21), square spec (round 22).
+  auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23).
 - Remaining work if principal assigns more:
   1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
   2. New provider research: Intercom, Zendesk, Braintree, Twitch
