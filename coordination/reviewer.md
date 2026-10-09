@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Round 4 complete. No tasks pending review — all 14 completable tasks done (T-11 blocked on GitHub App install).
+Round 5 complete. No tasks pending review — all 14 completable tasks done (T-11 blocked on GitHub App install). Inbox empty, no new review requests.
 
 ## Reviews Completed
 
@@ -40,7 +40,7 @@ Round 4 complete. No tasks pending review — all 14 completable tasks done (T-1
 - Receipt: coordination/review/T-15_receipt.json
 
 ## Pending
-- No tasks pending review. Round 4 checked: all tasks done or blocked. Inbox clear (2 stale T-15 messages acked).
+- No tasks pending review. Round 5 checked: all tasks done or blocked. Inbox empty, no new review requests since round 4.
 
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
