@@ -22,7 +22,6 @@ from depfix.sources.repo_exports import (
     synthetic_changes_for_scan,
 )
 
-
 # ─── helpers ──────────────────────────────────────────────────────────────────
 
 

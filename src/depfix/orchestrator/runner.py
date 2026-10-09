@@ -390,6 +390,11 @@ class Orchestrator:
                     repo_config=repo_config,
                 )
 
+        # Augment with repo-version-aware synthetic changes from TypeScript
+        # export diffs. These cover removals that span more than one major
+        # version and are therefore invisible to the feed-level ts_exports diff.
+        ordered = self._augment_with_repo_exports(ordered, repo_full_name, current_ref_sha)
+
         # Relevance filter: keep only changes whose old_api matches a call
         # site, then cap to the pipeline limit so the budget still applies.
         # A provider with 477 classified changes can no longer drown the 5
@@ -767,6 +772,98 @@ class Orchestrator:
                 )
             except Exception:
                 logger.exception("pre-scan failed for %s/%s", repo_full_name, provider_id)
+
+    def _augment_with_repo_exports(
+        self,
+        changes: list[BreakingChange],
+        repo_full_name: str,
+        commit_sha: str,
+    ) -> list[BreakingChange]:
+        """Augment ``changes`` with synthetic BreakingChange records from a
+        repo-version-aware TypeScript exports diff.
+
+        For each provider that has npm packages and a scan result with a
+        resolved lockfile version, compare the installed version's exports
+        against the latest version's and emit a METHOD_REMOVED record for
+        every removed export that matches an observed call site. These
+        synthetic records are invisible to the feed-level ts_exports diff
+        (which only covers consecutive or prev-major → current spans) but
+        real to this specific repository.
+        """
+        from depfix.sources.repo_exports import synthetic_changes_for_scan
+
+        seen_provider_ids: set[str] = set()
+        existing_old_apis: set[str] = {c.old_api for c in changes}
+        augmented = list(changes)
+
+        try:
+            import httpx
+
+            from depfix.registry.client import NpmRegistryClient
+
+            with httpx.Client(timeout=self._settings.http_timeout) as http, NpmRegistryClient(
+                base_url=self._settings.npm_registry_url,
+                http_client=http,
+            ) as npm:
+                for change in changes:
+                    provider_id = change.provider_id
+                    if provider_id in seen_provider_ids:
+                        continue
+                    seen_provider_ids.add(provider_id)
+
+                    provider = self._providers.get(provider_id)
+                    if provider is None:
+                        continue
+
+                    npm_packages = [
+                        pkg.name for pkg in provider.sdk_packages if pkg.ecosystem == "npm"
+                    ]
+                    if not npm_packages:
+                        continue
+
+                    cache_key = (repo_full_name, provider_id, commit_sha)
+                    scan_result = self._scan_cache.get(cache_key)
+                    if scan_result is None or not scan_result.actionable_sites:
+                        continue
+
+                    try:
+                        synthetics = synthetic_changes_for_scan(
+                            scan_result,
+                            provider_id=provider_id,
+                            npm_packages=npm_packages,
+                            http=http,
+                            npm=npm,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "repo_exports augmentation failed for %s/%s",
+                            repo_full_name,
+                            provider_id,
+                            exc_info=True,
+                        )
+                        continue
+
+                    added = 0
+                    for s_change in synthetics:
+                        if s_change.old_api not in existing_old_apis:
+                            augmented.append(s_change)
+                            existing_old_apis.add(s_change.old_api)
+                            added += 1
+                    if added:
+                        logger.info(
+                            "repo_exports: %d synthetic change(s) for %s/%s",
+                            added,
+                            repo_full_name,
+                            provider_id,
+                        )
+        except Exception:
+            logger.debug(
+                "repo_exports augmentation skipped for %s: HTTP setup failed",
+                repo_full_name,
+                exc_info=True,
+            )
+
+        return augmented
 
     def _match_filter_and_cap(
         self,
