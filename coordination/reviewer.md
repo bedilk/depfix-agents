@@ -40,7 +40,7 @@ Round 5 complete. No tasks pending review — all 14 completable tasks done (T-1
 - Receipt: coordination/review/T-15_receipt.json
 
 ## Pending
-- No tasks pending review. Round 5 checked: all tasks done or blocked. Inbox empty, no new review requests since round 4.
+- No tasks pending review. Round 6 checked: all tasks done except T-11 (ready, owner: tester). Inbox empty, no new review requests. Last code commit predates round 5.
 
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
