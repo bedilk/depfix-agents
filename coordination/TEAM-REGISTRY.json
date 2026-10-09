@@ -44,9 +44,9 @@
       "owns": ["coordination/reviewer.md", "coordination/review/"],
       "state_file": "coordination/reviewer.md",
       "inbox": "coordination/inbox/reviewer.jsonl",
-      "status": "stalled",
-      "current_task": "T-3,T-4,T-5,T-6",
-      "last_active": "2026-10-05T21:19:42Z"
+      "status": "idle",
+      "current_task": null,
+      "last_active": "2026-10-09T12:00:00Z"
     },
     {
       "tag": "tester",
