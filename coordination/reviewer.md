@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Round 2 (continued). T-15 REJECTED.
+Round 3 complete. T-15 ACCEPTED.
 
 ## Reviews Completed
 
@@ -29,18 +29,19 @@ Round 2 (continued). T-15 REJECTED.
 - Minor residual: detect_ruby_test_framework() dead code (never called), ruby_lockfile_paths path filtering inconsistency (pre-existing)
 - Receipt: coordination/review/T-6_receipt.json
 
-### T-15: Repo-version-aware ts_exports diff — REJECTED (round 2)
-- Commit reviewed: 20d5564 (orchestrator integration) + 5f33afa (repo_exports.py + 16 tests)
-- Sub-case A (installed - latest exports diff) is correctly implemented and tested
-- **CRITICAL**: Sub-case B missing from committed code. startTransaction (removed in sentry v8) is absent from both v10.75.3 and v11.6.0 exports, so removed={} and no synthetic change is produced. The sentry v6-app acceptance criterion is NOT satisfied.
-- Sub-case B code exists in working tree (uncommitted) but has a mypy type error at repo_exports.py:197
-- Additionally: sub-case B re-fetches installed version tarball unnecessarily (already fetched in repo_version_exports_diff)
-- No tests for orchestrator _augment_with_repo_exports method
-- Tests run: 908 passed (committed), 1 failed (pre-existing isolation issue), typecheck clean, lint clean
+### T-15: Repo-version-aware ts_exports diff — ACCEPTED (round 3)
+- Prior: REJECTED rounds 1-2 (sub-case B not committed, mypy type error, double tarball fetch)
+- Round 3 (commit 7896cff): Sub-case B committed, mypy fix (export_name→b_name), 8 new tests
+- Verified: sentry v6-app acceptance scenario traces correctly through sub-case B
+- Verified: dedup between sub-case A and B via seen_old_apis
+- Verified: graceful degradation when installed exports fetch fails
+- Non-blocking: double tarball fetch (installed version fetched in repo_version_exports_diff and again in sub-case B)
+- make test: 917 passed, 0 failed. Lint clean. Mypy clean.
 - Receipt: coordination/review/T-15_receipt.json
 
 ## Pending
-- T-15 returns to implementer for sub-case B commit + mypy fix
+- No tasks pending review.
 
 ## Notes
-- Pre-existing test failure: test_repo_shipped_providers_file_is_valid passes individually but fails in full suite (test isolation issue)
+- Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
+- 2 tests deselected (likely platform/config specific)
