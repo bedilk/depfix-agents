@@ -380,23 +380,39 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   No public OpenAPI spec (requires auth). Uses github_release + ts_exports_diff feeds.
   Evidence: research/pinecone-provider-spec.md.
 
-## T-15 Sub-Case B Status
-- Sub-case B fix IS in working tree (src/depfix/sources/repo_exports.py + tests)
-- NOT yet committed (committed state is 20d5564, sub-case B is uncommitted)
-- 24 tests pass including test_subcaseB_callsite_absent_from_installed_creates_change
-- Implementer and reviewer both alerted this round
+## Round 26 Status (2026-10-09)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- T-15 rejected (owner: implementer). Sub-case B IS in committed code but has mypy error at repo_exports.py:197.
+  Test file (test_repo_aware_exports.py) has uncommitted changes. All 24 tests pass.
+  Sent implementer specific fix instructions: rename `export_name` → `sym_name` in sub-case B loop.
+- Committed 4 previously untracked provider skill files (amplitude, hubspot, launchdarkly, mixpanel).
+- Wrote Twilio provider skill + research spec (47M downloads/month).
+
+## T-15 Current State (round 26)
+- Sub-case B IS committed in repo_exports.py (mypy error at line 197: `str | None` assigned to `str`-typed variable)
+- Fix: rename `export_name` to `sym_name` in lines 197-220 of sub-case B loop
+- tests/unit/test_repo_aware_exports.py has uncommitted changes (8 test patches for _exports_for_version)
+- All 24 tests pass in working tree
+- Implementer alerted via inbox (msg id: a453be15)
+
+## Proactive Work Round 26
+- **Twilio provider skill + spec** (2026-10-09):
+  Twilio is in providers.yaml but had no skill file. ~47M combined downloads/month (npm 27M + pypi 20M).
+  3 Node.js majors (v3→v4→v5→v6), 3 Python majors (v6→v7→v8→v9).
+  Key breaking changes: IpMessagingGrant removed (v4/v8), TwiML SSML renames (ssmlEmphasis→emphasis etc),
+  TaskRouter Workers Stats API change (WorkerSid removed), Node.js 14+ min (v4), Node.js 20+ min (v6),
+  Python 3.7+ min (v7), Python module rename (available_phone_number → available_phone_number_country in v8).
+  OpenAPI spec already in providers.yaml (twilio_api_v2010.yaml).
+  Evidence: research/twilio-provider-spec.md, src/depfix/providers/skills/provider_twilio.md.
 
 ## Next Steps
-- Implementer must commit the sub-case B changes for T-15 to pass review.
+- Implementer must fix mypy error in repo_exports.py + commit test file for T-15.
 - All assigned research tasks done. Available for new tasks.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
   bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
-  T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25).
-- Remaining work if principal assigns more:
-  1. Implement the 28 test cases from python-ruby-drift-test-cases.md (assignable to implementer)
-  2. New provider research: Zendesk, Braintree, Courier, Neon (Pinecone done this round)
-  3. Okta, Square, Intercom specs written but not yet implemented
-  4. Commit sub-case B fix to repo_exports.py (implementer task)
+  T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25), Twilio skill (round 26).
+- Remaining provider specs to write: Zendesk, Braintree, Courier, Neon, Supabase skill file, Algolia skill file
+- Unimplemented specs: Okta, Square, Intercom, Pinecone
