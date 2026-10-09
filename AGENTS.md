@@ -117,10 +117,18 @@ Format: `{"id":"<uuid>","from":"<role>","to":"<role>","ts":"<iso>","body":{...}}
 
 - `git push agents <branch>` — ONLY allowed push command
 - `git push origin ...` — FORBIDDEN. The `origin` push URL is intentionally disabled.
-- Do NOT cd into `/Users/bedil_karimov/Documents/dependency_check` or edit any file there.
+- Do NOT edit files in `/Users/bedil_karimov/Documents/dependency_check` or git push from it.
 - `dependency_check` is read-only reference material; treat it like a third-party library.
 
-Every loop script enforces this with: `git remote set-url --push origin DISABLED_...`
+**Exception — running depfix CLI from dependency_check:**
+Agents MAY `cd /Users/bedil_karimov/Documents/dependency_check` to **run** `depfix` commands
+(scan, plan, repos, eval, etc.) because that directory has the working `.env` with the GitHub
+App credentials and Bedrock LLM config. This is read-only execution — do NOT edit files, do
+NOT commit, do NOT push from that directory. Write all results and reports back to this repo
+(`depfix-agents`). The GitHub App is installed on 51 bedilk repos from `dependency_check`;
+use it instead of fighting missing App installations.
+
+Every loop script enforces the push boundary with: `git remote set-url --push origin DISABLED_...`
 
 ---
 
