@@ -27,7 +27,19 @@ Round 2 — 2026-10-05T23:25:00Z
 ## Smoke Test
 No smoke history found — will trigger after tester finishes T-11.
 
+## Human Directive (2026-10-09)
+**T-15 is top priority.** Human ran the full init→scan→plan→apply pipeline on two test repos
+and confirmed the core gap: scan finds call sites but plan produces 0 PRs because old-API
+removals (multiple major versions back) are never recorded as BreakingChange records.
+Full root cause, file paths, and implementation sketch are in T-15's notes field.
+
+Assign: researcher investigates the scan-time integration point, then implementer builds it.
+Rate limit: you + reviewer = 25 req/min Opus. Space rounds ≥3 min. Let Sonnet agents do
+the heavy work.
+
 ## Next Actions (Round 3)
+- **TOP PRIORITY: Assign T-15** — researcher first (investigate scan flow), then implementer
+- Clear the review backlog: T-3, T-4, T-5, T-6 are all waiting on reviewer
 - Check if researcher started T-2 (if still stalled, consider reassigning)
 - Check if reviewer picked up T-6 and T-3
 - Check T-5 and T-11 progress (commits expected)
