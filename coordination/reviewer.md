@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Round 5 complete. No tasks pending review — all 14 completable tasks done (T-11 blocked on GitHub App install). Inbox empty, no new review requests.
+Idle — no tasks pending review. T-16 (cross-repo migration) is running, owned by implementer, not yet submitted for review. All T-1 through T-15 are done. Inbox empty as of 2026-10-10.
 
 ## Reviews Completed
 
@@ -40,7 +40,8 @@ Round 5 complete. No tasks pending review — all 14 completable tasks done (T-1
 - Receipt: coordination/review/T-15_receipt.json
 
 ## Pending
-- No tasks pending review. Round 7 checked: all tasks done except T-11 (running, owner: tester). Inbox empty, no new review requests. Last code commit predates round 5.
+- T-16 (cross-repo migration) — running, owned by implementer. Will need review once submitted. Watching for inbox message.
+- No other tasks pending. 2026-10-10: all T-1 through T-15 done.
 
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
