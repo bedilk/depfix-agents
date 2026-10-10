@@ -14,8 +14,9 @@ bumps and LLM-written fixes, runs tests to verify, and opens a PR — all automa
 
 **Read CONTEXT.md** for the full vision, pipeline details, and domain glossary.
 
-This repo is a working copy of `dependency_check`. All agent work (research, code, tests, reviews)
-happens here. Do not modify /Users/bedil_karimov/Documents/dependency_check directly.
+This repo (`depfix-agents`) holds coordination state only. All code changes go to
+`/Users/bedil_karimov/Documents/dependency_check` — the production depfix codebase.
+See "Working Repos" section below for the full boundary rules.
 
 ---
 
@@ -111,24 +112,21 @@ Format: `{"id":"<uuid>","from":"<role>","to":"<role>","ts":"<iso>","body":{...}}
 
 ---
 
-## Boundary: depfix-agents ONLY
+## Working Repos
 
-**CRITICAL: This repo (`depfix-agents`) is the ONLY repo agents may write to or push from.**
+**Code changes go to `dependency_check`.** That is the production depfix codebase.
 
-- `git push agents <branch>` — ONLY allowed push command
-- `git push origin ...` — FORBIDDEN. The `origin` push URL is intentionally disabled.
-- Do NOT edit files in `/Users/bedil_karimov/Documents/dependency_check` or git push from it.
-- `dependency_check` is read-only reference material; treat it like a third-party library.
+- **Code edits, commits, tests, depfix CLI runs:** `/Users/bedil_karimov/Documents/dependency_check`
+  This repo has the working `.env` (GitHub App credentials, Bedrock LLM config), the installed
+  `depfix` CLI, and the GitHub App installed on 51 bedilk repos. All `src/`, `tests/`, `providers.yaml`,
+  and eval corpus changes belong here.
+- **Coordination files only:** `/Users/bedil_karimov/Documents/depfix-agents`
+  AGENTS.md, CONTEXT.md, coordination/, research/, inbox messages, task state, and review receipts
+  stay in this repo. Do not put production code here.
 
-**Exception — running depfix CLI from dependency_check:**
-Agents MAY `cd /Users/bedil_karimov/Documents/dependency_check` to **run** `depfix` commands
-(scan, plan, repos, eval, etc.) because that directory has the working `.env` with the GitHub
-App credentials and Bedrock LLM config. This is read-only execution — do NOT edit files, do
-NOT commit, do NOT push from that directory. Write all results and reports back to this repo
-(`depfix-agents`). The GitHub App is installed on 51 bedilk repos from `dependency_check`;
-use it instead of fighting missing App installations.
-
-Every loop script enforces the push boundary with: `git remote set-url --push origin DISABLED_...`
+Push rules:
+- `dependency_check`: push to `origin` on feature branches. Do NOT force-push main.
+- `depfix-agents`: `git push agents <branch>` only (origin push URL is disabled).
 
 ---
 
