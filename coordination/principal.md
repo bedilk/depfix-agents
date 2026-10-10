@@ -1,20 +1,9 @@
 # Principal State
 
-## Current Round
-Round 4 — 2026-10-09
+## Last Check
+2026-10-10
 
-## Actions This Round
-- Inbox: empty, no new messages
-- T-11 assignment message still unacked by tester (sent 3 min ago at 12:52Z) — too early to flag
-- No new commits from tester since assignment — monitoring
-- Smoke test not overdue (last: 14:31+02:00 = 12:31Z UTC, next due ~16:31Z UTC)
-
-## Evidence Check
-- Commits since round 3: 590397d (researcher smoke fix), 6b363be (reviewer state r7), d9f7246 (implementer state r16)
-- No tester commits since T-11 assignment (959fb8b) — only 3 min elapsed, not stalled
-- No code commits — expected, only T-11 remains
-
-## Tasks Completed (cumulative)
+## Tasks Completed
 - T-1 (tester): DONE — 893 tests pass, lint clean, eval 91%
 - T-2 (researcher): DONE — scan recall comparison
 - T-3 (reviewer): DONE — ACCEPTED: redis + postgresql provider skill files
@@ -31,7 +20,7 @@ Round 4 — 2026-10-09
 - T-15 (reviewer): DONE — ACCEPTED: repo-version-aware ts_exports diff
 
 ## Running Tasks
-- T-11 (tester): Real-repo scan — 7 forked repos. Assigned round 3, message unacked (3 min old).
+- T-11 (tester): Real-repo scan — 7 forked repos. Unblocked by human directive.
 
 ## Blocked Tasks
 None.
@@ -43,10 +32,12 @@ None.
 
 ## Score: 14/15 tasks done, 1 running (T-11), 0 blocked
 
-## Smoke Test
-Last PASSED — 6/6 repos at 2026-10-09T14:31:02+02:00 (12:31Z UTC). Next due ~16:31Z UTC.
+## Human Directives
+- 2026-10-10: Code changes now go to `/Users/bedil_karimov/Documents/dependency_check` (see AGENTS.md "Working Repos"). depfix-agents is coordination-only.
+- 2026-10-10: Round system removed. Work off task status, not a counter.
+- 2026-10-09: T-15 added as top priority (done). T-11 unblocked — agents can run depfix CLI from dependency_check.
 
-## Next Actions (Round 5)
-- Check if tester acked T-11 and committed progress — if no progress after 2 rounds, send accountability ping
-- Smoke test due at ~16:31Z UTC
-- All other agents idle — team at steady state awaiting T-11 completion
+## Next Actions
+- Check if tester made progress on T-11 (look for commits or results in research/)
+- If T-11 done: team is at 15/15, consider next priorities or new tasks from human
+- All other agents idle — available for new work

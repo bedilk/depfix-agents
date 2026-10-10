@@ -30,13 +30,12 @@ See "Working Repos" section below for the full boundary rules.
 | Reviewer | `reviewer` | claude-opus-4-6 | 25 req/min shared | coordination/reviewer.md, adversarial review |
 | Tester | `tester` | claude-sonnet-4-6 | 10 000 req/min | coordination/tester.md, test runs, reports |
 
-**Opus budget (25 req/min total):** principal + reviewer share this pool. Principal runs one round
-every ~5 minutes; reviewer runs one round per review task. Keep rounds tight. Never run both
-simultaneously in tight loops.
+**Opus budget (25 req/min total):** principal + reviewer share this pool. Space checks ≥ 3 min
+apart. Never run both simultaneously in tight loops.
 
 ---
 
-## Startup Protocol (every agent, every round)
+## Startup Protocol (every agent, every wake-up)
 
 1. Read AGENTS.md (this file) and CONTEXT.md
 2. Read coordination/OPERATING-MODEL.md
@@ -45,7 +44,7 @@ simultaneously in tight loops.
 5. Read coordination/inbox/<role>.jsonl (your messages — ack each after reading)
 6. Resume from your state file rather than re-reading everything from scratch
 
-Do this at the top of every round. Your state file is the durable fallback.
+Do this at the top of every wake-up. Your state file is the durable fallback.
 
 ---
 
@@ -201,7 +200,7 @@ Use `--dry-run` and `--no-pr` for all testing.
 
 ## Resource Policy
 
-- **Opus 4.6 / 4.5**: principal + reviewer combined ≤ 25 req/min. Space rounds ≥ 2 min apart.
+- **Opus 4.6 / 4.5**: principal + reviewer combined ≤ 25 req/min. Space checks ≥ 3 min apart.
 - **Sonnet 4.6 / 4.6 1M**: researcher, implementer, tester — no practical cap, use freely.
 - **Disk**: do not copy node_modules, .venv, or build artifacts into new directories.
 - **DB**: depfix.db is the live SQLite. Always back up before schema changes.
@@ -210,15 +209,16 @@ Use `--dry-run` and `--no-pr` for all testing.
 
 ---
 
-## Principals' Mutual Check
+## Principal Oversight
 
-Principal oversees all agents. After every 2 rounds, principal checks:
-- Which tasks moved to `done` since last check?
+Each time the principal wakes up, it checks TASKS.json and acts on what it finds:
+- Which tasks moved to `done` since the last check?
 - Which tasks are `running` with no evidence update in >10 min?
 - Does the reviewer have a backlog?
 - Are any tasks `blocked` with no owner and no next action?
 
 Principal sends accountability pings via inbox to stalled agents.
+No round counter — task status is the only state that matters.
 
 ---
 
