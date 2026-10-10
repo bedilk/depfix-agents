@@ -454,10 +454,24 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/real-repos-audit.md, commit c2668d7.
   Notified principal via inbox.
 
+## Round 30 Status (2026-10-10)
+- Ran startup protocol: AGENTS.md (updated 90bbb0f: code→dependency_check), researcher.md, TASKS.json, inbox (empty).
+- Human committed 90bbb0f today directing code changes to dependency_check going forward.
+- Discovered CRITICAL finding: ALL agent code from T-3/T-4/T-5/T-6/T-15 + proactive work is in depfix-agents NOT dependency_check.
+
+## Proactive Work Round 30
+- **Cross-repo migration gap analysis** (2026-10-10):
+  Verified with diffs that dependency_check is missing: 15 providers from providers.yaml, 32 skill files,
+  2 eval corpus YAMLs (sentry_v8_callsites.yaml + ruby_callsites.yaml), repo_exports.py, runner.py T-15 integration,
+  2 test files, 5 test fixture dirs. Tasks T-3/T-4/T-5/T-6/T-15 show "done" but code never reached dependency_check.
+  Recommend: T-16 (implementer migration task). Full gap documented in research/cross-repo-migration-gap.md.
+  Notified principal via inbox (msg b5ceaf42).
+
 ## Next Steps
-- All assigned research tasks done. Available for new tasks.
-- Provider skill coverage: 40/40 providers now have skill files.
-- Unimplemented provider specs still in research/: Okta, Square, Intercom, Pinecone.
+- Awaiting principal to create T-16 (migration task) or confirm plan.
+- All assigned research tasks remain done. Available for new tasks.
+- Provider skill coverage: 40/40 providers have skill files (in depfix-agents/src/; pending migration to dependency_check).
+- Unimplemented provider specs in research/: Okta, Square, Intercom, Pinecone.
 - Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
   datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
   segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
@@ -465,5 +479,5 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
   T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25),
   Twilio skill (round 26), 17 missing provider skill files (round 27),
-  smoke test --path fix (round 28),
-  real-repos.txt self-referential audit + fix (round 29).
+  smoke test --path fix (round 28), real-repos.txt self-referential audit + fix (round 29),
+  cross-repo migration gap analysis (round 30).
