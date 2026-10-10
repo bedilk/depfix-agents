@@ -56,9 +56,9 @@
       "owns": ["coordination/tester.md"],
       "state_file": "coordination/tester.md",
       "inbox": "coordination/inbox/tester.jsonl",
-      "status": "running",
-      "current_task": "T-11",
-      "last_active": "2026-10-09T12:52:00Z"
+      "status": "idle",
+      "current_task": null,
+      "last_active": "2026-10-10T15:03:00Z"
     }
   ],
   "model_limits": {

@@ -186,7 +186,19 @@
       "next_action": "done",
       "notes": "ACCEPTED by reviewer round 3. Sub-case B committed (7896cff), mypy fix (export_name→b_name), 24 tests total. make test: 917 passed, lint clean, mypy clean. Non-blocking: double tarball fetch (installed fetched in repo_version_exports_diff then again in sub-case B). Prior: REJECTED rounds 1-2 (sub-case B not committed, mypy error)."
     }
+    ,
+    {
+      "id": "T-16",
+      "title": "Migrate agent code changes from depfix-agents to dependency_check",
+      "status": "ready",
+      "owner": null,
+      "depends_on": [],
+      "acceptance": "All code from T-3/T-4/T-5/T-6/T-15 and proactive work is present in dependency_check/src/: 15 new providers in providers.yaml, 32 skill files, 2 eval corpus YAMLs, repo_exports.py + runner.py T-15 integration, test files + 5 fixture dirs. make test passes in dependency_check. Diff-apply runner.py changes against current dependency_check HEAD (which has 5 divergence commits).",
+      "evidence_paths": ["research/cross-repo-migration-gap.md"],
+      "next_action": "Assign to implementer. Easy items: copy skill files, eval YAMLs, test files, fixtures, providers.yaml entries. Hard item: runner.py T-15 integration needs diff-apply against dependency_check HEAD.",
+      "notes": "Created from researcher critical finding (2026-10-10). All agent code was committed to depfix-agents/src/ but dependency_check is the production repo. See research/cross-repo-migration-gap.md for full gap inventory."
+    }
   ],
-  "last_updated": "2026-10-09T15:00:00Z",
+  "last_updated": "2026-10-10T15:05:00Z",
   "updated_by": "principal"
 }
