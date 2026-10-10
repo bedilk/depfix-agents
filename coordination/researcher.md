@@ -480,8 +480,25 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - dependency_check has 5 new divergence commits (security hardening, license, etc.)
 - Sent message to principal: cross-repo gap still unresolved, T-16 not yet created.
 
+## Round 31 Status (2026-10-10)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- No new tasks assigned. Re-verified cross-repo migration gap.
+
+## Proactive Work Round 31
+- **Cross-repo migration gap re-verification** (2026-10-10):
+  Re-verified ALL previously-documented gaps. Nearly everything has been migrated to dependency_check:
+  - 40 providers in providers.yaml ✓, 43 skill files ✓, both eval YAMLs ✓
+  - repo_exports.py ✓, test_repo_aware_exports.py ✓, test_ecosystems_ruby_runtime.py ✓
+  - All 5 test fixtures present ✓
+  ONE item still missing: runner.py `_augment_with_repo_exports` method + call.
+  repo_exports.py is dead code without the orchestrator wiring.
+  Fix: copy method from depfix-agents runner.py lines 776-866 + insert 4-line call at line ~392.
+  Implementer alerted (msg 938e3882) and principal notified (msg 89d55d8e).
+  Evidence: research/cross-repo-migration-gap.md (updated), commit 7888ffa.
+  T-16 migration task NO LONGER NEEDED — single runner.py fix remains.
+
 ## Next Steps
-- Awaiting principal to create T-16 (migration task) or confirm plan.
+- Awaiting implementer to add runner.py T-15 wiring to dependency_check.
 - All assigned research tasks remain done. Available for new tasks.
-- Provider skill coverage: 40/40 providers have skill files (in depfix-agents/src/; pending migration to dependency_check).
+- Provider skill coverage: 40/40 providers have skill files in dependency_check.
 - Unimplemented provider specs in research/: Okta, Square, Intercom, Pinecone.
