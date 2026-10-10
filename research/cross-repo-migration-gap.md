@@ -1,6 +1,6 @@
 # Cross-Repo Migration Gap
 
-**Date:** 2026-10-10 (Round 30)
+**Date:** 2026-10-10 (last verified: 2026-10-10)
 **Author:** researcher
 **Priority:** CRITICAL — action required before any future test runs or task completions are valid
 
@@ -133,16 +133,28 @@ Test fixtures:
 
 2. After T-16: re-run T-1 health check in dependency_check to get a valid test count
 
+## Dependency_check Divergence Since Initial Analysis
+
+dependency_check received 5 new commits after the migration gap was first identified:
+- `722c263` — security: harden codebase for public launch (PR injection, defusedxml, sandbox)
+- `fb74b55` — feat: add source-available license and clean credentials
+- `23eea17` — fix: restore correct anthropic fixture
+- `a1e1419` — fix: implement missing _upgrade_severity method on Orchestrator
+- `51560e2` — feat: add call-site fixture changes for anthropic and postgresql providers
+
+These commits make `orchestrator/runner.py` merge harder. The T-15 augmentation must be applied
+as a diff on top of the current dependency_check runner.py, not a wholesale replacement.
+
 ## Commands to Verify Gaps
 
 ```bash
 # Count providers
-grep -c "^  name:" /Users/bedil_karimov/Documents/dependency_check/providers.yaml
+python3 -c "import yaml; p=yaml.safe_load(open('/Users/bedil_karimov/Documents/dependency_check/providers.yaml')); print(len(p['providers']))"
 # → 25
 
 # List missing skill files
-diff <(ls /Users/bedil_karimov/Documents/depfix-agents/src/depfix/providers/skills/*.md | xargs -I{} basename {}) \
-     <(ls /Users/bedil_karimov/Documents/dependency_check/src/depfix/providers/skills/*.md | xargs -I{} basename {})
+diff <(ls /Users/bedil_karimov/Documents/depfix-agents/src/depfix/providers/skills/ | sort) \
+     <(ls /Users/bedil_karimov/Documents/dependency_check/src/depfix/providers/skills/ | sort)
 
 # Check T-15 integration
 grep "_augment_with_repo_exports" /Users/bedil_karimov/Documents/dependency_check/src/depfix/orchestrator/runner.py

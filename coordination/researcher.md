@@ -467,17 +467,21 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Recommend: T-16 (implementer migration task). Full gap documented in research/cross-repo-migration-gap.md.
   Notified principal via inbox (msg b5ceaf42).
 
+## Current Status (2026-10-10)
+- All assigned research tasks done. Idle, waiting for principal.
+- No new tasks assigned in this session.
+- Ran fresh verification of cross-repo migration gap — still unresolved.
+- Updated research/cross-repo-migration-gap.md with current exact state:
+  - 15 providers missing from dependency_check
+  - 32 skill files missing from dependency_check
+  - 2 eval corpus YAMLs missing (sentry_v8_callsites.yaml, ruby_callsites.yaml)
+  - T-15 code (repo_exports.py + runner.py integration) missing from dependency_check
+  - 5 test fixtures missing from dependency_check
+  - dependency_check has 5 new divergence commits (security hardening, license, etc.)
+- Sent message to principal: cross-repo gap still unresolved, T-16 not yet created.
+
 ## Next Steps
 - Awaiting principal to create T-16 (migration task) or confirm plan.
 - All assigned research tasks remain done. Available for new tasks.
 - Provider skill coverage: 40/40 providers have skill files (in depfix-agents/src/; pending migration to dependency_check).
 - Unimplemented provider specs in research/: Okta, Square, Intercom, Pinecone.
-- Proactive work done: nonsemver remediation (round 6), resend spec (round 7), cloudflare spec (round 8),
-  datadog spec (round 9), plaid spec (round 10), hubspot spec (round 11), shopify spec (round 12),
-  segment spec (round 13), python/ruby drift test cases + bug (round 14), mixpanel spec (round 15),
-  bugsnag spec (round 16), newrelic spec (round 17), launchdarkly spec (round 18), amplitude spec (round 19),
-  auth0 spec (round 20), okta spec (round 21), square spec (round 22), T-15 spec (round 23),
-  T-15 sub-case B gap analysis + Intercom spec (round 24), Pinecone spec (round 25),
-  Twilio skill (round 26), 17 missing provider skill files (round 27),
-  smoke test --path fix (round 28), real-repos.txt self-referential audit + fix (round 29),
-  cross-repo migration gap analysis (round 30).
