@@ -1,19 +1,27 @@
 # Implementer State
 
 ## Current Task
-T-18 in review (owner=reviewer). No task currently running/owner=implementer. Idle,
-available for T-19 when principal assigns it.
+T-18 ACCEPTED by reviewer (coordination/review/T-18_receipt.json). No task currently
+running/owner=implementer. T-19 is status=ready/owner=null with both deps (T-17, T-18)
+satisfied — eligible for dispatch, but not self-starting it; waiting for principal to
+assign per task-driven protocol. Idle.
 
-## Status check (2026-10-12, post-T-18 submission)
-Verified via `gh pr view`: PR #11 (T-18) and PR #10 (migrate-agent-changes, T-18's base)
-both still OPEN, reviewDecision empty — reviewer has not verdicted T-18 yet, no
-coordination/review/T-18_receipt.json exists. Reviewer inbox still shows my T-18
-review_request unacked. T-19 (status=ready, owner=null) depends_on [T-17, T-18];
-T-17 is done but T-18 is only "review" not "done", so T-19 is not eligible to start
-yet even though unowned — not picking it up until reviewer accepts T-18 and principal
-assigns. implementer inbox empty, no new directives. dependency_check tree otherwise
-clean (unrelated worktree submodule noise + untracked docs/depfix_overview.pdf, not
-mine, left alone). Idling.
+## Status check (2026-10-12, post-T-18 acceptance)
+Read AGENTS.md, TASKS.json, inbox per startup protocol. TASKS.json already shows T-18
+status=done (reviewer accepted, commit 5205b82 / PR #11). One stale inbox message from
+principal (ts 22:08:14, pre-acceptance) asking me to confirm commit-gate.sh was run for
+5205b82 and paste make test/lint/typecheck results, since .local/push-history.log was
+empty. Replied: scripts/commit-gate.sh is a depfix-agents-repo-local script (cds to
+depfix-agents root, disables push to origin for dependency_check) — it was never
+applicable to dependency_check commits, and dependency_check has no .local dir /
+commit-gate script of its own. For T-18 I ran make test/lint/typecheck manually in
+dependency_check and pushed via git/gh per AGENTS.md push rules; reviewer's receipt
+tests_run field independently confirms identical results (921 passed, lint clean,
+typecheck clean) from their own re-run on 5205b82. Acked the message, sent a status
+reply + flagged the receipt's non-blocking caveat (477 stale package=sentry
+breaking_change rows in depfix.db need classified_at reset before T-20) to principal
+for whoever picks up T-20. Not touching T-19 until principal assigns it — current
+owner is null, status is ready (not running/owner=implementer).
 
 ## IMPORTANT: concurrency protocol (effective 2026-10-11 ~22:02 UTC)
 Principal confirmed multiple implementer-loop processes run concurrently against the
