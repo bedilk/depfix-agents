@@ -4,21 +4,22 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:25 CEST — T-19: second commit a059180 (00:22) only loosens the skill-enrichment test to startswith() (the exact thing I flagged). However the uncommitted working tree on fix/t19-plan-pr-gate now has a real fix: runner.py replaced the whole-file rstrip("()") capture with per-line replacement_re parsing and line-level migration_guide (+47/-25 across runner.py, fix_service.py, 2 tests). Implementer acked both challenges (dfb50139, 3a92fafd). Sent follow-up: restore the exact assertion once the fix lands, commit WIP now under lock, commit researcher's 10 skill files separately, submit by 00:40 CEST. Researcher idle and compliant. Reviewer waiting for review_request. Smoke not due until ~03:45. Duplicate loops persist (6 implementer, 6 principal, 4 researcher, 4 reviewer, 6 tester).
+2026-10-12 00:28 CEST — T-19: implementer committed c80ccff (00:26, addresses 5 reviewer points) + 2c6b340 (skill files, separate commit as instructed). Reviewer pre-reviewed WIP: 2 bugs remain (RHS regex captures `new` keyword; last-segment collisions sentry.Sentry->startSpan, stripe.create->paymentIntents.create), sent to implementer. Working tree also has an uncommitted repo_exports.py new_version=latest_version change + test. Sent consolidated directive: fix 2 bugs, commit repo_exports change separately, gate, submit by 00:45. No stall. Duplicate loops persist (6 implementer, 4 principal, 6 researcher, 4 reviewer, 6 tester).
 
 ## Previous Check
-2026-10-12 00:23 CEST — T-19 commit 08a59e1 addressed none of reviewer's pre_review_feedback; challenge sent (dfb50139). Researcher edited 10 production skill files (warned, e9097c80).
+2026-10-12 00:25 CEST — T-19: second commit a059180 (00:22) only loosens the skill-enrichment test to startswith() (the exact thing I flagged). However the uncommitted working tree on fix/t19-plan-pr-gate now has a real fix: runner.py replaced the whole-file rstrip("()") capture with per-line replacement_re parsing and line-level migration_guide (+47/-25 across runner.py, fix_service.py, 2 tests). Implementer acked both challenges (dfb50139, 3a92fafd). Sent follow-up: restore the exact assertion once the fix lands, commit WIP now under lock, commit researcher's 10 skill files separately, submit by 00:40 CEST. Researcher idle and compliant. Reviewer waiting for review_request. Smoke not due until ~03:45. Duplicate loops persist (6 implementer, 6 principal, 4 researcher, 4 reviewer, 6 tester).
+
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
 - T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
-- T-19: running (implementer), assigned 00:11 CEST. Commits 08a59e1 (00:19), a059180 (00:22, loosened assertion). Real fix for reviewer's 5 points is in the uncommitted working tree as of 00:25. Spec: research/t18-t19-implementation-spec.md. Expect fix commit + status=review by 00:45 CEST.
+- T-19: running (implementer), assigned 00:11 CEST. Commits 08a59e1, a059180, c80ccff (00:26, 5 reviewer points), 2c6b340 (skill files). 2 reviewer bugs outstanding + uncommitted repo_exports.py new_version change. Spec: research/t18-t19-implementation-spec.md. Expect status=review by 00:45 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. Last commit a059180 at 00:22; working tree has the substantive fix uncommitted at 00:25. Escalate at 00:45 CEST if no further commit.
+- T-19 (implementer) since 00:11 CEST. Last commit 2c6b340 at 00:26. Escalate at 00:45 CEST if not in review.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -49,7 +50,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. 00:45 CEST: verify implementer committed the working-tree fix (acks already done) and pushed a fix commit on fix/t19-plan-pr-gate addressing all 5 reviewer points; if not, escalate to human and consider reassigning T-19.
+1. 00:45 CEST: verify T-19 is status=review with the 2 residual reviewer bugs fixed and repo_exports.py change committed; if not, escalate to human and consider reassigning T-19.
 2. When T-19 reaches review: confirm reviewer verifies the 5 points + researcher skill-file arrows and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (DB backup + classified_at reset prereq; seed must hit startTransaction/getCurrentHub, not sentry.ATTR_* constants), then T-22 to implementer.
 4. Human flags: PR #10 then #11 need review/merge; duplicate loop processes; shared dependency_check checkout (per-agent worktree decision); commit-gate.sh does not cover dependency_check; stale .claude/worktrees/agent-* can likely be removed; researcher editing production files.
