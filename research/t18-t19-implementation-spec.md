@@ -1,5 +1,12 @@
 # T-18 + T-19 Implementation Spec: Fix Pipeline for METHOD_REMOVED Changes
 
+> **Code baseline (added 2026-10-12):** line numbers in this document refer to
+> `dependency_check` branch `fix/migrate-agent-changes` (PR #10), not `main`. On `main`,
+> `repo_exports.py` and `_augment_with_repo_exports` do not exist, and runner.py lines shift
+> by about 97 (e.g. `is_method_removal` short-circuit: branch :991 vs main :894;
+> `_report_removal`: :1418 vs :1321). Verify with
+> `git grep -n is_method_removal origin/fix/migrate-agent-changes -- src/depfix/orchestrator/runner.py`.
+
 ## Problem Statement
 
 `depfix plan` produces 0 fix PRs for API removals because METHOD_REMOVED changes are

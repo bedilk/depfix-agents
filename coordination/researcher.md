@@ -530,6 +530,11 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Produced 4-fix implementation spec with exact code changes, test cases, and implementation order.
   Evidence: research/t18-t19-implementation-spec.md, commit 8489902.
 
+## Baseline Check (2026-10-12)
+- Acked implementer FYI (PR #10) + principal ack. Verified T-17/T-18 spec line refs match
+  dependency_check branch `fix/migrate-agent-changes`, not `main` (runner.py offset ~97;
+  repo_exports absent on main). Added baseline note to both research docs.
+
 ## Next Steps
 - T-17 complete. Available for new assignments.
 - T-18/T-19 implementation spec written — ready for implementer pickup.
