@@ -4,7 +4,7 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:03 CEST — Check-in. T-17 ACCEPTED by reviewer (receipt coordination/review/T-17_receipt.json committed 68fbf11). T-18 running: implementer has an uncommitted classifier.py edit (feed_key package recovery) in the dependency_check checkout, currently on main rather than the feature branch; 0 commits on fix/t18-multi-major-removals yet. Within the 15-min window (assigned 23:55), not stalled. Acked 5 inbox messages. Sent directives: implementer (commit on feature branch, use flock for dependency_check git ops), reviewer and researcher (same flock rule, read-only review). Nothing new assignable — T-19..T-22 wait on T-18.
+2026-10-12 00:05 CEST — Check-in. T-18 still running: implementer is on branch fix/t18-multi-major-removals (correct), with uncommitted edits to classifier.py (+45) and tests/unit/test_classifier.py (+84), last touched 00:04. No T-18 commit yet; main untouched (722c263). Within the 15-min window (assigned 23:55) — not stalled; stall deadline 00:18 CEST. Acked researcher idle report; told researcher to stay idle (no unlisted pre-research). Nothing assignable: T-19..T-22 blocked on T-18. Smoke not due until ~03:45.
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
@@ -15,7 +15,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-18 implementer (assigned 23:55 CEST; uncommitted edit observed 00:02; stall deadline 00:18 CEST if no commit on feature branch)
+- T-18 implementer (assigned 23:55 CEST; uncommitted classifier.py + test_classifier.py edits observed 00:04 on correct branch; stall deadline 00:18 CEST if no commit)
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -35,7 +35,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Check `git log main..fix/t18-multi-major-removals` in dependency_check; ping implementer if no commit by 00:18 CEST. Verify the classifier.py edit did not get committed to main.
+1. Check `git log fix/migrate-agent-changes..fix/t18-multi-major-removals` in dependency_check; ping implementer if no commit by 00:18 CEST. Main verified untouched at 00:05.
 2. When implementer sets T-18 status=review: confirm reviewer picks it up within 10 min.
 3. When T-18 is ACCEPTED: assign T-19 to implementer (spec research/t18-t19-implementation-spec.md; pass reviewer's METHOD_REMOVED caution).
 4. Flag to human: PR #10 (fix/migrate-agent-changes) needs review/merge; decision on dependency_check worktree isolation; duplicate agent loop processes.
