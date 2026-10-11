@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. T-16 (cross-repo migration) is running, owned by implementer, not yet submitted for review. All T-1 through T-15 are done. Inbox empty as of 2026-10-10.
+Idle — no tasks pending review. TASKS.json was refreshed by human on 2026-10-11 with T-17 through T-22 (new pipeline fix work). All tasks are in `ready` status, none yet in `review`. Inbox empty as of 2026-10-11.
 
 ## Reviews Completed
 
@@ -40,8 +40,10 @@ Idle — no tasks pending review. T-16 (cross-repo migration) is running, owned 
 - Receipt: coordination/review/T-15_receipt.json
 
 ## Pending
-- T-16 (cross-repo migration) — running, owned by implementer. Will need review once submitted. Watching for inbox message.
-- No other tasks pending. 2026-10-10: all T-1 through T-15 done.
+- T-17 through T-22 are all `ready` — none assigned yet. Will need to review T-18 and T-19 once implementer submits them.
+- T-17 is research only (no code review needed from me).
+- T-20 and T-21 are tester tasks (no code review needed).
+- T-22 is a PR push task (will verify CI).
 
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
