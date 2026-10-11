@@ -4,7 +4,7 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:16 CEST (re-checked 00:17) — T-19 still in progress on fix/t19-plan-pr-gate (dependency_check): working-tree edits to upgrade.py, fix_service.py, runner.py, provider_sentry.md plus new tests/unit/test_upgrade_method_removal_gate.py (new since 00:13). No commit yet; task is 5 min old, not stalled. Inbox empty. Nothing assignable (T-20/T-21/T-22 depend on T-19).
+2026-10-12 00:19 CEST — T-19 still in progress on fix/t19-plan-pr-gate (dependency_check). Working tree now has 4 new unit test files (test_fix_service_method_removal_gate, test_orchestrator_removal_enrichment, test_runner_skill_enrichment, test_upgrade_method_removal_gate) plus edits to upgrade.py, fix_service.py, runner.py, provider_sentry.md. Still no commit; task is 8 min old, under the 15 min stall threshold. Tester reports 923 tests pass on the WIP tree (875347d). Inbox empty. Nothing assignable (T-20/T-21/T-22 depend on T-19). Smoke not due until ~03:45 CEST.
 
 ## Previous Check
 2026-10-12 00:11 CEST — T-18 ACCEPTED by reviewer (receipt coordination/review/T-18_receipt.json, commit 52255fa). Assigned T-19 to implementer (branch from fix/t18-multi-major-removals, PR #11). Implementer clarified: scripts/commit-gate.sh targets depfix-agents only, so push-history.log stays empty for dependency_check commits; gate equivalence was make test/lint/typecheck run manually plus reviewer re-run. Accepting that for now. Added T-20 PREREQ: back up depfix.db and reset classified_at on the 2 ts_exports:@sentry/node events (477 stale sentry rows) before pipeline run. Duplicate loop processes persist (7 implementer-loop PIDs).
@@ -18,7 +18,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. 00:17: same uncommitted working tree on fix/t19-plan-pr-gate (upgrade.py, fix_service.py, runner.py, provider_sentry.md, new test file); no commit yet, inbox empty. Working tree edits present at 00:16 on fix/t19-plan-pr-gate (incl. new unit test file); no commit yet. Flag if no commit by 00:28 CEST.
+- T-19 (implementer) since 00:11 CEST. 00:19: 4 new test files, still uncommitted; expect a commit by 00:26 CEST, ping if none. 00:17: same uncommitted working tree on fix/t19-plan-pr-gate (upgrade.py, fix_service.py, runner.py, provider_sentry.md, new test file); no commit yet, inbox empty. Working tree edits present at 00:16 on fix/t19-plan-pr-gate (incl. new unit test file); no commit yet. Flag if no commit by 00:28 CEST.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -32,6 +32,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - DUPLICATE LOOPS (00:08): 5 principal, 6 implementer, 6 reviewer, 3 researcher, 3 tester loop PIDs. Implementer confirmed a concurrent instance raced it on TASKS.json during T-18 submission. HUMAN: kill extra loops (pkill -f <role>-loop.sh then restart one per role via run-team.sh).
 - Stray log files at coordination repo root: cleaned by tester (e77ca0f).
 - GAP (implementer, confirmed): scripts/commit-gate.sh only gates depfix-agents, not dependency_check. Interim rule: dependency_check gate = make test/lint/typecheck run inside dependency_check + reviewer re-run. HUMAN: decide whether to add a dependency_check-aware gate script (candidate task after T-22).
+- STALE WORKTREES (00:19): dependency_check/.claude/worktrees has 4 agent-* worktrees at 98e21b6 (2026-09-27) with uncommitted src edits (old removals.py, upgrade_service.py drafts). Pre-date this mission; not part of T-19. HUMAN: confirm they can be removed (git worktree remove) to avoid confusing agents.
 - TEAM-REGISTRY researcher model still lists claude-sonnet-4-6-1m; AGENTS.md says opus-5-5. Cosmetic; loop scripts control the actual model.
 
 - CONCURRENCY HAZARD (implementer, 00:00): multiple agent processes share the single dependency_check checkout; a branch switch raced a commit (recovered, nothing lost). Interim rule issued: all dependency_check git mutations under flock depfix-agents/.local/git.lock; reviewer to inspect read-only. HUMAN DECISION NEEDED: per-agent worktrees/clones for dependency_check, or restrict to one implementer instance (ps showed duplicate implementer/researcher/reviewer PIDs).
