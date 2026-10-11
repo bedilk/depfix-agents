@@ -4,21 +4,21 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:23 CEST — T-19 commit 08a59e1 landed on fix/t19-plan-pr-gate at 00:19 (stall cleared; 7 files, 3 new test files). BUT the commit addresses none of the reviewer's pre_review_feedback (msg 3a92fafd, still unacked by implementer): rstrip("()") paren bug, Express prose target enriched as fixable, fix_service gate on migration_guide vs upgrade gate on new_api, whole skill file in migration_guide, missing Express->None and fix_service tests. Working tree also loosens test_runner_skill_enrichment to startswith("Sentry.startSpan"), masking the paren bug. Challenge sent (dfb50139); expect a fix commit + status=review by 00:45 CEST, otherwise escalate. RULE VIOLATION: researcher edited 10 production skill files in dependency_check (clerk, datadog, google_cloud, mixpanel, mongodb, postgresql, prisma, rabbitmq, sendgrid, stripe), uncommitted on the implementer's branch; report at research/skill-file-migration-arrows.md (48892ec). Researcher warned (e9097c80); implementer told to verify arrow format and commit separately. Nothing assignable (T-20/21/22 depend on T-19). Smoke not due until ~03:45 CEST. Duplicate loops persist (7 implementer, 5 researcher, 7 principal PIDs).
+2026-10-12 00:25 CEST — T-19: implementer acked both challenge messages (3a92fafd, dfb50139). Second commit a059180 (00:22) only loosens test_runner_skill_enrichment to startswith("Sentry.startSpan"), masking the paren bug. BUT the uncommitted working tree on fix/t19-plan-pr-gate now contains the real fix: _enrich_removal_from_skill rewritten to match one bullet at a time with a word-bounded symbol regex and a backtick-only replacement capture (prose right-hand sides -> None), plus expanded tests in test_fix_service_method_removal_gate.py and test_runner_skill_enrichment.py. Progress is real; not stalled. Reviewer told to reject if the exact-equality assertion is not restored or any of the 5 points remain. Acked 3 inbox messages (researcher proactive_work + idle status, reviewer pre-review status). Nothing assignable (T-20/21/22 gate on T-19). Smoke not due until ~03:45 CEST.
 
 ## Previous Check
-2026-10-12 00:19 CEST — T-19 still in progress on fix/t19-plan-pr-gate (dependency_check). Working tree had 4 new unit test files plus edits to upgrade.py, fix_service.py, runner.py, provider_sentry.md; no commit yet. Tester reported 923 tests pass on the WIP tree (875347d).
+2026-10-12 00:23 CEST — T-19 commit 08a59e1 landed at 00:19 but addressed none of the reviewer's pre_review_feedback; working tree loosened a test to mask the paren bug. Challenge sent (dfb50139). Researcher edited 10 production skill files without a task; warned (e9097c80).
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
 - T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
-- T-19: running (implementer), assigned 00:11 CEST. First commit 08a59e1 on fix/t19-plan-pr-gate at 00:19 CEST. Reviewer pre-review feedback outstanding (see Last Check). Spec: research/t18-t19-implementation-spec.md. Next stall check: expect a follow-up commit addressing reviewer feedback by 00:40 CEST.
+- T-19: running (implementer), assigned 00:11 CEST. Commits 08a59e1 (00:19), a059180 (00:22, loosened assertion). Real fix for reviewer's 5 points is in the uncommitted working tree as of 00:25. Spec: research/t18-t19-implementation-spec.md. Expect fix commit + status=review by 00:45 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. 00:19 commit 08a59e1. 00:23 challenged on unaddressed reviewer feedback + loosened test. Escalate at 00:45 CEST if no follow-up commit.
+- T-19 (implementer) since 00:11 CEST. Last commit a059180 at 00:22; working tree has the substantive fix uncommitted at 00:25. Escalate at 00:45 CEST if no further commit.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -49,7 +49,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. 00:45 CEST: verify implementer acked dfb50139 + 3a92fafd and pushed a fix commit on fix/t19-plan-pr-gate addressing all 5 reviewer points; if not, escalate to human and consider reassigning T-19.
+1. 00:45 CEST: verify implementer committed the working-tree fix (acks already done) and pushed a fix commit on fix/t19-plan-pr-gate addressing all 5 reviewer points; if not, escalate to human and consider reassigning T-19.
 2. When T-19 reaches review: confirm reviewer verifies the 5 points + researcher skill-file arrows and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (DB backup + classified_at reset prereq; seed must hit startTransaction/getCurrentHub, not sentry.ATTR_* constants), then T-22 to implementer.
 4. Human flags: PR #10 then #11 need review/merge; duplicate loop processes; shared dependency_check checkout (per-agent worktree decision); commit-gate.sh does not cover dependency_check; stale .claude/worktrees/agent-* can likely be removed; researcher editing production files.
