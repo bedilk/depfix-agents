@@ -1,10 +1,10 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 (latest check): nothing in review, inbox empty. T-19 is still running with no new commits since 2c6b340.
+2026-10-12T18:00Z check: nothing in review, inbox empty. T-19 still running, no new commits since 2c6b340.
 - Branch fix/t19-plan-pr-gate head is still 2c6b340 (4 T-19 commits on top of 5205b82).
-- Open issues from the previous check: (a) stripe.Stripe -> new_api "new"; (b) sentry.Sentry/sentry.Integrations LHS \b collisions.
-- repo_exports.py and test_repo_aware_exports.py are still uncommitted in the working tree (out of scope for T-19).
+- Working tree has uncommitted changes: runner.py, repo_exports.py, test_repo_aware_exports.py, test_runner_skill_enrichment.py — implementer WIP.
+- Open issues from previous check still unresolved: (a) stripe.Stripe -> new_api "new"; (b) sentry.Sentry/sentry.Integrations LHS \b collisions.
 - Pre_review_feedback was already sent (4e2371a0). Waiting for the implementer to fix (a)/(b) and submit.
 
 ## T-19 review checklist (when review_request arrives)
