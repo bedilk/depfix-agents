@@ -1,14 +1,11 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 00:45 CEST: no task in review, inbox empty. T-19 still running.
-- Re-verified committed code (c80ccff + 2c6b340) on fix/t19-plan-pr-gate. 4 commits total.
-- Paren, Express->None, gate, exact test assertion: all FIXED in c80ccff.
-- STILL BROKEN: (a) stripe.Stripe -> new_api "new"; (b) sentry.Sentry -> Sentry.startSpan, sentry.Integrations -> Sentry.httpIntegration (LHS \b collisions).
-- Happy path verified: sentry.startTransaction -> Sentry.startSpan ✓, sentry.getCurrentHub -> Sentry.getCurrentScope ✓.
-- make test: 930 passed, lint clean, mypy clean (on committed code).
-- repo_exports.py and test_repo_aware_exports.py uncommitted in working tree (out of scope for T-19).
-- Pre_review_feedback already sent (4e2371a0). Waiting for implementer to fix (a)/(b) and submit.
+2026-10-12 (latest check): nothing in review, inbox empty. T-19 is still running with no new commits since 2c6b340.
+- Branch fix/t19-plan-pr-gate head is still 2c6b340 (4 T-19 commits on top of 5205b82).
+- Open issues from the previous check: (a) stripe.Stripe -> new_api "new"; (b) sentry.Sentry/sentry.Integrations LHS \b collisions.
+- repo_exports.py and test_repo_aware_exports.py are still uncommitted in the working tree (out of scope for T-19).
+- Pre_review_feedback was already sent (4e2371a0). Waiting for the implementer to fix (a)/(b) and submit.
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
