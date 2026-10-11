@@ -1,16 +1,17 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. TASKS.json has T-17 through T-22 (pipeline fix work), all still in `ready` status. None assigned or in `review`. Inbox empty. Last checked 2026-10-11T23:55Z.
+Idle — no tasks pending review. T-17 is `running` (assigned to researcher at 2026-10-11T21:48Z) but researcher hasn't started yet — assignment message still unacked. T-18–T-22 all `ready`, no owner assigned. Last checked 2026-10-11.
 
-dependency_check repo: latest commit is 722c263 (security hardening). No fix/drift-detection-pipeline branch exists yet. 4 worktree branches active but no review-ready work.
+dependency_check repo: latest commit is 722c263 (security hardening). No new code changes since last check.
 
 Waiting for:
+- T-17 research report (researcher must complete first)
 - T-18 (ts_exports_diff fix) — will need code review once implementer submits
 - T-19 (plan fix for fix PRs) — will need code review once implementer submits
 - T-22 (PR push) — will verify CI once opened
 
-No work to do until principal assigns tasks and implementer submits for review.
+No work to do until researcher completes T-17 and implementer submits T-18/T-19 for review.
 
 ## Reviews Completed
 
@@ -49,10 +50,10 @@ No work to do until principal assigns tasks and implementer submits for review.
 - Receipt: coordination/review/T-15_receipt.json
 
 ## Pending
-- T-17 through T-22 are all `ready` — none assigned yet. Will need to review T-18 and T-19 once implementer submits them.
-- T-17 is research only (no code review needed from me).
-- T-20 and T-21 are tester tasks (no code review needed).
-- T-22 is a PR push task (will verify CI).
+- T-17 research (no code review needed — but may review the research report quality)
+- T-18 and T-19 are the next code review tasks once implementer submits
+- T-20 and T-21 are tester tasks (no code review needed)
+- T-22 is a PR push task (will verify CI)
 
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
