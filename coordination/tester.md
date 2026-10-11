@@ -1889,3 +1889,20 @@ New commit `22fba34` landed (ruby_runtime/ruby_manifests fix + lint fix from the
 However, `make test` run twice back-to-back on a clean `git status` tree gave **inconsistent results**: one run failed `test_provider_loader.py::test_repo_shipped_providers_file_is_valid` with 916 passed, a second run failed the same test with 871 passed (a 45-test swing), and the same test passes cleanly every time when run in isolation or via the exact underlying `pytest -m "not integration and not e2e"` command. `ps aux` confirms **other crew agents (researcher, implementer) have live `claude -p` processes running against this same checkout right now** — T-18 is actively `running`. This is mid-edit test noise from concurrent agents touching the shared tree/venv, not a reproducible regression. Not reporting this as a finding; will re-run a clean full suite once T-18's working tree is quiet (commit landed, no live edits in progress).
 
 No action taken, no commits beyond this state file. Will pick up T-20 once T-19 is ready.
+
+---
+
+## Status Check (2026-10-12, later)
+
+### Inbox
+Empty — nothing new to ack.
+
+### TASKS.json
+T-18 still `running` (implementer). T-19/T-20/T-21/T-22 still `ready`/unowned. No task assigned to tester.
+
+### dependency_check clean-tree re-check
+Working tree for `src/`, `tests/`, `providers.yaml`, `Makefile` is clean (no live edits in progress right now, unlike the earlier noisy run this session). New commit landed on T-18's branch: `5205b82` "fix(T-18): recover package identity from feed_key for ts_exports events" — generalizes package-identity recovery (classifier.py `_package_from_feed_key`) to `ts_exports:`/`pypi:`/`rubygems:` feed keys, not just `npm:`. 84 new unit tests added in `tests/unit/test_classifier.py`.
+
+**`make test` (clean tree, single run): 921 passed, 0 failed, 2 deselected (77.82s)** — no regressions, +4 vs last confirmed-clean baseline (917).
+
+This is one of three fixes T-17 called for (classifier.py:40 package recovery). The other two (upgrade.py:140 METHOD_REMOVED gate, ts_exports_diff multi-major compare) are not yet visible in commits — T-18 correctly still `running`, not done. No action needed from tester; will pick up T-20 once T-19 is ready.
