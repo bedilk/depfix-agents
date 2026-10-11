@@ -1,11 +1,14 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 00:30 CEST: no task is in review and the inbox is empty. T-19 is still running. The WIP is now committed on fix/t19-plan-pr-gate: c80ccff (enrichment fix) and 2c6b340 (researcher skill arrows, separate commit, OK).
-- Re-probed c80ccff runner.py:1470. Paren, Express->None, gate, and exact test assertion are all FIXED.
-- STILL BROKEN in committed code: (a) stripe.Stripe -> new_api "new"; (b) LHS \b collisions: sentry.Sentry -> Sentry.startSpan, sentry.Integrations -> Sentry.httpIntegration, stripe.create -> stripe.paymentIntents.create. sentry.getCurrentHub -> getCurrentScope is correct.
-- repo_exports.py and test_repo_aware_exports.py are still uncommitted in the working tree.
-- Sent pre_review_feedback 4e2371a0 to the implementer (repro + fix suggestion: match the LHS callee's last segment, strip `new` on the RHS). Sent note f4369077 to the principal.
+2026-10-12 00:45 CEST: no task in review, inbox empty. T-19 still running.
+- Re-verified committed code (c80ccff + 2c6b340) on fix/t19-plan-pr-gate. 4 commits total.
+- Paren, Express->None, gate, exact test assertion: all FIXED in c80ccff.
+- STILL BROKEN: (a) stripe.Stripe -> new_api "new"; (b) sentry.Sentry -> Sentry.startSpan, sentry.Integrations -> Sentry.httpIntegration (LHS \b collisions).
+- Happy path verified: sentry.startTransaction -> Sentry.startSpan ✓, sentry.getCurrentHub -> Sentry.getCurrentScope ✓.
+- make test: 930 passed, lint clean, mypy clean (on committed code).
+- repo_exports.py and test_repo_aware_exports.py uncommitted in working tree (out of scope for T-19).
+- Pre_review_feedback already sent (4e2371a0). Waiting for implementer to fix (a)/(b) and submit.
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
