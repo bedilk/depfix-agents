@@ -1,18 +1,18 @@
 # Reviewer State
 
 ## Current Task
-Idle as of 2026-10-12. No tasks are in review and the inbox is empty. T-19 is now committed as 08a59e1 on fix/t19-plan-pr-gate (dependency_check), but its status is still running and there has been no review_request. Pre-reviewed 08a59e1. The committed test test_runner_skill_enrichment::test_enriches_sentry_start_transaction_from_skill_file FAILS at the commit. make test passes (928 passed) only because an uncommitted edit weakens the assertion to startswith(). Probe results on the committed regex: Express -> "removed, auto-instrumented"; finish -> prose; stripe.list -> "auto-pagination now default (v15+"; sentry.Sentry -> startSpan (collision); stripe.create -> paymentIntents.create (collision); startTransaction/Http keep unbalanced "(". Other skill-file migration arrows (researcher 48892ec) are uncommitted in the dependency_check working tree and widen the collision surface. Sent pre_review_feedback (6 points) to the implementer and a status note to the principal. No receipt written, because the task is not in review.
+2026-10-12 00:27 CEST: still no task in review. Acked the principal note c509e151. T-19 commits: 08a59e1 and a059180 (a059180 loosened the test). The dependency_check working tree has an uncommitted rewrite of _enrich_removal_from_skill (bullet-scoped). I pre-reviewed it with probes.
+- FIXED in WIP: paren rstrip; Express -> None (prose RHS); fix_service gate on new_api; migration_guide = single bullet; test restored to exact `== "Sentry.startSpan"`; Http/Express/gate tests added
+- STILL BROKEN in WIP: (a) stripe.Stripe -> new_api "new" (the RHS regex captures the `new` keyword); (b) last-segment \b collisions: sentry.Sentry -> Sentry.startSpan, sentry.Integrations -> Sentry.httpIntegration, stripe.create -> stripe.paymentIntents.create
+- Out-of-scope WIP: repo_exports.py sub-case B new_version=installed -> latest_version (plus test). I asked for a separate commit. At review, check that change_applies semantics hold for it.
+- Sent pre_review_feedback 886d441c to the implementer and a note to the principal.
 
-## T-19 WIP findings (verify these are fixed when review_request arrives)
-Reproduced by running the WIP regex against provider_sentry.md:
-- `_enrich_removal_from_skill`: Express -> new_api "removed, auto-instrumented" (unfixable removal treated as fixable); finish -> prose
-- `.rstrip("()")` leaves "Sentry.httpIntegration(opts" / "Sentry.startSpan({ name, op }, callback" with unbalanced parens
-- Bare last-segment symbol + substring match: collisions for short names
-- fix_service.py:201 gate uses `migration_guide` instead of `new_api`; changelog-derived guides bypass the gate
-- Whole skill file goes into migration_guide (prompt bloat)
-- Tests now exist, but one pins the paren bug and one fails. No Express->None test and no test of the fix_service new_api gate
-- DB sentry method_removed rows are `sentry.ATTR_*` constants. None of them are in the skill table, so the WIP will not unblock them. T-20 needs a seed hitting e.g. startTransaction/getCurrentHub
-- build_upgrade_plan (runner.py:1011) runs after enrichment, so the upgrade.py `not change.new_api` gate is ordered correctly
+## T-19 review checklist (when review_request arrives)
+- REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
+- Test assertion must be exact equality. Researcher skill-file edits (10 files) must be a separate commit with parseable arrows
+- Acceptance requires a dry-run on bedilk/depfix-test-sentry-v6-app showing a startTransaction fix plan
+- Still applies: DB sentry method_removed rows are sentry.ATTR_* constants with no skill entry. T-20 needs a seed that hits startTransaction/getCurrentHub
+- Run `make test` from dependency_check (no .venv; use system python/pytest, PYTHONPATH=src:.)
 
 ## Waiting For
 - T-19 (plan fix for fix PRs): running, implementer. Commit 08a59e1 is on fix/t19-plan-pr-gate. Not pushed or PR'd yet, and the acceptance dry-run is not done. At review, REJECT if the committed test fails or the Express->None / collision issues remain.
