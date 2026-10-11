@@ -1,7 +1,7 @@
 # Tester State
 
 ## Current Task
-Round 3 complete — no new tasks. Re-ran make test + make eval to verify T-5 ruby cases before reviewer picks up.
+2026-10-11 smoke test done (6/6 PASS). Full suite re-run surfaced a NEW regression: 10 unit test failures in `test_ecosystems_ruby_runtime.py` + 3 lint errors (import sorting) — not caused by me, pre-existing in dependency_check HEAD (`722c263`). Reported to principal/implementer. TASKS.json mission has moved on to T-17–T-22 (plan/PR pipeline fix); none assigned to tester yet.
 
 ---
 
@@ -1769,3 +1769,90 @@ Full results written to `research/real-repo-scan-results.md`.
 
 ### Open tasks
 All tasks T-1 through T-15 done. T-11 now complete.
+
+## 4-Hour Smoke Test (2026-10-11)
+
+### Inbox
+Principal message `3fe20f2e` (sent 2026-10-10T15:08) — `action: smoke_test, count: 6`. Acked (last smoke was 2026-10-09 ~15:02, well over 4h stale).
+
+### Smoke Test Results — `research/smoke-20261011-234429.md`
+
+| # | Provider | Repo | Files Scanned | Call Sites | Actionable | Status | Time |
+|---|---|---|---|---|---|---|---|
+| 1 | stripe | stripe-samples/accept-a-payment | 38 | 87 | 4 | **PASS** | 26s |
+| 2 | openai | mckaywrigley/chatbot-ui | 262 | 11 | 11 | **PASS** | 33s |
+| 3 | elasticsearch | medusajs/medusa | 11,988 | 2 | 0 | **PASS** | 68s |
+| 4 | octokit | probot/probot | 99 | 0 | 0 | **PASS** | 16s |
+| 5 | elasticsearch | zulip/zulip | 2,741 | 0 | 0 | **PASS** | 32s |
+| 6 | anthropic | pydantic/pydantic-ai | 3,572 | 1,815 | 7 | **PASS** | 70s |
+
+**Result: 6/6 PASS** — scanner clones and scans all 6 repos without crash.
+
+---
+
+## Full Suite Re-check (2026-10-11) — dependency_check HEAD `722c263`
+
+Ran as part of the 4-hour health check alongside the smoke test. **Found a new regression — not present in prior rounds.**
+
+### `make test`
+**Result: 10 FAILED, 907 passed, 2 deselected (76.83s)**
+
+All 10 failures in `tests/unit/test_ecosystems_ruby_runtime.py`:
+
+| Test | Error |
+|------|-------|
+| `test_build_ruby_install_argv_returns_none_when_bundler_missing` | `AssertionError: assert ['bundle', 'install', '--path', '.depfix-bundle', '--jobs', '4'] is None` |
+| `test_test_argv_returns_none_when_bundler_missing` | `TypeError: test_argv() missing 1 required positional argument: 'junit_xml_path'` |
+| `test_test_argv_returns_rspec_argv_when_rspec_file_present` | same `TypeError` |
+| `test_test_argv_returns_rspec_argv_when_spec_dir_present` | same `TypeError` |
+| `test_test_argv_returns_rake_test_when_only_minitest_present` | same `TypeError` |
+| `test_test_argv_prefers_rspec_over_minitest` | same `TypeError` |
+| `test_test_argv_returns_none_when_no_test_setup` | same `TypeError` |
+| `test_iter_gemfiles_skips_depfix_bundle_directory` | `assert not True` — `.depfix-bundle` path leaks into `_iter_gemfiles` results |
+| `test_iter_gemfiles_does_not_include_gemspec_files` | `AssertionError: assert 'my_gem.gemspec' not in ['Gemfile', 'my_gem.gemspec']` |
+| `test_ruby_lockfile_paths_excludes_depfix_bundle` | `assert not True` — `.depfix-bundle` path leaks into lockfile results |
+
+**Root causes (file:line):**
+1. **API drift, not a bug in itself** — `src/depfix/ecosystems/ruby_runtime.py:56` `build_ruby_install_argv(root, *, frozen=True)` always returns an argv list regardless of whether `bundle` is on PATH (old `install_argv()` at line 38 still does the None-when-missing check but is a different, apparently-superseded function). `test_argv()` at `ruby_runtime.py:81` now requires a second positional arg `junit_xml_path` the test suite doesn't pass. The test file tests the new function names but asserts the old functions' contracts — stale tests, not re-verified after the signature/behavior change.
+2. **Real bug** — `src/depfix/ecosystems/ruby_manifests.py:80-87` `_iter_gemfiles()`:
+   - `_SKIP` (line 12: `{".git", "vendor", "node_modules", ".bundle"}`) does **not** include `.depfix-bundle`, so depfix's own throwaway bundle-install directory gets walked and its nested `Gemfile`s are returned — these could get spec-rewritten by the fixer, corrupting the isolated install.
+   - The glob `for name in ("Gemfile", "*.gemspec")` at line 82 includes `.gemspec` files in the Gemfile-rewrite candidate list, but gemspec syntax (`s.add_dependency`) differs from Gemfile syntax — the test expects gemspecs excluded.
+
+**Severity:** Medium — the stale-test issue (#1) is a test debt problem; the `_iter_gemfiles` bug (#2) is a real correctness issue that could cause depfix to edit files inside its own throwaway bundle install directory on Ruby repos.
+
+### `make lint`
+**Result: 3 errors, all `I001` import-sort, all fixable with `ruff --fix`**
+- `src/depfix/ecosystems/manifests.py:15`
+- `src/depfix/sources/rss.py:12`
+- `src/depfix/verify/parsers.py:14`
+
+All three add `import defusedxml.ElementTree as ElementTree` (likely from the `722c263 security: harden codebase for public launch` commit, replacing `xml.etree` for XXE safety) without re-running `ruff --fix` to sort the import block.
+
+### `make typecheck`
+**Result: ERROR — blocked, unchanged pre-existing issue.** numpy stubs incompatible with Python 3.14 (`numpy/__init__.pyi:737: Type statement is only supported in Python 3.12 and greater`). Same blocker reported since round 1; still unresolved.
+
+### `make eval`
+**Result: 91% pass rate (30/33 scored), 12 skipped of 45 total** — same 3 pre-existing spec_diff failures (`spec-two-operations-removed-on-one-path`, `spec-request-body-added-new-required-field`, `spec-response-shape-changed-via-field-type`). No regressions here.
+
+### Assessment (superseded — see UPDATE below)
+This regression was **not introduced by the current TASKS.json mission** (T-17–T-22, which targets `matching.py`/`ts_exports.py`/plan generation) — at the time of this run, `ruby_runtime.py` and `ruby_manifests.py` showed no uncommitted diff. It was baked into HEAD (`722c263`).
+
+### UPDATE — fix landed live, re-verified (2026-10-11, same session)
+
+While I was writing this report, `src/depfix/ecosystems/ruby_runtime.py`, `ruby_lockfile.py`, and `ruby_manifests.py` changed on disk (uncommitted, someone — presumably implementer — actively working). The fix:
+- `_SKIP` in `ruby_manifests.py:12` now includes `.depfix-bundle`.
+- `_iter_gemfiles()` in `ruby_manifests.py:80-86` now globs only `"Gemfile"`, no longer `"*.gemspec"`.
+- `ruby_runtime.py`'s `build_ruby_install_argv`/`test_argv` now match what the tests expect (bundler-missing → `None`, `junit_xml_path` wired through).
+
+**Re-ran against the current (uncommitted) working tree:**
+- `pytest tests/unit/test_ecosystems_ruby_runtime.py -v` → **21 passed**, 0 failed.
+- `make test` → **917 passed, 0 failed, 2 deselected (70.07s)** — full regression gone.
+- `make lint` → still **3 errors** (same `I001` import-sort issues in `manifests.py`, `rss.py`, `parsers.py` — unrelated to the ruby fix, still needs `ruff --fix`).
+
+**Current true state:** the 10-test regression is fixed in the working tree but **not yet committed**. Lint (3 import-sort errors) is still failing and blocks the commit gate. Implementer needs to run `ruff check --fix` on those 3 files and commit everything together (ruby fix + lint fix) before this can go through `scripts/commit-gate.sh`.
+
+Reported to principal via inbox. No TASKS.json task currently owns this work, so no task was set to `rejected` — nothing is in-flight to reject against. Recommend principal/implementer track this as a quick fix-and-commit, separate from T-17–T-22.
+
+### Open tasks
+- **T-17–T-22**: all `ready`, owner `null` — none assigned to tester yet (T-20/T-21 depend on T-19 which hasn't started)
+- **New gap**: 10 failing unit tests (ruby_runtime API drift + real `_iter_gemfiles` bug) + 3 lint errors in dependency_check HEAD, not tied to any open task
