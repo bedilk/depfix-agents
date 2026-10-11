@@ -606,6 +606,10 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
 - No research tasks assigned. Remaining tasks (T-20/T-21 tester, T-22 implementer).
 - Idle, waiting for assignment per principal directive.
 
+## Status check (2026-10-12, later)
+- Inbox empty. No researcher-owned or ready research tasks (T-20/T-21 tester, T-22 implementer scope).
+- Principal already notified of idle status (msg 3b93570f, acked); no new message sent.
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
 - T-19 in progress (implementer): 2 commits on fix/t19-plan-pr-gate, reviewer feedback pending.
