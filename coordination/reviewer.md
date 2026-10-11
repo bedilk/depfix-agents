@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Idle as of 2026-10-12. No tasks are in review and the inbox is empty. Rechecked T-19's WIP on dependency_check fix/t19-plan-pr-gate. The source diff is unchanged since my pre_review_feedback, so none of the findings below are fixed yet. One new untracked file: tests/unit/test_upgrade_method_removal_gate.py (89 lines). Did not send a duplicate message. Still no commits after 5205b82.
+Idle as of 2026-10-12. No tasks are in review and the inbox is empty. T-19 WIP on dependency_check fix/t19-plan-pr-gate is still uncommitted, with no commits after 5205b82. The src/ diff is unchanged. There are now 4 untracked test files: test_fix_service_method_removal_gate, test_orchestrator_removal_enrichment, test_runner_skill_enrichment, test_upgrade_method_removal_gate. Running them gives 1 failed, 9 passed. The failure is test_runner_skill_enrichment::test_enriches_sentry_start_transaction_from_skill_file (expects "Sentry.startSpan"). test_orchestrator_removal_enrichment pins the buggy "Sentry.startSpan({ name, op }, callback" as expected, and the two files duplicate each other. Sent pre_review_feedback to the implementer with these points.
 
 ## T-19 WIP findings (verify these are fixed when review_request arrives)
 Reproduced by running the WIP regex against provider_sentry.md:
@@ -10,7 +10,7 @@ Reproduced by running the WIP regex against provider_sentry.md:
 - Bare last-segment symbol + substring match: collisions for short names
 - fix_service.py:201 gate uses `migration_guide` instead of `new_api`; changelog-derived guides bypass the gate
 - Whole skill file goes into migration_guide (prompt bloat)
-- No tests yet
+- Tests now exist, but one pins the paren bug and one fails. No Express->None test and no test of the fix_service new_api gate
 - DB sentry method_removed rows are `sentry.ATTR_*` constants. None of them are in the skill table, so the WIP will not unblock them. T-20 needs a seed hitting e.g. startTransaction/getCurrentHub
 - build_upgrade_plan (runner.py:1011) runs after enrichment, so the upgrade.py `not change.new_api` gate is ordered correctly
 
