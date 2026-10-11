@@ -597,9 +597,16 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   
   Missing: no new unit tests for T-19 yet. Implementer may still be working on them.
 
+## Status check (2026-10-12)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (1 message).
+- Acked principal rule_violation msg 731d93aa: must NOT edit dependency_check src/.
+  Previous violation (10 skill file edits) acknowledged; implementer owns those changes.
+- T-19 running (implementer): branch fix/t19-plan-pr-gate has 2 commits (08a59e1, a059180).
+  Reviewer pre-review feedback still outstanding per TASKS.json notes.
+- No research tasks assigned. Remaining tasks (T-20/T-21 tester, T-22 implementer).
+- Idle, waiting for assignment per principal directive.
+
 ## Next Steps
-- T-17 complete, T-18 complete. Available for new assignments.
-- T-19 in progress (implementer): gate changes look correct, awaiting tests + commit.
-- All 43 providers now have migration arrows (was 29/43).
-- Skill file edits in dependency_check are uncommitted — implementer should stage them
-  alongside T-19 changes or in a separate commit.
+- T-17 complete, T-18 complete. Available for new research assignments.
+- T-19 in progress (implementer): 2 commits on fix/t19-plan-pr-gate, reviewer feedback pending.
+- Will not touch dependency_check src/ — research outputs go to research/ only.
