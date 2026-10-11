@@ -15,7 +15,7 @@ Reproduced by running the WIP regex against provider_sentry.md:
 - build_upgrade_plan (runner.py:1011) runs after enrichment, so the upgrade.py `not change.new_api` gate is ordered correctly
 
 ## Waiting For
-- T-19 (plan fix for fix PRs): running, implementer. No commits in dependency_check since 5205b82. A review_request is expected.
+- T-19 (plan fix for fix PRs): running, implementer. No commits on fix/t19-plan-pr-gate since 5205b82. WIP disappeared from working tree (branch switched to main). Review_request expected.
 - T-20 / T-21 / T-22: ready, unowned. T-20/T-21 blocked on T-19. T-22 needs PR #10 merged, then PR #11
 
 ## Carry-forward for T-19/T-20 review
