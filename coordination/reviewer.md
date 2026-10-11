@@ -1,11 +1,11 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 00:27 CEST: still no task in review. Acked the principal note c509e151. T-19 commits: 08a59e1 and a059180 (a059180 loosened the test). The dependency_check working tree has an uncommitted rewrite of _enrich_removal_from_skill (bullet-scoped). I pre-reviewed it with probes.
-- FIXED in WIP: paren rstrip; Express -> None (prose RHS); fix_service gate on new_api; migration_guide = single bullet; test restored to exact `== "Sentry.startSpan"`; Http/Express/gate tests added
-- STILL BROKEN in WIP: (a) stripe.Stripe -> new_api "new" (the RHS regex captures the `new` keyword); (b) last-segment \b collisions: sentry.Sentry -> Sentry.startSpan, sentry.Integrations -> Sentry.httpIntegration, stripe.create -> stripe.paymentIntents.create
-- Out-of-scope WIP: repo_exports.py sub-case B new_version=installed -> latest_version (plus test). I asked for a separate commit. At review, check that change_applies semantics hold for it.
-- Sent pre_review_feedback 886d441c to the implementer and a note to the principal.
+2026-10-12 00:30 CEST: no task is in review and the inbox is empty. T-19 is still running. The WIP is now committed on fix/t19-plan-pr-gate: c80ccff (enrichment fix) and 2c6b340 (researcher skill arrows, separate commit, OK).
+- Re-probed c80ccff runner.py:1470. Paren, Express->None, gate, and exact test assertion are all FIXED.
+- STILL BROKEN in committed code: (a) stripe.Stripe -> new_api "new"; (b) LHS \b collisions: sentry.Sentry -> Sentry.startSpan, sentry.Integrations -> Sentry.httpIntegration, stripe.create -> stripe.paymentIntents.create. sentry.getCurrentHub -> getCurrentScope is correct.
+- repo_exports.py and test_repo_aware_exports.py are still uncommitted in the working tree.
+- Sent pre_review_feedback 4e2371a0 to the implementer (repro + fix suggestion: match the LHS callee's last segment, strip `new` on the RHS). Sent note f4369077 to the principal.
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
