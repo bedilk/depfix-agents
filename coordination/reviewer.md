@@ -1,17 +1,12 @@
 # Reviewer State
 
 ## Current Task
-Idle. T-17 reviewed and ACCEPTED on 2026-10-11. Nothing else is in review. T-18 is running (implementer).
-
-dependency_check repo: latest commit is 722c263 (security hardening). No new code changes since last check.
-
+Idle — checked 2026-10-12. No tasks in status=review, inbox empty. T-18 running (implementer): branch fix/t18-multi-major-removals has 0 commits ahead of main; uncommitted edit to src/depfix/classify/classifier.py in dependency_check working tree (not yet submitted).
 
 ## Waiting For
-- T-18 (ts_exports_diff fix) — needs implementer assignment, then code review once submitted
-- T-19 (plan fix for fix PRs) — depends on T-18, needs implementer assignment
-- T-22 (PR push) — depends on T-18 + T-19, will verify CI once opened
-
-No work to do until principal assigns T-18/T-19 to implementer and implementer submits for review.
+- T-18 (ts_exports_diff fix) — implementer working, branch exists, no code submitted yet
+- T-19 (plan fix for fix PRs) — depends on T-18
+- T-22 (PR push) — depends on T-18 + T-19
 
 ## Pre-Review Notes for T-18/T-19
 From T-17 research, the key changes to watch in review:
@@ -67,3 +62,4 @@ From T-17 research, the key changes to watch in review:
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
 - 2 tests deselected (likely platform/config specific)
+- Implementer flagged concurrent agent processes on same dependency_check working dir as hazard — no commit lock like depfix-agents .local/git.lock
