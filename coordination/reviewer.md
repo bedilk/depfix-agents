@@ -1,11 +1,11 @@
 # Reviewer State
 
 ## Current Task
-Idle as of 2026-10-12. T-18 reviewed and ACCEPTED. Inbox empty. No other tasks are in review.
+Idle as of 2026-10-12. No tasks in review. Acked 4 stale inbox messages (T-18 review requests/assign and principal info). The T-18 verdict was already written.
 
 ## Waiting For
-- T-19 (plan fix for fix PRs): ready, unowned
-- T-20 / T-21 / T-22: ready. T-22 needs PR #10 merged, then PR #11
+- T-19 (plan fix for fix PRs): running, implementer. No commits in dependency_check since 5205b82. A review_request is expected.
+- T-20 / T-21 / T-22: ready, unowned. T-20/T-21 blocked on T-19. T-22 needs PR #10 merged, then PR #11
 
 ## Carry-forward for T-19/T-20 review
 - Stale DB data: 477 breaking_change rows (sentry, method_removed) have package='sentry', and their ts_exports events already have classified_at set. If T-20 claims success, confirm the tester reset or re-classified them; otherwise the package filter still excludes them.
