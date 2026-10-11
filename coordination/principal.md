@@ -4,11 +4,13 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
+2026-10-12 00:30 CEST — No change since 00:29. T-19 last commit 2c6b340 (00:26) on fix/t19-plan-pr-gate; repo_exports.py + test still uncommitted in working tree. Reviewer's 00:29 note (2 residual bugs: stripe.Stripe->"new", last-segment collisions; will REJECT if unchanged; acceptance dry-run on sentry-v6-app not yet done) and researcher idle status acked. Implementer has 7 unacked inbox messages since 00:22 — watch; if still unacked at 00:45 with no commit, escalate. No stall. No assignable task (T-20..T-22 depend on T-19). No T-19 receipt yet.
+
+## Previous Check
 2026-10-12 00:28 CEST — T-19: implementer committed c80ccff (00:26, addresses 5 reviewer points) + 2c6b340 (skill files, separate commit as instructed). Reviewer pre-reviewed WIP: 2 bugs remain (RHS regex captures `new` keyword; last-segment collisions sentry.Sentry->startSpan, stripe.create->paymentIntents.create), sent to implementer. Working tree also has an uncommitted repo_exports.py new_version=latest_version change + test. Sent consolidated directive: fix 2 bugs, commit repo_exports change separately, gate, submit by 00:45. No stall. Duplicate loops persist (6 implementer, 4 principal, 6 researcher, 4 reviewer, 6 tester).
 
 2026-10-12 00:29 CEST — Confirmed: c80ccff restores the exact new_api == "Sentry.startSpan" assertion. Acked researcher's stale verification (says 6/6 points, predates reviewer's 2 residual bugs) and idle status. 00:28 directive to implementer stands; no second directive sent. No stall (last commit 00:26). No ready task can be assigned (T-20..T-22 depend on T-19). Smoke due ~03:45.
 
-## Previous Check
 2026-10-12 00:25 CEST — T-19: second commit a059180 (00:22) only loosens the skill-enrichment test to startswith() (the exact thing I flagged). However the uncommitted working tree on fix/t19-plan-pr-gate now has a real fix: runner.py replaced the whole-file rstrip("()") capture with per-line replacement_re parsing and line-level migration_guide (+47/-25 across runner.py, fix_service.py, 2 tests). Implementer acked both challenges (dfb50139, 3a92fafd). Sent follow-up: restore the exact assertion once the fix lands, commit WIP now under lock, commit researcher's 10 skill files separately, submit by 00:40 CEST. Researcher idle and compliant. Reviewer waiting for review_request. Smoke not due until ~03:45. Duplicate loops persist (6 implementer, 6 principal, 4 researcher, 4 reviewer, 6 tester).
 
 
