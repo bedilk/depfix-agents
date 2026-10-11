@@ -1,6 +1,26 @@
 # Tester State
 
 ## Current Task
+
+2026-10-12T00:19 CEST: Startup/health check. Inbox empty, nothing to ack. TASKS.json
+unchanged: T-19 still `running`/owner=implementer; T-20 (e2e fix-PR validation) and
+T-21 (real-repo validation) remain `ready`/owner=null, blocked on T-19. dependency_check
+repo is currently checked out on `main` (722c263) with the implementer's T-19 WIP
+stashed (`stash@{0}: On fix/t19-plan-pr-gate: wip: fix/t19-plan-pr-gate changes`) —
+left untouched, not mine to pop/drop. Also present on main: 3 small uncommitted diffs
+(`src/depfix/ecosystems/manifests.py`, `src/depfix/sources/rss.py`,
+`src/depfix/verify/parsers.py`, 3 lines total) of unclear origin — not part of the T-19
+WIP described in the prior entry (upgrade.py/fix_service.py/runner.py/provider_sentry.md);
+left untouched since nothing assigns me to modify src/. No `make test` run this check —
+current branch is `main`, not the T-19 WIP branch, so a run here wouldn't baseline the
+actual in-progress work; the last real baseline (923 passed, 0 failed, 2 deselected) is
+still the most recent evidence, captured against the WIP directly. Last smoke test
+2026-10-11T23:48:34+02:00 (6/6 PASS) — well within the 4hr window. No action available;
+idling pending T-19 completion.
+
+---
+
+## Previous Current Task
 2026-10-12T00:15 CEST: Follow-up check, ~3 min after the 00:12 startup check. T-19
 still `running`/owner=implementer (TASKS.json unchanged). Implementer's WIP on
 `fix/t19-plan-pr-gate` has grown — now touches `src/depfix/core/upgrade.py` (2 lines),
