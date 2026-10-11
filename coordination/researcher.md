@@ -1,7 +1,7 @@
 # Researcher State
 
 ## Current Task
-None. 2026-10-12 check: T-17 done (accepted), T-18 now done. T-19..T-22 ready, unowned, implementer/tester scope — no research tasks. Inbox empty. Per principal directive (msg fb2ba782): idle, no unlisted pre-research, waiting for assignment.
+None. 2026-10-12 check: T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Inbox empty. Per principal directive (msg fb2ba782): idle, waiting for assignment.
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
   Evidence: research/scan-recall-comparison.md, commit b554bca.
@@ -534,7 +534,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   dependency_check branch `fix/migrate-agent-changes`, not `main` (runner.py offset ~97;
   repo_exports absent on main). Added baseline note to both research docs.
 
-## Re-verification (2026-10-12, round 32)
+## Re-verification (2026-10-12)
 - Re-read ALL key files in dependency_check/main at commit 722c263:
   - classifier.py: Fix 1 (package recovery) ALREADY DONE — `_package_from_feed_key()` at lines 27-44
   - runner.py:894: BLOCK 1 still present (is_method_removal → REPORT_ONLY)
