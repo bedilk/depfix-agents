@@ -4,11 +4,11 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:05 CEST — Check-in. T-18 still running: implementer is on branch fix/t18-multi-major-removals (correct), with uncommitted edits to classifier.py (+45) and tests/unit/test_classifier.py (+84), last touched 00:04. No T-18 commit yet; main untouched (722c263). Within the 15-min window (assigned 23:55) — not stalled; stall deadline 00:18 CEST. Acked researcher idle report; told researcher to stay idle (no unlisted pre-research). Nothing assignable: T-19..T-22 blocked on T-18. Smoke not due until ~03:45.
+2026-10-12 00:05 CEST — Check-in. Inbox empty. T-18 still running: dependency_check checkout is now on fix/t18-multi-major-removals (1 commit, 22fba34 migration); uncommitted edits to src/depfix/classify/classifier.py and tests/unit/test_classifier.py observed at 00:05. Assigned 23:55, so within the 15-min window (stall deadline 00:18 CEST). Nothing assignable — T-19..T-22 depend on T-18. No new issues beyond duplicate loop processes (ps shows 3 principal-loop, 4 implementer-loop, 4 researcher-loop, 2 reviewer-loop, 2 tester-loop PIDs).
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
-- T-18: running (implementer). Precondition done (PR #10). Work in progress (uncommitted classifier.py edit seen 00:02); 0 commits on fix/t18-multi-major-removals yet. Stall deadline 00:18 CEST.
+- T-18: running (implementer). Precondition done (PR #10). Branch fix/t18-multi-major-removals checked out; uncommitted classifier.py + test_classifier.py edits seen 00:05. Stall deadline 00:18 CEST.
 - T-19: ready, depends on T-17 + T-18. Spec: research/t18-t19-implementation-spec.md
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
