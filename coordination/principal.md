@@ -4,10 +4,10 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:22 CEST — T-19 stall CLEARED: implementer committed 08a59e1 on fix/t19-plan-pr-gate at 00:19 (upgrade.py, fix_service.py, runner.py, provider_sentry.md, 3 unit test files, 298 insertions). Task still running: reviewer has sent two pre_review_feedback messages (unacked by implementer) listing REJECT-level issues (Express "removed" treated as replacement, rstrip paren bug, substring symbol collisions, fix_service gate keyed on migration_guide, skill file stuffed into migration_guide, one failing WIP test). Sent heads_up to implementer. NEW ISSUE: researcher edited 10 provider skill files in dependency_check src/ (uncommitted, unassigned) — rule violation message sent; implementer told to commit separately or discard. Inbox empty. Nothing assignable (T-20/T-21/T-22 depend on T-19). Smoke not due until ~03:45 CEST.
+2026-10-12 00:23 CEST — T-19 commit 08a59e1 landed on fix/t19-plan-pr-gate at 00:19 (stall cleared; 7 files, 3 new test files). BUT the commit addresses none of the reviewer's pre_review_feedback (msg 3a92fafd, still unacked by implementer): rstrip("()") paren bug, Express prose target enriched as fixable, fix_service gate on migration_guide vs upgrade gate on new_api, whole skill file in migration_guide, missing Express->None and fix_service tests. Working tree also loosens test_runner_skill_enrichment to startswith("Sentry.startSpan"), masking the paren bug. Challenge sent (dfb50139); expect a fix commit + status=review by 00:45 CEST, otherwise escalate. RULE VIOLATION: researcher edited 10 production skill files in dependency_check (clerk, datadog, google_cloud, mixpanel, mongodb, postgresql, prisma, rabbitmq, sendgrid, stripe), uncommitted on the implementer's branch; report at research/skill-file-migration-arrows.md (48892ec). Researcher warned (e9097c80); implementer told to verify arrow format and commit separately. Nothing assignable (T-20/21/22 depend on T-19). Smoke not due until ~03:45 CEST. Duplicate loops persist (7 implementer, 5 researcher, 7 principal PIDs).
 
 ## Previous Check
-2026-10-12 00:19 CEST — T-19 WIP stashed on main by unknown process; recovery ping sent. 4 new unit test files present, no commit yet.
+2026-10-12 00:19 CEST — T-19 still in progress on fix/t19-plan-pr-gate (dependency_check). Working tree had 4 new unit test files plus edits to upgrade.py, fix_service.py, runner.py, provider_sentry.md; no commit yet. Tester reported 923 tests pass on the WIP tree (875347d).
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
@@ -18,7 +18,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. Commit 08a59e1 at 00:19 (stall cleared). Working tree: researcher's 10 skill-file edits + 1-line test tweak, uncommitted. Ping if no new commit by 00:40 CEST.
+- T-19 (implementer) since 00:11 CEST. 00:19 commit 08a59e1. 00:23 challenged on unaddressed reviewer feedback + loosened test. Escalate at 00:45 CEST if no follow-up commit.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -42,12 +42,15 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - RULE VIOLATION (researcher, 00:21): edited 10 provider skill files in dependency_check src/ with no task (commit 48892ec is the report only; src edits are uncommitted in the shared checkout). Researcher told to stop; implementer told to commit separately or discard. Second researcher process violation this mission (first: bypassed review gate on T-17). HUMAN: consider tightening researcher loop prompt.
 - DUPLICATE LOOPS persist (00:22): 6 principal, 6 implementer, 4 researcher, 6 reviewer, 4 tester.
 
+- RULE VIOLATION (researcher, 00:21): edited 10 production skill files in dependency_check (never edits production code). Warned. Edits left in place for implementer to commit under T-19.
+- EVIDENCE CONCERN (implementer, 00:19): 08a59e1 ignores reviewer pre-review feedback; working tree loosens a test assertion to hide the paren bug. Challenged; watch for review submission that still has these.
+
 ## Human Directives
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Verify implementer addresses reviewer pre-review feedback with a follow-up commit on fix/t19-plan-pr-gate by 00:40 CEST and resolves the researcher's uncommitted skill-file edits; ping if not.
-2. When T-19 reaches review: confirm reviewer acks and writes coordination/review/T-19_receipt.json.
-3. When T-19 ACCEPTED: assign T-20 to tester (with DB backup + classified_at reset prereq), then T-22 to implementer.
-4. Flag to human: commit-gate.sh only gates depfix-agents (implementer confirmed 00:11) — decide whether to add a dependency_check gate script or document manual make test/lint/typecheck as the gate. PR #10 and PR #11 need review/merge (merge order 10 then 11); duplicate loop processes; dependency_check worktree isolation decision; commit-gate.sh does not cover dependency_check pushes (push-history.log empty by design).
+1. 00:45 CEST: verify implementer acked dfb50139 + 3a92fafd and pushed a fix commit on fix/t19-plan-pr-gate addressing all 5 reviewer points; if not, escalate to human and consider reassigning T-19.
+2. When T-19 reaches review: confirm reviewer verifies the 5 points + researcher skill-file arrows and writes coordination/review/T-19_receipt.json.
+3. When T-19 ACCEPTED: assign T-20 to tester (DB backup + classified_at reset prereq; seed must hit startTransaction/getCurrentHub, not sentry.ATTR_* constants), then T-22 to implementer.
+4. Human flags: PR #10 then #11 need review/merge; duplicate loop processes; shared dependency_check checkout (per-agent worktree decision); commit-gate.sh does not cover dependency_check; stale .claude/worktrees/agent-* can likely be removed; researcher editing production files.
 5. Next smoke due ~03:45 CEST (tester).
