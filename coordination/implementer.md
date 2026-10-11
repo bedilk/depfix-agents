@@ -1,7 +1,21 @@
 # Implementer State
 
 ## Current Task
-No active task. All assigned tasks are done.
+T-18 in review (owner=reviewer). No task currently running/owner=implementer. Idle,
+available for T-19 when principal assigns it.
+
+## IMPORTANT: concurrency protocol (effective 2026-10-11 ~22:02 UTC)
+Principal confirmed multiple implementer-loop processes run concurrently against the
+SAME dependency_check working directory (no worktree isolation). I personally hit this
+live while working T-18: my uncommitted classifier.py/test_classifier.py edits were
+swept up and committed/pushed by a concurrent process under its own commit message
+before my own `git commit` ran (content identical, message different — confirmed via
+`git show --stat` + diff comparison). No work was lost, but it means two instances can
+do the same task redundantly and whichever flock-protected commit lands first wins.
+**From now on: wrap every git-mutating command in dependency_check (checkout, add,
+commit, push) with `flock /Users/bedil_karimov/Documents/depfix-agents/.local/git.lock`,
+and run `git branch --show-current` immediately before any commit** — per principal's
+directive (inbox messages ffeaf01f.../13bb7efb...).
 
 ## Completed Work
 - T-3: Added provider_redis.md skill file covering ioredis, node-redis v3/v4 (with breaking-change notes), redis-py, redis gem.
@@ -112,3 +126,21 @@ Be careful with branch checkouts in dependency_check until this is addressed -- 
   dependency_check: make test 917 passed, make lint clean, make typecheck clean,
   make eval 91% (30/33, matches known baseline). Committed on fix/migrate-agent-changes,
   pushed to origin, PR: https://github.com/bedilk/dependency_check/pull/10.
+
+- T-18: Fixed classifier.py package-recovery bug (T-17 root cause #2). Generalized the
+  DIST_TAG-only feed_key package recovery into `_package_from_feed_key()`, applied at
+  the top of `Classifier.classify()` for every feed_key prefix carrying a real package
+  identity (npm, ts_exports, pypi, rubygems) — including the scan-bootstrap
+  `:repo:<key>:installed:<v>` suffix. Fixes the "sentry" vs "@sentry/node" mismatch that
+  made build_upgrade_plan's package filter exclude every ts_exports-derived
+  METHOD_REMOVED record (including T-15's multi-major synthetic changes from
+  repo_exports.py, which already does the installed-vs-latest compare via
+  `_exports_for()` — that mechanism needed no further change for T-18's acceptance).
+  Added/confirmed unit tests in tests/unit/test_classifier.py covering npm/pypi/rubygems/
+  ts_exports feed-key recovery and the scan-bootstrap suffix case.
+  make test: 921 passed, 0 failed. make lint/typecheck: clean.
+  Branch fix/t18-multi-major-removals (based on fix/migrate-agent-changes, PR #10, since
+  it needs repo_exports.py which isn't on main yet). Committed 5205b82, pushed, PR:
+  https://github.com/bedilk/dependency_check/pull/11. TASKS.json already moved to
+  status=review/owner=reviewer by the time I checked (concurrent process — see note
+  above); sent the missing review_request to reviewer and a status update to principal.
