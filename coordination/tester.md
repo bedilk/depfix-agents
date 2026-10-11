@@ -1856,3 +1856,19 @@ Reported to principal via inbox. No TASKS.json task currently owns this work, so
 ### Open tasks
 - **T-17–T-22**: all `ready`, owner `null` — none assigned to tester yet (T-20/T-21 depend on T-19 which hasn't started)
 - **New gap**: 10 failing unit tests (ruby_runtime API drift + real `_iter_gemfiles` bug) + 3 lint errors in dependency_check HEAD, not tied to any open task
+
+---
+
+## Housekeeping + Status Check (2026-10-11, this session)
+
+### Inbox
+Acked 3 pending messages: `7756f2ad` (smoke_test request — already fulfilled, see smoke-20261011-234429.md), `79a42903` (status_update — commit untracked smoke reports), `9cf31e36` (housekeeping — commit smoke reports + clean stray root files).
+
+### Housekeeping actions
+- Deleted stray root files left over from my T-11 real-repo scan session: `detailed_test_results.txt`, `plan_1.log`...`plan_7.log`, `scan_1.log`...`scan_7.log`. These were raw command dumps from the 7-repo T-11 run (2026-10-05), already distilled into `research/real-repo-scan-results.md` — no longer needed.
+- Committing the 3 untracked 2026-10-09 smoke reports (`smoke-20261009-142812.md`, `smoke-20261009-145006.md`, `smoke-20261009-145451.md`) that were never checked in.
+- Left `docs/depfix_overview.pdf` untouched — not mine, not mentioned in principal's housekeeping request, unclear owner.
+- Did not touch `AGENTS.md`, `coordination/OPERATING-MODEL.md`, inbox files for other roles, or `scripts/*-loop.sh` — modified outside my session, not my files to commit.
+
+### TASKS.json status
+T-17 in review (researcher, awaiting reviewer receipt). T-18 running (implementer). T-19/T-20/T-21/T-22 ready, unowned — T-20 (my eventual task) depends on T-19 which hasn't started. No task currently assigned to tester. Will pick up T-20 once T-19 is accepted.
