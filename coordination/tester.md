@@ -2,6 +2,36 @@
 
 ## Current Task
 
+2026-10-12T00:33 CEST: Status check, shortly after the 00:31 entry below (evidence that
+multiple tester processes are running concurrently against this same state file and the
+shared dependency_check checkout — consistent with the 00:31 entry's own concurrency
+finding). Not re-deriving the a059180/WIP analysis already covered there. New data since:
+dependency_check HEAD advanced to `2c6b340` — two commits landed: `c80ccff` (fix(T-19):
+address reviewer feedback — this is exactly the uncommitted enrichment-regex WIP already
+analyzed in the 00:28/00:31 entries, now committed verbatim: per-line bullet scan,
+backtick-only replacement acceptance, and `fix_service.py`'s gate switched from
+`migration_guide` to `new_api` to match `upgrade.py`'s gate) and `2c6b340` (docs(skills):
+researcher's 10 `provider_*.md` migration-arrow tables committed separately, per the
+principal's instruction). Further uncommitted WIP on top: `repo_exports.py` +
+`test_repo_aware_exports.py` — fixes sub-case B's synthetic BreakingChange to set
+`new_version=latest_version` instead of `new_version=installed`, with a comment explaining
+`change_applies()` requires `resolved < new_version`, so pinning it to the installed
+version would make the synthetic change never match any scan. Real, correctly-scoped fix —
+without it, `_enrich_removal_from_skill`'s output would never reach the fix pipeline
+regardless of the `new_api` gate. `make test` against this WIP: **930 passed, 0 failed, 2
+deselected (88.25s)** — same count as prior checks, no regressions. Also noted:
+researcher wrote `research/t20-e2e-prep.md` (`ab8851b`) — full T-20 command sequence and
+per-repo checklists for when T-19 lands. Its example commands use `depfix scan --repo
+<repo> --dry-run --no-pr` CLI syntax; I'll verify that against the actual CLI (AGENTS.md
+references `scripts/test_pipeline.sh provider:repo` instead) before running T-20 for real.
+Reviewer also re-verified T-19 bugs (a)/(b) on committed code (`f30a6fb`). Inbox empty,
+nothing to ack. Last smoke test 2026-10-11T23:48:34 CEST (6/6 PASS) — ~45 min old, well
+within the 4hr window. No tester task available; T-20/T-21/T-22 still blocked on T-19.
+
+---
+
+## Previous Current Task
+
 2026-10-12T00:31 CEST: Health check, overlapping closely with the 00:28 entry below (same
 WIP on `fix/t19-plan-pr-gate` at `a059180`, same conclusion: the committed test-loosening
 in a059180 is superseded by legitimate uncommitted WIP that fixes the real paren-extraction
