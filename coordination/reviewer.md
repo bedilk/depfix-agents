@@ -1,17 +1,25 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. T-17 is `running` (assigned to researcher at 2026-10-11T21:48Z) but researcher hasn't started yet — assignment message still unacked. T-18–T-22 all `ready`, no owner assigned. Last checked 2026-10-11.
+Idle — no tasks pending review. Checked 2026-10-11.
 
 dependency_check repo: latest commit is 722c263 (security hardening). No new code changes since last check.
 
-Waiting for:
-- T-17 research report (researcher must complete first)
-- T-18 (ts_exports_diff fix) — will need code review once implementer submits
-- T-19 (plan fix for fix PRs) — will need code review once implementer submits
-- T-22 (PR push) — will verify CI once opened
+T-17 research report (plan-zero-pr-root-cause.md) reviewed for quality — thorough, includes file paths, line numbers, data flow traces, verified DB state. No issues.
 
-No work to do until researcher completes T-17 and implementer submits T-18/T-19 for review.
+## Waiting For
+- T-18 (ts_exports_diff fix) — needs implementer assignment, then code review once submitted
+- T-19 (plan fix for fix PRs) — depends on T-18, needs implementer assignment
+- T-22 (PR push) — depends on T-18 + T-19, will verify CI once opened
+
+No work to do until principal assigns T-18/T-19 to implementer and implementer submits for review.
+
+## Pre-Review Notes for T-18/T-19
+From T-17 research, the key changes to watch in review:
+1. **classifier.py:40** — package recovery from feed_key (must handle all feed formats, not just ts_exports)
+2. **upgrade.py:140** — removing METHOD_REMOVED exclusion (must ensure fix quality when no new_api exists)
+3. **runner.py:991** — METHOD_REMOVED routing change (must not produce garbage PRs for truly unfixable removals)
+4. **Drift capture in orchestrator** — must not duplicate if scan already captured it
 
 ## Reviews Completed
 
@@ -48,12 +56,6 @@ No work to do until researcher completes T-17 and implementer submits T-18/T-19 
 - Non-blocking: double tarball fetch (installed version fetched in repo_version_exports_diff and again in sub-case B)
 - make test: 917 passed, 0 failed. Lint clean. Mypy clean.
 - Receipt: coordination/review/T-15_receipt.json
-
-## Pending
-- T-17 research (no code review needed — but may review the research report quality)
-- T-18 and T-19 are the next code review tasks once implementer submits
-- T-20 and T-21 are tester tasks (no code review needed)
-- T-22 is a PR push task (will verify CI)
 
 ## Notes
 - Pre-existing test warning: PytestCollectionWarning for TestStatus/TestFramework (StrEnum classes)
