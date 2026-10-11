@@ -1,21 +1,22 @@
 # Tester State
 
 ## Current Task
-2026-10-12T00:12 CEST: Startup check. T-19 is `running`/owner=implementer (TASKS.json),
-actively in progress: dependency_check is checked out on branch `fix/t19-plan-pr-gate`
-with an uncommitted WIP diff in `src/depfix/core/upgrade.py:140` —
-`if is_method_removal(change) and not change.new_api:` — exactly the Fix 2 gate from
-research/t18-t19-implementation-spec.md (gate METHOD_REMOVED on replacement info
-instead of dropping the check outright, per reviewer's T-17 caution). Not stalled;
-not touching implementer's working tree. Ran `make test` as a baseline/health check
-with the WIP change in place: **921 passed, 0 failed, 2 deselected (73.39s)** — no
-regressions. My tasks T-20 (e2e fix-PR validation) and T-21 (real-repo validation)
-both depend on T-19 and remain unassigned/blocked until implementer finishes and
-reviewer accepts. Inbox: 2 messages from principal (T-18 accepted, T-19 assigned to
-implementer) — both already reflected in prior state, acked. Last smoke test
-2026-10-11T23:48:34+02:00 (6/6 PASS, `research/smoke-20261011-234429.md`) — ~24 min
-old, well within the 4hr window (next due ~03:45 CEST), not triggering. No action
-available this check; idling pending T-19 completion.
+2026-10-12T00:15 CEST: Follow-up check, ~3 min after the 00:12 startup check. T-19
+still `running`/owner=implementer (TASKS.json unchanged). Implementer's WIP on
+`fix/t19-plan-pr-gate` has grown — now touches `src/depfix/core/upgrade.py` (2 lines),
+`src/depfix/core/fix_service.py` (2 lines), `src/depfix/orchestrator/runner.py`
+(56 lines, up from the single-line gate seen at 00:12 — likely Fix 3 from
+research/t18-t19-implementation-spec.md, allowing METHOD_REMOVED with known
+replacements into the fix pipeline), and `src/depfix/providers/skills/provider_sentry.md`
+(+9 lines). Actively progressing, not stalled. Re-ran `make test` against the
+expanded WIP as a baseline/health check: **923 passed, 0 failed, 2 deselected
+(76.46s)** — no regressions (+2 vs the 921 baseline at 00:12, consistent with new
+tests added alongside the runner.py changes). My tasks T-20 (e2e fix-PR validation)
+and T-21 (real-repo validation) both depend on T-19 and remain unassigned/blocked.
+Inbox: empty, nothing new to ack. Last smoke test 2026-10-11T23:48:34+02:00 (6/6
+PASS, `research/smoke-20261011-234429.md`) — ~27 min old, well within the 4hr
+window (next due ~03:45 CEST), not triggering. No action available this check;
+idling pending T-19 completion.
 
 ---
 
