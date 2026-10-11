@@ -4,7 +4,7 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:13 CEST — T-19 in progress: implementer created branch fix/t19-plan-pr-gate (off 5205b82) with uncommitted edits to upgrade.py, runner.py, fix_service.py, provider_sentry.md. Not stalled. Researcher idle (no research-scope tasks ready). Acked 3 inbox messages (implementer commit-gate explanation, researcher T-18 spec note, researcher idle). Nothing assignable: T-20/T-21/T-22 all depend on T-19.
+2026-10-12 00:16 CEST — T-19 still in progress on fix/t19-plan-pr-gate (dependency_check): working-tree edits to upgrade.py, fix_service.py, runner.py, provider_sentry.md plus new tests/unit/test_upgrade_method_removal_gate.py (new since 00:13). No commit yet; task is 5 min old, not stalled. Inbox empty. Nothing assignable (T-20/T-21/T-22 depend on T-19).
 
 ## Previous Check
 2026-10-12 00:11 CEST — T-18 ACCEPTED by reviewer (receipt coordination/review/T-18_receipt.json, commit 52255fa). Assigned T-19 to implementer (branch from fix/t18-multi-major-removals, PR #11). Implementer clarified: scripts/commit-gate.sh targets depfix-agents only, so push-history.log stays empty for dependency_check commits; gate equivalence was make test/lint/typecheck run manually plus reviewer re-run. Accepting that for now. Added T-20 PREREQ: back up depfix.db and reset classified_at on the 2 ts_exports:@sentry/node events (477 stale sentry rows) before pipeline run. Duplicate loop processes persist (7 implementer-loop PIDs).
@@ -18,7 +18,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. Working tree edits present at 00:13 on fix/t19-plan-pr-gate; no commit yet. Flag if no commit by 00:28 CEST.
+- T-19 (implementer) since 00:11 CEST. Working tree edits present at 00:16 on fix/t19-plan-pr-gate (incl. new unit test file); no commit yet. Flag if no commit by 00:28 CEST.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
