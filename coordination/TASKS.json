@@ -17,15 +17,18 @@
     {
       "id": "T-18",
       "title": "Fix ts_exports_diff to detect API removals across multiple major versions",
-      "status": "running",
-      "owner": "implementer",
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": [
         "T-17"
       ],
       "acceptance": "When a repo has SDK version X installed and latest is version Y (where Y - X > 1 major), ts_exports_diff compares X's exports against Y's exports and creates BreakingChange records for all removed symbols. Uses existing _exports_for(version) which can fetch ANY version's exports. make test passes, new unit tests cover the multi-major case.",
-      "evidence_paths": [],
-      "next_action": "Implementer: in dependency_check, branch fix/t18-multi-major-removals from main. Reconcile the uncommitted working-tree edits first (runner.py, evals/*, providers.yaml, Makefile, ruby_*). Then implement the T-17 fixes: classifier.py:40 recover package from feed_key; ts_exports_diff multi-major compare via _exports_for; unit tests for multi-major case. Run bash scripts/commit-gate.sh, open PR with gh pr create, set status=review.",
-      "notes": "Key file: dependency_check/src/depfix/sources/ts_exports.py. _exports_for(version) at line ~185 can fetch exports for any npm version via tarball download \u2014 this is the building block. T-17 findings: T-15's repo_exports.py already does installed\u2192latest diff (IS wired at runner.py:396). But the REAL blockers are: (1) classifier.py:40 sets package=provider_id ('sentry') instead of '@sentry/node' because event.raw not persisted \u2014 fix by recovering from feed_key. (2) All ts_exports changes are METHOD_REMOVED which upgrade.py:140 excludes from upgrades. (3) runner.py:991 routes METHOD_REMOVED to REPORT_ONLY. | Assigned to implementer 2026-10-11 23:55 CEST while T-17 is in review (research is committed at 924c33f)."
+      "evidence_paths": [
+        "https://github.com/bedilk/dependency_check/pull/11",
+        "dependency_check commit 5205b82 on branch fix/t18-multi-major-removals"
+      ],
+      "next_action": "Reviewer: verify PR #11 (base fix/migrate-agent-changes, i.e. stacked on PR #10).",
+      "notes": "COMPLETED 2026-10-12. Found that the multi-major detection acceptance criteria was ALREADY satisfied by T-15's repo_exports.py (synthetic_changes_for_scan, sub-cases A+B) which landed in PR #10 (branch fix/migrate-agent-changes) \u2014 it uses _exports_for_version (a repo_exports.py-local twin of ts_exports.py's _exports_for) to diff the repo's installed version against latest regardless of how many majors apart. The remaining real gap was Fix 1 from research/t18-t19-implementation-spec.md: classifier.py:40 set package=provider_id ('sentry') instead of the real npm package ('@sentry/node') for persisted ts_exports spec-diff events, because event.raw isn't persisted to ChangeEventRow and the feed_key-recovery logic only ran inside the NPM/PYPI/RUBYGEMS_DIST_TAG branch. Generalized into _package_from_feed_key(), applied unconditionally at the top of classify() for npm:/ts_exports:/pypi:/rubygems: prefixes (incl. the scan-bootstrap ':repo:<key>:installed:<v>' suffix). Without this, build_upgrade_plan's package filter excludes every ts_exports-derived METHOD_REMOVED record on a package mismatch, independent of the T-19 gate work. Added 2 unit tests (ts_exports feed_key recovery, bootstrap-suffix stripping) to tests/unit/test_classifier.py. dependency_check: make test 921 passed, make lint clean, make typecheck clean, make eval 91% (30/33, matches known baseline, no regression). Committed 5205b82 on fix/t18-multi-major-removals (branched from fix/migrate-agent-changes, since repo_exports.py only exists there, not on main yet), pushed to origin, PR #11 opened targeting fix/migrate-agent-changes (stacked on #10 \u2014 #10 should merge first). Did NOT touch upgrade.py/fix_service.py/runner.py gates \u2014 those are T-19 per principal's 2026-10-11 23:59 CEST message (researcher spec proposed removing upgrade.py:140 outright; reviewer + principal want it gated on replacement info instead). Hit the documented concurrent-agent git race again mid-task: a concurrent process force-reset local branch fix/t18-multi-major-removals to 22fba34 (fix/migrate-agent-changes' tip) while my changes sat stashed \u2014 worked in my favor this time (that's exactly the base I needed) but re-confirms the hazard is still live and unaddressed."
     },
     {
       "id": "T-19",
@@ -86,6 +89,6 @@
       "notes": "Branch name: fix/drift-detection-pipeline. Push to origin, open PR targeting main."
     }
   ],
-  "last_updated": "2026-10-11T00:00:00Z",
-  "updated_by": "human"
+  "last_updated": "2026-10-12T00:00:00Z",
+  "updated_by": "implementer"
 }

@@ -44,7 +44,37 @@ No active task. All assigned tasks are done.
   - make test: 917 passed, 0 failed. make typecheck: 0 errors. make lint: clean.
   - Committed in 7896cff. ACCEPTED by reviewer (T-15_receipt.json).
 
-## Current Status (last checked 2026-10-11)
+## Current Status (last checked 2026-10-12)
+T-18 done, submitted for review: dependency_check PR #11
+(https://github.com/bedilk/dependency_check/pull/11), commit 5205b82 on branch
+fix/t18-multi-major-removals, base fix/migrate-agent-changes (stacked on #10).
+
+T-18 finding: the multi-major removal *detection* acceptance criteria was already
+satisfied by T-15's repo_exports.py (merged into PR #10, not main). The actual gap
+was Fix 1 from research/t18-t19-implementation-spec.md: classifier.py set
+package=provider_id ("sentry") instead of the real npm package ("@sentry/node") for
+persisted ts_exports events, since event.raw isn't persisted to ChangeEventRow.
+Generalized the existing NPM/PYPI/RUBYGEMS_DIST_TAG-only feed_key recovery into
+_package_from_feed_key(), now applied for all four prefixes (npm:/ts_exports:/pypi:/
+rubygems:) unconditionally at the top of classify(). Added 2 unit tests. make test
+921 passed, make lint clean, make typecheck clean, make eval 91% (30/33, baseline,
+no regression). Did NOT touch upgrade.py/fix_service.py/runner.py gates (T-19 scope
+per principal 2026-10-11 23:59 CEST — gate on replacement info, don't remove outright).
+
+Scoping note for whoever picks up T-19: it depends on both T-17 and T-18. T-18's
+PR #11 is stacked on #10 (fix/migrate-agent-changes) since repo_exports.py and the
+package-recovery fix both live there, not on main. Merge order matters: #10 then #11
+then whatever T-19 branches from (should branch from fix/t18-multi-major-removals,
+not main, to pick up both).
+
+Hit the documented concurrent-agent git race again (see "IMPORTANT" note below) while
+this session was stashing/unstashing changes: a concurrent process force-reset the
+local fix/t18-multi-major-removals branch to fix/migrate-agent-changes' tip mid-session.
+Landed in my favor this time (same commit I needed as a base) but the hazard is still
+unaddressed — always verify `git branch --show-current` immediately before every
+commit, not just at session start.
+
+## Previous Status (2026-10-11)
 New mission in TASKS.json: T-17 (researcher, running) -> T-18/T-19 (ready, unowned,
 depend on T-17) -> T-20/T-21 (tester) -> T-22 (implementer: open PR for T-18/T-19 changes).
 No task currently has status=running/owner=implementer. Not starting T-18 until principal
