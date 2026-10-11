@@ -4,18 +4,18 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:08 CEST — T-18 submitted for review at 00:07 (commit 5205b82 on fix/t18-multi-major-removals, PR #11 stacked on PR #10). Implementer reports make test 921 passed, lint/typecheck clean. PR #11 shows zero GitHub CI checks — asked reviewer to verify why and state it in the receipt. .local/push-history.log is empty; asked implementer to confirm commit-gate run. Reviewer has 2 unacked review_requests from implementer plus my assign message; expect receipt within 10 min (deadline 00:20 CEST). Registry: implementer idle, reviewer running T-18. No stalls. Nothing else assignable (T-19..T-22 depend on T-18). Duplicate loop processes still present (ps: 7 principal-loop, 4 implementer-loop, 4 researcher-loop, 6 reviewer-loop, 4 tester-loop PIDs) — implementer reported a concurrent implementer-loop instance raced it on the TASKS.json status update.
+2026-10-12 00:11 CEST — T-18 ACCEPTED (receipt coordination/review/T-18_receipt.json, commit 52255fa; PR #11 stacked on PR #10, both need human merge). Acked reviewer verdict, implementer status, tester status messages. Assigned T-19 to implementer (branch from fix/t18-multi-major-removals; Fix 2 + Fix 3 from spec; DB cleanup of 477 stale sentry rows before T-20). Reviewer idle, researcher idle, tester idle (T-20/T-21 blocked on T-19). No stalls. Duplicate loop PIDs persist (6 implementer, 6 principal, 4 researcher, 4 reviewer, 2 tester).
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
-- T-18: review (reviewer). PR #11 https://github.com/bedilk/dependency_check/pull/11, commit 5205b82 on fix/t18-multi-major-removals (stacked on PR #10). Submitted 00:07 CEST; reviewer pickup deadline 00:17 CEST.
-- T-19: ready, depends on T-17 + T-18. Spec: research/t18-t19-implementation-spec.md
+- T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
+- T-19: running (implementer), assigned 00:11 CEST. Spec: research/t18-t19-implementation-spec.md. Stall check: expect a commit by 00:26 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- None. T-18 awaiting reviewer (submitted 00:07 CEST; ping reviewer if no receipt/ack by 00:17 CEST).
+- T-19 (implementer) since 00:11 CEST. Ping if no dependency_check or state commit by 00:26 CEST.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -36,8 +36,8 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Confirm reviewer acks the T-18 review_request and writes coordination/review/T-18_receipt.json; ping reviewer if nothing by 00:17 CEST.
-2. When T-18 is ACCEPTED: assign T-19 to implementer — branch from fix/t18-multi-major-removals (per implementer), spec research/t18-t19-implementation-spec.md, carry reviewer's METHOD_REMOVED caution (gate on replacement info, do not drop upgrade.py:140 gate). Researcher's skill-file audit (c695348) is input for Fix 3.
-3. If T-18 is REJECTED: return to implementer with receipt issues.
-4. Flag to human: PR #10 and PR #11 need review/merge; duplicate loop processes; dependency_check worktree isolation decision.
+1. Watch T-19 for progress (implementer commits on dependency_check branch off fix/t18-multi-major-removals). Ping at 00:26 CEST if silent.
+2. When T-19 goes to review: confirm reviewer picks it up within 10 min; reviewer must check the DB cleanup was documented and the sentry-v6-app dry-run plan is non-empty.
+3. When T-19 is ACCEPTED: assign T-20 to tester and T-22 to implementer in parallel.
+4. Flag to human: PR #10 and PR #11 need review/merge (merge order #10 then #11); duplicate loop processes still running; dependency_check worktree isolation decision still open.
 5. Next smoke due ~03:45 CEST (tester).

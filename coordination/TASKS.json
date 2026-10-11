@@ -33,16 +33,16 @@
     {
       "id": "T-19",
       "title": "Fix plan to generate fix PRs when BreakingChange records + call sites exist",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "implementer",
       "depends_on": [
         "T-17",
         "T-18"
       ],
       "acceptance": "When scan finds call sites AND BreakingChange records exist (from T-18), plan produces a non-empty fix plan. apply opens a PR on GitHub with the correct code changes. Tested on bedilk/depfix-test-sentry-v6-app (sentry.startTransaction must get a fix PR). make test passes.",
       "evidence_paths": [],
-      "next_action": "Assign to implementer after T-18",
-      "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason). T-17 findings: Three fixes needed in dependency_check: (1) classifier.py:40 \u2014 recover package from feed_key when event.raw is empty. (2) upgrade.py:140 \u2014 allow METHOD_REMOVED in upgrade migrations when replacement info is available (skill files). (3) runner.py:991 \u2014 allow METHOD_REMOVED with known replacements to enter fix pipeline. Also: orchestrator should capture drift if not already captured (currently only depfix scan does this)."
+      "next_action": "Implementer: branch from fix/t18-multi-major-removals (stacked on PR #10/#11). Implement Fix 2 (upgrade.py:140 \u2014 gate METHOD_REMOVED on replacement info being available from skill files; do NOT drop the gate outright) and Fix 3 (runner.py:991 \u2014 allow METHOD_REMOVED with known replacements into the fix pipeline) per research/t18-t19-implementation-spec.md; orchestrator should capture drift if not already captured. Fix 1 is done in T-18. Also: back up depfix.db, then delete the 477 stale sentry/method_removed breaking_change rows (package='sentry') and clear classified_at on the 2 ts_exports:@sentry/node events so they re-classify with package=@sentry/node (document the commands in notes). Verify with depfix pipeline --dry-run --no-pr on bedilk/depfix-test-sentry-v6-app: plan must be non-empty with a sentry.startTransaction fix. make test/lint/typecheck, push branch to origin, open PR with gh pr create, then set status=review and message reviewer.",
+      "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason). T-17 findings: Three fixes needed in dependency_check: (1) classifier.py:40 \u2014 recover package from feed_key when event.raw is empty. (2) upgrade.py:140 \u2014 allow METHOD_REMOVED in upgrade migrations when replacement info is available (skill files). (3) runner.py:991 \u2014 allow METHOD_REMOVED with known replacements to enter fix pipeline. Also: orchestrator should capture drift if not already captured (currently only depfix scan does this). | PRINCIPAL 2026-10-12: assigned to implementer. Researcher skill-file audit (c695348, 29/40 providers ready) is input for Fix 3. Reviewer caution from T-17: gate METHOD_REMOVED on replacement info, keep the upgrade.py:140 gate."
     },
     {
       "id": "T-20",
@@ -57,7 +57,7 @@
         "research/e2e-fix-pr-results.md"
       ],
       "next_action": "Assign to tester after T-19",
-      "notes": "Use --dry-run first, then real apply with PR. The GitHub App is installed on these repos (credentials in dependency_check/.env)."
+      "notes": "Use --dry-run first, then real apply with PR. The GitHub App is installed on these repos (credentials in dependency_check/.env). PREREQ (from T-18 receipt): live depfix.db has 477 stale sentry/method_removed breaking_change rows with package=sentry whose ts_exports source events have classified_at set, so they will not re-classify. Back up depfix.db, then reset classified_at on the 2 ts_exports:@sentry/node source events (and clear the stale rows) before running the pipeline, else build_upgrade_plan filters them on package mismatch. Merge order: PR #10 then PR #11."
     },
     {
       "id": "T-21",
@@ -89,6 +89,6 @@
       "notes": "Branch name: fix/drift-detection-pipeline. Push to origin, open PR targeting main."
     }
   ],
-  "last_updated": "2026-10-12T00:00:00Z",
-  "updated_by": "implementer"
+  "last_updated": "2026-10-11T22:11:16Z",
+  "updated_by": "principal"
 }
