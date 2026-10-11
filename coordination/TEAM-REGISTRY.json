@@ -2,7 +2,7 @@
   "agents": [
     {
       "tag": "principal",
-      "model": "claude-opus-4-6",
+      "model": "claude-fable-5-1",
       "mode": "interactive",
       "script": "scripts/principal-loop.sh",
       "owns": [
@@ -13,7 +13,7 @@
       "inbox": "coordination/inbox/principal.jsonl",
       "status": "idle",
       "current_task": null,
-      "last_active": "2026-10-11T21:51:00Z"
+      "last_active": "2026-10-11T21:54:03.297632+00:00"
     },
     {
       "tag": "researcher",
@@ -26,9 +26,9 @@
       ],
       "state_file": "coordination/researcher.md",
       "inbox": "coordination/inbox/researcher.jsonl",
-      "status": "running",
-      "current_task": "T-17",
-      "last_active": "2026-10-11T21:48:14Z"
+      "status": "idle",
+      "current_task": null,
+      "last_active": "2026-10-11T21:54:03.297632+00:00"
     },
     {
       "tag": "implementer",
@@ -41,9 +41,9 @@
       ],
       "state_file": "coordination/implementer.md",
       "inbox": "coordination/inbox/implementer.jsonl",
-      "status": "idle",
-      "current_task": null,
-      "last_active": "2026-10-10T16:00:00Z"
+      "status": "running",
+      "current_task": "T-18",
+      "last_active": "2026-10-11T21:54:03.297632+00:00"
     },
     {
       "tag": "reviewer",
@@ -56,9 +56,9 @@
       ],
       "state_file": "coordination/reviewer.md",
       "inbox": "coordination/inbox/reviewer.jsonl",
-      "status": "idle",
-      "current_task": null,
-      "last_active": "2026-10-09T15:00:00Z"
+      "status": "running",
+      "current_task": "T-17 review",
+      "last_active": "2026-10-11T21:54:03.297632+00:00"
     },
     {
       "tag": "tester",

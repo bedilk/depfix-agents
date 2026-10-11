@@ -4,28 +4,28 @@
     {
       "id": "T-17",
       "title": "Research: trace why plan produces 0 PRs after scan finds call sites",
-      "status": "done",
+      "status": "review",
       "owner": "researcher",
       "depends_on": [],
       "acceptance": "Researcher writes research/plan-zero-pr-root-cause.md documenting: (1) exact data flow from scan output \u2192 BreakingChange records \u2192 assess_scan_change() \u2192 plan filtering, (2) why no BreakingChange records exist for multi-major-version jumps, (3) what T-15's repo_exports.py was supposed to fix and whether its code is actually in dependency_check/src/. Include file paths, line numbers, and command outputs.",
       "evidence_paths": [
         "research/plan-zero-pr-root-cause.md"
       ],
-      "next_action": "Done. T-18 and T-19 can proceed with findings from research.",
-      "notes": "COMPLETED 2026-10-11. Found 3 root causes: (1) METHOD_REMOVED\u2192REPORT_ONLY at runner.py:991, (2) package mismatch 'sentry' vs '@sentry/node' at classifier.py:40, (3) depfix plan never calls capture_repository_dependency_drift. T-15 code IS in dependency_check and wired up, but synthetic changes are METHOD_REMOVED so still REPORT_ONLY. See research/plan-zero-pr-root-cause.md for full data flow + fix recommendations."
+      "next_action": "Reviewer verifies research/plan-zero-pr-root-cause.md against acceptance criteria and writes coordination/review/T-17_receipt.json",
+      "notes": "COMPLETED 2026-10-11. Found 3 root causes: (1) METHOD_REMOVED\u2192REPORT_ONLY at runner.py:991, (2) package mismatch 'sentry' vs '@sentry/node' at classifier.py:40, (3) depfix plan never calls capture_repository_dependency_drift. T-15 code IS in dependency_check and wired up, but synthetic changes are METHOD_REMOVED so still REPORT_ONLY. See research/plan-zero-pr-root-cause.md for full data flow + fix recommendations. | PRINCIPAL 2026-10-11 23:55 CEST: researcher self-marked done without reviewer receipt; reset to review per review gate."
     },
     {
       "id": "T-18",
       "title": "Fix ts_exports_diff to detect API removals across multiple major versions",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "implementer",
       "depends_on": [
         "T-17"
       ],
       "acceptance": "When a repo has SDK version X installed and latest is version Y (where Y - X > 1 major), ts_exports_diff compares X's exports against Y's exports and creates BreakingChange records for all removed symbols. Uses existing _exports_for(version) which can fetch ANY version's exports. make test passes, new unit tests cover the multi-major case.",
       "evidence_paths": [],
-      "next_action": "Assign to implementer after T-17 research is done",
-      "notes": "Key file: dependency_check/src/depfix/sources/ts_exports.py. _exports_for(version) at line ~185 can fetch exports for any npm version via tarball download \u2014 this is the building block. T-17 findings: T-15's repo_exports.py already does installed\u2192latest diff (IS wired at runner.py:396). But the REAL blockers are: (1) classifier.py:40 sets package=provider_id ('sentry') instead of '@sentry/node' because event.raw not persisted \u2014 fix by recovering from feed_key. (2) All ts_exports changes are METHOD_REMOVED which upgrade.py:140 excludes from upgrades. (3) runner.py:991 routes METHOD_REMOVED to REPORT_ONLY."
+      "next_action": "Implementer: in dependency_check, branch fix/t18-multi-major-removals from main. Reconcile the uncommitted working-tree edits first (runner.py, evals/*, providers.yaml, Makefile, ruby_*). Then implement the T-17 fixes: classifier.py:40 recover package from feed_key; ts_exports_diff multi-major compare via _exports_for; unit tests for multi-major case. Run bash scripts/commit-gate.sh, open PR with gh pr create, set status=review.",
+      "notes": "Key file: dependency_check/src/depfix/sources/ts_exports.py. _exports_for(version) at line ~185 can fetch exports for any npm version via tarball download \u2014 this is the building block. T-17 findings: T-15's repo_exports.py already does installed\u2192latest diff (IS wired at runner.py:396). But the REAL blockers are: (1) classifier.py:40 sets package=provider_id ('sentry') instead of '@sentry/node' because event.raw not persisted \u2014 fix by recovering from feed_key. (2) All ts_exports changes are METHOD_REMOVED which upgrade.py:140 excludes from upgrades. (3) runner.py:991 routes METHOD_REMOVED to REPORT_ONLY. | Assigned to implementer 2026-10-11 23:55 CEST while T-17 is in review (research is committed at 924c33f)."
     },
     {
       "id": "T-19",
@@ -39,7 +39,7 @@
       "acceptance": "When scan finds call sites AND BreakingChange records exist (from T-18), plan produces a non-empty fix plan. apply opens a PR on GitHub with the correct code changes. Tested on bedilk/depfix-test-sentry-v6-app (sentry.startTransaction must get a fix PR). make test passes.",
       "evidence_paths": [],
       "next_action": "Assign to implementer after T-18",
-      "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason). T-17 findings: Three fixes needed in dependency_check: (1) classifier.py:40 — recover package from feed_key when event.raw is empty. (2) upgrade.py:140 — allow METHOD_REMOVED in upgrade migrations when replacement info is available (skill files). (3) runner.py:991 — allow METHOD_REMOVED with known replacements to enter fix pipeline. Also: orchestrator should capture drift if not already captured (currently only depfix scan does this)."
+      "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason). T-17 findings: Three fixes needed in dependency_check: (1) classifier.py:40 \u2014 recover package from feed_key when event.raw is empty. (2) upgrade.py:140 \u2014 allow METHOD_REMOVED in upgrade migrations when replacement info is available (skill files). (3) runner.py:991 \u2014 allow METHOD_REMOVED with known replacements to enter fix pipeline. Also: orchestrator should capture drift if not already captured (currently only depfix scan does this)."
     },
     {
       "id": "T-20",
