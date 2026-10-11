@@ -18,7 +18,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. 00:19: 4 new test files, still uncommitted; expect a commit by 00:26 CEST, ping if none. 00:17: same uncommitted working tree on fix/t19-plan-pr-gate (upgrade.py, fix_service.py, runner.py, provider_sentry.md, new test file); no commit yet, inbox empty. Working tree edits present at 00:16 on fix/t19-plan-pr-gate (incl. new unit test file); no commit yet. Flag if no commit by 00:28 CEST.
+- T-19 (implementer) since 00:11 CEST. 00:19: 4 new test files, still uncommitted; expect a commit by 00:26 CEST, ping if none. 00:17: same uncommitted working tree on fix/t19-plan-pr-gate (upgrade.py, fix_service.py, runner.py, provider_sentry.md, new test file); no commit yet, inbox empty. Working tree edits present at 00:16 on fix/t19-plan-pr-gate (incl. new unit test file); no commit yet. Flag if no commit by 00:28 CEST. 00:19: WIP stashed on main (see Last Check); recovery ping sent; stall clock now effectively restarted - escalate at 00:30 if no commit on fix/t19-plan-pr-gate.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -37,11 +37,13 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 
 - CONCURRENCY HAZARD (implementer, 00:00): multiple agent processes share the single dependency_check checkout; a branch switch raced a commit (recovered, nothing lost). Interim rule issued: all dependency_check git mutations under flock depfix-agents/.local/git.lock; reviewer to inspect read-only. HUMAN DECISION NEEDED: per-agent worktrees/clones for dependency_check, or restrict to one implementer instance (ps showed duplicate implementer/researcher/reviewer PIDs).
 
+- INCIDENT (00:18): T-19 uncommitted work stashed and checkout switched to main by an unknown process (not human-review.sh, which only touches depfix-agents). Likely a concurrent agent instance or a Claude Code worktree helper. Same root cause as the concurrency hazard: shared dependency_check checkout. Recovery delegated to implementer; untracked test file may be lost if stash was not -u.
+
 ## Human Directives
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Check T-19 progress: implementer commit on dependency_check branch off fix/t18-multi-major-removals; ping at 00:26 CEST if nothing.
+1. Verify implementer recovered stash@{0} onto fix/t19-plan-pr-gate and committed; if no commit by 00:30 CEST, escalate and consider reassigning (or committing the stash myself as a safety net - but principal does not write code, so prefer human).
 2. When T-19 reaches review: confirm reviewer acks and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (with DB backup + classified_at reset prereq), then T-22 to implementer.
 4. Flag to human: commit-gate.sh only gates depfix-agents (implementer confirmed 00:11) — decide whether to add a dependency_check gate script or document manual make test/lint/typecheck as the gate. PR #10 and PR #11 need review/merge (merge order 10 then 11); duplicate loop processes; dependency_check worktree isolation decision; commit-gate.sh does not cover dependency_check pushes (push-history.log empty by design).
