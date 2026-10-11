@@ -553,10 +553,51 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   "ghost APIs" via sub-case B.
 - Notified implementer + principal via inbox
 
+## Round 33 Status (2026-10-12)
+- Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
+- T-19 running (implementer): reviewed uncommitted changes to upgrade.py, runner.py,
+  fix_service.py, provider_sentry.md. All 3 gate changes + _enrich_removal_from_skill
+  method look correct. Sentry migration arrows working (regex tested).
+- No new tasks assigned from principal.
+
+## Proactive Work Round 33
+- **Skill file migration arrows — complete coverage** (2026-10-12):
+  Identified 10/43 providers with ZERO migration arrows (mongodb, stripe, prisma, clerk,
+  sendgrid, google_cloud, postgresql, rabbitmq, datadog, mixpanel). Without arrows,
+  T-19's _enrich_removal_from_skill() returns None → METHOD_REMOVED stays REPORT_ONLY.
+  CRITICAL: mongodb had 0 arrows and T-21 tests Rocket.Chat with mongodb.
+  
+  Researched breaking changes for all 10 providers using web search + existing specs.
+  Added migration arrows to all 10 skill files in dependency_check. Sources verified:
+  MongoDB upgrade docs, Stripe wiki, Prisma v6/v7 guides, Clerk v6 guide, SendGrid
+  changelog, pg v9 discussion, psycopg migration guide, Google Cloud Storage v7 release,
+  amqplib/pika releases.
+  
+  Result: ALL 43 providers now have → arrows (was 29/43, now 43/43).
+  MongoDB: 17 arrows (v4→v5 callback/method removal, v5→v6 option removals)
+  
+  Evidence: research/skill-file-migration-arrows.md (commit 48892ec).
+  Skill file edits are in dependency_check working tree (uncommitted — implementer
+  is working on T-19 in the same repo, will need to stage these).
+
+- **T-19 implementation review** (2026-10-12):
+  Reviewed all 4 diffs in dependency_check working tree:
+  1. upgrade.py:140 — `is_method_removal(change) and not change.new_api` — correct gate ✓
+  2. runner.py:991 — calls _enrich_removal_from_skill before REPORT_ONLY path — correct ✓
+  3. runner.py:1467-1507 — _enrich_removal_from_skill reads skill files, regex extracts
+     replacement from → arrows, returns enriched BreakingChange — correct ✓
+  4. fix_service.py:201 — `is_method_removal(change) and not change.migration_guide` — correct ✓
+  5. provider_sentry.md — v7→v8 migration arrows added — correct ✓
+  
+  Minor issue: `rstrip("()")` strips trailing parens char-by-char, so
+  `Sentry.startSpan({ name, op }, callback)` → `Sentry.startSpan({ name, op }, callback`
+  (loses closing paren). Cosmetic — LLM has full migration_guide as context.
+  
+  Missing: no new unit tests for T-19 yet. Implementer may still be working on them.
+
 ## Next Steps
-- T-17 complete. Available for new assignments.
-- T-18/T-19 spec fully updated with both categories of fixes (commit 01e129c).
-- T-18 scope: migrate repo_exports.py + runner.py wiring + tests from fix/migrate-agent-changes
-- T-19 scope: gate fixes (upgrade.py, runner.py, fix_service.py) + skill enrichment
-- Sentry skill file needs v7→v8 migration table added (T-19 prerequisite).
-- Provider skill coverage: 29/40 have migration arrows; 10 need enrichment.
+- T-17 complete, T-18 complete. Available for new assignments.
+- T-19 in progress (implementer): gate changes look correct, awaiting tests + commit.
+- All 43 providers now have migration arrows (was 29/43).
+- Skill file edits in dependency_check are uncommitted — implementer should stage them
+  alongside T-19 changes or in a separate commit.
