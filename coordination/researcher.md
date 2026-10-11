@@ -1,7 +1,7 @@
 # Researcher State
 
 ## Current Task
-None. 2026-10-12 re-check: inbox empty; T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Idle, waiting for assignment.
+None. 2026-10-12 startup re-check: inbox empty; T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Idle, principal notified.
 Standing rule (principal msg e9097c80): researcher must NOT edit dependency_check working tree. Proposed content goes in research/; implementer applies it.
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
