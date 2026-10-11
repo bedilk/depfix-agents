@@ -4,18 +4,18 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:02 CEST — Check-in. T-17 receipt present (ACCEPTED, 68fbf11); task is done. Acked 5 inbox messages (reviewer verdict, researcher idle x2, implementer PR #10 status, implementer concurrency hazard). T-18 branch still 0 commits over main, but implementer has an uncommitted classifier.py edit (_package_from_feed_key, a T-19 spec item) on the main checkout of dependency_check. Pinged implementer: commit on the feature branch (based on PR #10 branch), use flock on dependency_check git ops, T-18 commit by 00:20 CEST. Nothing new assignable: T-19..T-22 blocked on T-18. Researcher and reviewer idle.
+2026-10-12 00:03 CEST — Check-in. T-17 ACCEPTED by reviewer (receipt coordination/review/T-17_receipt.json committed 68fbf11). T-18 running: implementer has an uncommitted classifier.py edit (feed_key package recovery) in the dependency_check checkout, currently on main rather than the feature branch; 0 commits on fix/t18-multi-major-removals yet. Within the 15-min window (assigned 23:55), not stalled. Acked 5 inbox messages. Sent directives: implementer (commit on feature branch, use flock for dependency_check git ops), reviewer and researcher (same flock rule, read-only review). Nothing new assignable — T-19..T-22 wait on T-18.
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
-- T-18: running (implementer). Precondition done (PR #10, reconciliation). Feature branch fix/t18-multi-major-removals has 0 commits over main as of 00:01.
+- T-18: running (implementer). Precondition done (PR #10). Work in progress (uncommitted classifier.py edit seen 00:02); 0 commits on fix/t18-multi-major-removals yet. Stall deadline 00:18 CEST.
 - T-19: ready, depends on T-17 + T-18. Spec: research/t18-t19-implementation-spec.md
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-18 implementer (assigned 23:55 CEST; uncommitted WIP on main checkout as of 00:02; ping sent 00:02; stall deadline 00:20 CEST if no commit on fix/t18-multi-major-removals)
+- T-18 implementer (assigned 23:55 CEST; uncommitted edit observed 00:02; stall deadline 00:18 CEST if no commit on feature branch)
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -29,11 +29,14 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - Stray log files at coordination repo root: cleaned by tester (e77ca0f).
 - TEAM-REGISTRY researcher model still lists claude-sonnet-4-6-1m; AGENTS.md says opus-5-5. Cosmetic; loop scripts control the actual model.
 
+- CONCURRENCY HAZARD (implementer, 00:00): multiple agent processes share the single dependency_check checkout; a branch switch raced a commit (recovered, nothing lost). Interim rule issued: all dependency_check git mutations under flock depfix-agents/.local/git.lock; reviewer to inspect read-only. HUMAN DECISION NEEDED: per-agent worktrees/clones for dependency_check, or restrict to one implementer instance (ps showed duplicate implementer/researcher/reviewer PIDs).
+
 ## Human Directives
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Check `git log main..fix/t18-multi-major-removals` in dependency_check; if still 0 commits by 00:20 CEST, second ping and flag as stalled.
-2. Human: decide on the dependency_check concurrency fix (lock vs worktrees vs single mutating agent).
-3. When T-18 is ACCEPTED: assign T-19 to implementer (spec already in research/).
-4. Flag PR #10 (fix/migrate-agent-changes) to the human for review.
+1. Check `git log main..fix/t18-multi-major-removals` in dependency_check; ping implementer if no commit by 00:18 CEST. Verify the classifier.py edit did not get committed to main.
+2. When implementer sets T-18 status=review: confirm reviewer picks it up within 10 min.
+3. When T-18 is ACCEPTED: assign T-19 to implementer (spec research/t18-t19-implementation-spec.md; pass reviewer's METHOD_REMOVED caution).
+4. Flag to human: PR #10 (fix/migrate-agent-changes) needs review/merge; decision on dependency_check worktree isolation; duplicate agent loop processes.
+5. Next smoke due ~03:45 CEST (tester).
