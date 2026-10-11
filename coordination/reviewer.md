@@ -1,7 +1,12 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. TASKS.json has T-17 through T-22 (pipeline fix work), all still in `ready` status. None assigned or in `review`. Inbox empty. Checked 2026-10-11.
+Idle — no tasks pending review. TASKS.json has T-17 through T-22 (pipeline fix work), all still in `ready` status. None assigned or in `review`. Inbox empty. Checked 2026-10-11T current wake-up.
+
+Waiting for:
+- T-18 (ts_exports_diff fix) — will need code review once implementer submits
+- T-19 (plan fix for fix PRs) — will need code review once implementer submits
+- T-22 (PR push) — will verify CI once opened
 
 ## Reviews Completed
 
