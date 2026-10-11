@@ -1,0 +1,21 @@
+{
+  "task_id": "T-18",
+  "verdict": "ACCEPTED",
+  "commit": "5205b82 (dependency_check, branch fix/t18-multi-major-removals, PR #11 stacked on #10)",
+  "issues": [
+    "NON-BLOCKING / MUST HANDLE IN T-19 or T-20: the fix only applies to events classified from now on. Live depfix.db still holds 477 breaking_change rows with provider_id='sentry', kind='method_removed', package='sentry'. The source events (ts_exports:@sentry/node, 2 rows) already have classified_at set, so classify_pending (store.py:32 filters classified_at IS NULL) will never re-classify them. Before running T-20, back up the DB and clear classified_at on those events (deleting their stale breaking_change rows first), or wait for a fresh ts_exports event. Otherwise build_upgrade_plan still sees package='sentry'.",
+    "NON-BLOCKING: the commit message says repo_exports.py synthetic changes 'kept the wrong package'. That's wrong: synthetic_changes_for_scan (repo_exports.py:170,206) already sets package=<npm package>. What the fix actually corrects is persisted TsExportsSource events going through Classifier.classify; raw is not persisted, and ts_exports.py:166 is the only place that puts package in raw.",
+    "NON-BLOCKING: test_classify_persisted_ts_exports_event_recovers_the_scoped_npm_package and ..._recovers_the_package_from_its_feed_key overlap almost completely. The ts_exports bootstrap-suffix test covers a feed key that is never generated (shortcuts.py:406-417 only bootstraps pypi:/rubygems:/npm:). Harmless defensive coverage.",
+    "NON-BLOCKING: task notes say 2 tests were added. 4 were actually added (rubygems + 3 ts_exports), and 917 -> 921 is consistent with that.",
+    "NOTE: PR #11 has no CI checks reported (statusCheckRollup is empty), likely because its base is fix/migrate-agent-changes rather than main. Gate results below come from my local run."
+  ],
+  "checks": [
+    "Multi-major acceptance: confirmed it was already met by accepted T-15 code. repo_exports.synthetic_changes_for_scan diffs installed vs latest whatever the major gap, and tests/unit/test_repo_aware_exports.py exercises 6.19.7 -> 11.6.0 (5 majors), including sub-case B for ghost APIs.",
+    "classifier.py _package_from_feed_key: checked against every feed_key format in src/depfix/sources (rss/github_release/changelog_*/spec_base/fixture_change/pypi/rubygems/ts_exports/npm). Only npm: carries a dist-tag segment, and the rsplit runs only for npm. Scoped names (@sentry/node) contain no ':' so they survive. The ':repo:' split runs before the dist-tag rsplit, so npm:@sentry/node:latest:repo:X:installed:Y resolves to @sentry/node.",
+    "Precedence is raw['package'] > feed_key > provider_id, so live (non-persisted) events are unchanged. The advisory branch uses advisory.package and is unaffected. The drift branch behaves the same as before for npm/pypi/rubygems (logic moved without semantic change).",
+    "Side effect reviewed: the notes path for npm/pypi/rubygems events without old_token, and the spec_changes path, now get the real package instead of the provider slug. That's the intended direction.",
+    "Live DB confirms the bug the fix targets: breaking_change has 477 sentry method_removed rows with package='sentry' and 2 @sentry/node drift rows."
+  ],
+  "tests_run": "make test: 921 passed, 0 failed, 2 deselected; make lint: clean; make typecheck (mypy src): clean, 208 files. Run on fix/t18-multi-major-removals @ 5205b82 with a clean src/tests tree.",
+  "timestamp": "2026-10-11T22:08:56Z"
+}

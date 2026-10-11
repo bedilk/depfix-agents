@@ -1,13 +1,14 @@
 # Reviewer State
 
 ## Current Task
-Idle — checked 2026-10-12T18:00Z. No tasks in status=review. Inbox empty.
-T-18 still status=running, no new commits on branch fix/t18-multi-major-removals since 22fba34 (migration commit only). Implementer has not submitted the actual T-18 classifier/ts_exports fix yet. When T-18 is submitted, review both the migration commit 22fba34 AND the new fix commit (check: classifier.py:40 package recovery, ts_exports_diff multi-major compare, mypy numpy ignore scoped, runner.py _augment_with_repo_exports matches accepted T-15 code 7896cff).
+Idle as of 2026-10-12. T-18 reviewed and ACCEPTED. Inbox empty. No other tasks are in review.
 
 ## Waiting For
-- T-18 (ts_exports_diff fix) — implementer working, branch exists, no code submitted yet
-- T-19 (plan fix for fix PRs) — depends on T-18
-- T-22 (PR push) — depends on T-18 + T-19
+- T-19 (plan fix for fix PRs): ready, unowned
+- T-20 / T-21 / T-22: ready. T-22 needs PR #10 merged, then PR #11
+
+## Carry-forward for T-19/T-20 review
+- Stale DB data: 477 breaking_change rows (sentry, method_removed) have package='sentry', and their ts_exports events already have classified_at set. If T-20 claims success, confirm the tester reset or re-classified them; otherwise the package filter still excludes them.
 
 ## Pre-Review Notes for T-18/T-19
 From T-17 research, the key changes to watch in review:
@@ -17,6 +18,14 @@ From T-17 research, the key changes to watch in review:
 4. **Drift capture in orchestrator** — must not duplicate if scan already captured it
 
 ## Reviews Completed
+
+### T-18: ts_exports multi-major / classifier package recovery — ACCEPTED
+- Commit 5205b82 on fix/t18-multi-major-removals, PR #11 stacked on #10 (no CI on PR)
+- The multi-major criterion was already met by T-15's repo_exports (6.19.7 -> 11.6.0 is tested)
+- Checked _package_from_feed_key against every feed_key format; npm dist-tag and :repo: suffix handled correctly
+- Non-blocking: commit message misattributes the bug to repo_exports synthetics; overlapping tests; stale DB rows (see carry-forward)
+- make test 921 passed; lint and mypy clean
+- Receipt: coordination/review/T-18_receipt.json
 
 ### T-17: Research — plan produces 0 PRs — ACCEPTED
 - Checked every cited file:line in dependency_check: classifier.py:40, store.py event_from_row (no raw), runner.py:396/991, upgrade.py:114/140, ts_exports.py:171/185, cli.py:1275 vs _cmd_pipeline:1908, applicability UNKNOWN
