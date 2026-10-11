@@ -514,7 +514,24 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   0 startTransaction BreakingChange in DB (removed before v10→v11 window)
 - Evidence: research/plan-zero-pr-root-cause.md
 
+## Proactive Work (2026-10-11)
+- **T-18/T-19 Implementation Spec** (2026-10-11):
+  Traced all 4 code checkpoints blocking METHOD_REMOVED from generating fix PRs.
+  Read runner.py, classifier.py, upgrade.py, fix_service.py, spec_rules.py, pipeline.py,
+  bedrock.py (fixer prompt), repo_exports.py, and models.py in dependency_check.
+  Key findings beyond T-17:
+  1. classifier.py:89-99 ALREADY has feed_key recovery for dist-tag events — same pattern
+     needed for ts_exports events (feed_key = "ts_exports:@sentry/node")
+  2. spec_rules.py:146-147 hardcodes `new_api=""` for REMOVAL_KINDS — enrichment must happen
+     downstream (not in classification)
+  3. bedrock.py fixer prompt includes migration_guide and new_api — if populated from skill
+     files, LLM can generate correct fixes
+  4. repo_exports.py synthetic changes also have migration_guide="" and new_api="" — same fix
+  Produced 4-fix implementation spec with exact code changes, test cases, and implementation order.
+  Evidence: research/t18-t19-implementation-spec.md, commit 8489902.
+
 ## Next Steps
 - T-17 complete. Available for new assignments.
+- T-18/T-19 implementation spec written — ready for implementer pickup.
 - Provider skill coverage: 40/40 providers have skill files in dependency_check.
 - Unimplemented provider specs in research/: Okta, Square, Intercom, Pinecone.
