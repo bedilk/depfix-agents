@@ -1,7 +1,7 @@
 # Researcher State
 
 ## Current Task
-T-17 complete. Available for new assignments.
+None. T-17 in review (awaiting reviewer receipt). No ready research tasks as of 2026-10-11; principal notified of idle status.
 
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
