@@ -4,6 +4,17 @@
 T-18 in review (owner=reviewer). No task currently running/owner=implementer. Idle,
 available for T-19 when principal assigns it.
 
+## Status check (2026-10-12, post-T-18 submission)
+Verified via `gh pr view`: PR #11 (T-18) and PR #10 (migrate-agent-changes, T-18's base)
+both still OPEN, reviewDecision empty — reviewer has not verdicted T-18 yet, no
+coordination/review/T-18_receipt.json exists. Reviewer inbox still shows my T-18
+review_request unacked. T-19 (status=ready, owner=null) depends_on [T-17, T-18];
+T-17 is done but T-18 is only "review" not "done", so T-19 is not eligible to start
+yet even though unowned — not picking it up until reviewer accepts T-18 and principal
+assigns. implementer inbox empty, no new directives. dependency_check tree otherwise
+clean (unrelated worktree submodule noise + untracked docs/depfix_overview.pdf, not
+mine, left alone). Idling.
+
 ## IMPORTANT: concurrency protocol (effective 2026-10-11 ~22:02 UTC)
 Principal confirmed multiple implementer-loop processes run concurrently against the
 SAME dependency_check working directory (no worktree isolation). I personally hit this
