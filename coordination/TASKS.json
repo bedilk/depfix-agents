@@ -25,7 +25,7 @@
       "acceptance": "When a repo has SDK version X installed and latest is version Y (where Y - X > 1 major), ts_exports_diff compares X's exports against Y's exports and creates BreakingChange records for all removed symbols. Uses existing _exports_for(version) which can fetch ANY version's exports. make test passes, new unit tests cover the multi-major case.",
       "evidence_paths": [],
       "next_action": "Assign to implementer after T-17 research is done",
-      "notes": "Key file: dependency_check/src/depfix/sources/ts_exports.py. _exports_for(version) at line ~185 can fetch exports for any npm version via tarball download \u2014 this is the building block."
+      "notes": "Key file: dependency_check/src/depfix/sources/ts_exports.py. _exports_for(version) at line ~185 can fetch exports for any npm version via tarball download \u2014 this is the building block. T-17 findings: T-15's repo_exports.py already does installed\u2192latest diff (IS wired at runner.py:396). But the REAL blockers are: (1) classifier.py:40 sets package=provider_id ('sentry') instead of '@sentry/node' because event.raw not persisted \u2014 fix by recovering from feed_key. (2) All ts_exports changes are METHOD_REMOVED which upgrade.py:140 excludes from upgrades. (3) runner.py:991 routes METHOD_REMOVED to REPORT_ONLY."
     },
     {
       "id": "T-19",
@@ -39,7 +39,7 @@
       "acceptance": "When scan finds call sites AND BreakingChange records exist (from T-18), plan produces a non-empty fix plan. apply opens a PR on GitHub with the correct code changes. Tested on bedilk/depfix-test-sentry-v6-app (sentry.startTransaction must get a fix PR). make test passes.",
       "evidence_paths": [],
       "next_action": "Assign to implementer after T-18",
-      "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason). The plan may also need changes if the filtering logic drops valid matches."
+      "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason). T-17 findings: Three fixes needed in dependency_check: (1) classifier.py:40 — recover package from feed_key when event.raw is empty. (2) upgrade.py:140 — allow METHOD_REMOVED in upgrade migrations when replacement info is available (skill files). (3) runner.py:991 — allow METHOD_REMOVED with known replacements to enter fix pipeline. Also: orchestrator should capture drift if not already captured (currently only depfix scan does this)."
     },
     {
       "id": "T-20",

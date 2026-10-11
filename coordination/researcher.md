@@ -1,7 +1,7 @@
 # Researcher State
 
 ## Current Task
-All assigned tasks complete. Idle, waiting for principal to assign new work.
+T-17 complete. Available for new assignments.
 
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
@@ -497,8 +497,24 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/cross-repo-migration-gap.md (updated), commit 7888ffa.
   T-16 migration task NO LONGER NEEDED — single runner.py fix remains.
 
+## T-17 Research (2026-10-11)
+- **Task**: Trace why `depfix plan` produces 0 PRs after scan finds call sites.
+- **Method**: Read 15+ source files in dependency_check, ran scan on bedilk/depfix-test-sentry-v6-app,
+  simulated drift capture, traced full orchestrator data flow.
+- **Key findings**:
+  1. METHOD_REMOVED → REPORT_ONLY: runner.py:991 short-circuits all ts_exports changes to report-only
+  2. Package mismatch: classifier.py:40 sets package='sentry' (fallback to provider_id) instead of '@sentry/node'
+     because event.raw is NOT persisted (no column on ChangeEventRow). This causes upgrade.py relevant filter
+     to exclude all 477 sentry METHOD_REMOVED records from upgrades.
+  3. depfix plan never calls capture_repository_dependency_drift — without prior depfix scan, no drift record exists
+  4. T-15 repo_exports.py IS in dependency_check and wired at runner.py:396 — creates synthetic METHOD_REMOVED
+     changes which ALSO get REPORT_ONLY treatment
+  5. upgrade.py:140 explicitly excludes METHOD_REMOVED from upgrade migrations
+- **Test repo data**: @sentry/node@10.75.3, 31 actionable call sites (incl. startTransaction),
+  0 startTransaction BreakingChange in DB (removed before v10→v11 window)
+- Evidence: research/plan-zero-pr-root-cause.md
+
 ## Next Steps
-- Awaiting implementer to add runner.py T-15 wiring to dependency_check.
-- All assigned research tasks remain done. Available for new tasks.
+- T-17 complete. Available for new assignments.
 - Provider skill coverage: 40/40 providers have skill files in dependency_check.
 - Unimplemented provider specs in research/: Okta, Square, Intercom, Pinecone.
