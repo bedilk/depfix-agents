@@ -5,13 +5,22 @@
 
 ## Problem Statement
 
-`depfix plan` produces 0 fix PRs for API removals because METHOD_REMOVED changes are
-universally blocked at three independent checkpoints. T-17 identified root causes;
-this spec maps those to exact code changes in `dependency_check/src/`.
+`depfix plan` produces 0 fix PRs for API removals due to TWO independent categories of issues:
+
+**Category A — No BreakingChange records for multi-major jumps (T-18)**:
+The ts_exports feed compares adjacent major versions (v10→v11) but the test repo has
+APIs removed many majors ago (startTransaction removed in v8). No BreakingChange record
+exists in the DB for these old removals.
+
+**Category B — METHOD_REMOVED blocked at three gates (T-19)**:
+Even when BreakingChange records exist (from T-18), three independent gates prevent
+METHOD_REMOVED from generating fix PRs.
+
+Both categories must be fixed for the pipeline to work end-to-end.
 
 ## Current State (verified 2026-10-12)
 
-### Fix 1: Package Recovery — ALREADY DONE ✓
+### Fix 0: Package Recovery — ALREADY DONE ✓
 
 `classifier.py:27-44` already has `_package_from_feed_key()` which handles `ts_exports:`,
 `npm:`, `pypi:`, `rubygems:` prefixes. Called at line 67:
@@ -24,7 +33,21 @@ package = str(
 ```
 No work needed here.
 
-### Three Remaining Blocks
+### Category A: BreakingChange Generation Gap (T-18)
+
+```
+ts_exports poll: compares v10.76.1 → v11.5.0 exports
+  → 477 EXPORT_REMOVED (symbols removed between v10 and v11)
+  → startTransaction NOT in these 477 (removed in v8, absent from both v10 AND v11)
+  → No BreakingChange exists for startTransaction
+  → depfix plan finds call sites but has nothing to plan against
+```
+
+**Solution**: `repo_exports.py` + runner.py wiring already exists on branch
+`fix/migrate-agent-changes` (commit 22fba34). Compares the repo's INSTALLED version
+exports against LATEST and emits synthetic METHOD_REMOVED for removed symbols.
+
+### Category B: Three Remaining Gates (T-19)
 
 ```
 scan → classify → BreakingChange(METHOD_REMOVED, package="@sentry/node", new_api="") → DB
@@ -39,7 +62,68 @@ plan → load changes → _process_change_body
 
 ---
 
-## Fix 2: Allow METHOD_REMOVED with Replacement Info in Upgrade Plan (T-18)
+## Fix 1: Migrate repo_exports.py to main (T-18, CRITICAL)
+
+### Problem
+The ts_exports feed only compares adjacent major versions (v10→v11). For the test repo
+`bedilk/depfix-test-sentry-v6-app` with `@sentry/node@10.75.3`:
+- `startTransaction` was removed in v8
+- It's absent from BOTH v10 and v11 exports
+- The v10→v11 diff doesn't show it as removed
+- No BreakingChange record exists in the DB
+
+### Solution: Already built, needs migration
+Branch `fix/migrate-agent-changes` (commit 22fba34) has:
+
+| File | Lines | Status on main |
+|---|---|---|
+| `src/depfix/sources/repo_exports.py` | 224 | MISSING |
+| `src/depfix/orchestrator/runner.py` additions | +97 | MISSING |
+| `tests/unit/test_repo_aware_exports.py` | 437 | MISSING |
+
+### What repo_exports.py does
+`synthetic_changes_for_scan(scan_result, provider_id, npm_packages, http, npm)`:
+1. Gets the repo's installed version (from scan_result.dependencies)
+2. Downloads installed version's exports via `_exports_for(version)` from ts_exports.py
+3. Downloads latest version's exports
+4. **Sub-case A**: `installed_exports - latest_exports` → symbols removed since installed
+5. **Sub-case B**: For each call site using a symbol NOT in installed_exports →
+   "ghost" API (removed before the installed version, like startTransaction)
+6. Returns `list[BreakingChange]` with `kind=METHOD_REMOVED`
+
+### runner.py wiring (from branch diff)
+**Call site** — add after `_prescan_providers()` at line ~392:
+```python
+# Augment with repo-version-aware synthetic changes from TypeScript
+# export diffs. These cover removals that span more than one major
+# version and are therefore invisible to the feed-level ts_exports diff.
+ordered = self._augment_with_repo_exports(ordered, repo_full_name, current_ref_sha)
+```
+
+**Method** — add `_augment_with_repo_exports` (90 lines) after `_prescan_providers` method
+at ~line 773. The full code is on branch `fix/migrate-agent-changes` — can be cherry-picked
+or copied verbatim.
+
+### Implementation approach
+```bash
+cd dependency_check
+git checkout fix/t18-multi-major-removals  # already exists, 0 commits
+# Cherry-pick the relevant files from fix/migrate-agent-changes:
+git checkout fix/migrate-agent-changes -- src/depfix/sources/repo_exports.py
+git checkout fix/migrate-agent-changes -- tests/unit/test_repo_aware_exports.py
+# Then manually port the runner.py additions (can't cherry-pick a partial file)
+```
+
+### Test cases (already written in test_repo_aware_exports.py)
+24 tests covering:
+- Sub-case A: symbol removed between installed and latest
+- Sub-case B: call site uses symbol absent from installed exports (ghost API)
+- Edge cases: no npm packages, no scan result, httpx failures, empty exports
+- All 24 pass on the branch
+
+---
+
+## Fix 2: Allow METHOD_REMOVED with Replacement Info in Upgrade Plan (T-19)
 
 ### File: `src/depfix/core/upgrade.py`
 ### Location: lines 140-141
@@ -257,16 +341,32 @@ skill file content; an unenriched change has `migration_guide=""`.
 
 ## Implementation Order
 
-1. **Prerequisite**: Add migration table to `provider_sentry.md` (needed for test case)
-2. **Fix 2** (upgrade.py:140) — conditional gate on `new_api`. Smallest change, testable alone.
-3. **Fix 3** (runner.py:894) — skill enrichment method + conditional gate. The core logic.
-4. **Fix 4** (fix_service.py:201) — conditional gate on `migration_guide`. Enables the fix pipeline.
+### T-18 (BreakingChange generation)
+1. **Fix 1**: Migrate repo_exports.py + runner.py wiring + tests from `fix/migrate-agent-changes`
+2. Verify: `make test` passes, new unit tests cover multi-major case
 
-Fixes 2-4 are independent in code but must all be present for the pipeline to work end-to-end.
-Order above is recommended for reviewability (each commit adds one gate change).
+### T-19 (Fix pipeline gates)
+3. **Prerequisite**: Add migration table to `provider_sentry.md` (needed for test case)
+4. **Fix 2** (upgrade.py:140) — conditional gate on `new_api`
+5. **Fix 3** (runner.py:894) — skill enrichment method + conditional gate (core logic)
+6. **Fix 4** (fix_service.py:201) — conditional gate on `migration_guide`
+7. Verify: `make test` passes, integration test produces non-zero migrations
+
+### End-to-end
+8. Run `depfix scan --path <sentry-test-repo>` → verify synthetic BreakingChanges created
+9. Run `depfix plan` → verify non-zero fix plan with startTransaction migration
+10. Run `depfix apply` → verify PR with correct code changes
 
 ## Files Changed
 
+### T-18 files (migrate from fix/migrate-agent-changes)
+| File | Lines | Change |
+|---|---|---|
+| `src/depfix/sources/repo_exports.py` | 224 (new) | Installed-vs-latest export diff |
+| `src/depfix/orchestrator/runner.py` | 392 + 773 | `_augment_with_repo_exports` call + method |
+| `tests/unit/test_repo_aware_exports.py` | 437 (new) | 24 test cases |
+
+### T-19 files (gate changes)
 | File | Lines | Change |
 |---|---|---|
 | `src/depfix/providers/skills/provider_sentry.md` | append | Add v7→v8 migration table |
@@ -299,6 +399,12 @@ bedilk/depfix-test-sentry-v6-app:
 
 `repo_exports.py` does NOT exist on dependency_check `main`. The T-15 code
 (installed→latest export diff) is only on `fix/migrate-agent-changes` branch.
-T-18/T-19 do NOT depend on repo_exports.py — the ts_exports source already
-produces METHOD_REMOVED BreakingChanges from feed polling. repo_exports.py
-adds a second path (scan-time detection) that can be wired up separately.
+
+**CRITICAL**: T-18 DEPENDS on repo_exports.py. The ts_exports feed only compares
+adjacent major versions (v10→v11), so it CANNOT detect symbols removed in earlier
+majors (startTransaction removed in v8). repo_exports.py compares the repo's
+INSTALLED version exports against LATEST, catching all cross-major removals.
+Without Fix 1, no BreakingChange for startTransaction exists, and the test case fails.
+
+See `git diff main..fix/migrate-agent-changes -- src/depfix/sources/repo_exports.py`
+for the exact code to migrate.
