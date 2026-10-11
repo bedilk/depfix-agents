@@ -13,11 +13,11 @@
       "inbox": "coordination/inbox/principal.jsonl",
       "status": "idle",
       "current_task": null,
-      "last_active": "2026-10-11T21:56:49.752281+00:00"
+      "last_active": "2026-10-11T21:59:50.532784+00:00"
     },
     {
       "tag": "researcher",
-      "model": "claude-sonnet-4-6-1m",
+      "model": "claude-opus-5-5",
       "mode": "headless",
       "script": "scripts/researcher-loop.sh",
       "owns": [
@@ -32,7 +32,7 @@
     },
     {
       "tag": "implementer",
-      "model": "claude-sonnet-4-6",
+      "model": "claude-sonnet-5",
       "mode": "headless",
       "script": "scripts/implementer-loop.sh",
       "owns": [
@@ -47,7 +47,7 @@
     },
     {
       "tag": "reviewer",
-      "model": "claude-opus-4-6",
+      "model": "claude-opus-5-5",
       "mode": "interactive",
       "script": "scripts/reviewer-loop.sh",
       "owns": [
@@ -56,13 +56,13 @@
       ],
       "state_file": "coordination/reviewer.md",
       "inbox": "coordination/inbox/reviewer.jsonl",
-      "status": "running",
-      "current_task": "T-17",
-      "last_active": "2026-10-11T21:54:03.297632+00:00"
+      "status": "idle",
+      "current_task": null,
+      "last_active": "2026-10-11T21:59:50.532784+00:00"
     },
     {
       "tag": "tester",
-      "model": "claude-sonnet-4-6",
+      "model": "claude-sonnet-5",
       "mode": "headless",
       "script": "scripts/tester-loop.sh",
       "owns": [
@@ -101,5 +101,5 @@
       ]
     }
   },
-  "notes": "Opus pool (principal+reviewer) must not exceed 25 req/min combined. Space Opus wake-ups >= 2 min apart. Sonnet agents run freely."
+  "notes": "Opus 5.5 pool (researcher+reviewer): space wake-ups >= 2 min apart. Fable 5.1 principal is lightweight. Sonnet 5 agents run freely."
 }
