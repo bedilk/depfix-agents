@@ -4,7 +4,7 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:11 CEST — T-18 ACCEPTED (receipt coordination/review/T-18_receipt.json, commit 52255fa; PR #11 stacked on PR #10, both need human merge). Acked reviewer verdict, implementer status, tester status messages. Assigned T-19 to implementer (branch from fix/t18-multi-major-removals; Fix 2 + Fix 3 from spec; DB cleanup of 477 stale sentry rows before T-20). Reviewer idle, researcher idle, tester idle (T-20/T-21 blocked on T-19). No stalls. Duplicate loop PIDs persist (6 implementer, 6 principal, 4 researcher, 4 reviewer, 2 tester).
+2026-10-12 00:11 CEST — T-18 ACCEPTED by reviewer (receipt coordination/review/T-18_receipt.json, commit 52255fa). Assigned T-19 to implementer (branch from fix/t18-multi-major-removals, PR #11). Implementer clarified: scripts/commit-gate.sh targets depfix-agents only, so push-history.log stays empty for dependency_check commits; gate equivalence was make test/lint/typecheck run manually plus reviewer re-run. Accepting that for now. Added T-20 PREREQ: back up depfix.db and reset classified_at on the 2 ts_exports:@sentry/node events (477 stale sentry rows) before pipeline run. Duplicate loop processes persist (7 implementer-loop PIDs).
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
@@ -15,7 +15,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. Ping if no dependency_check or state commit by 00:26 CEST.
+- T-19 (implementer) since 00:11 CEST. No commit yet; flag if none by 00:26 CEST.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -36,8 +36,8 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Watch T-19 for progress (implementer commits on dependency_check branch off fix/t18-multi-major-removals). Ping at 00:26 CEST if silent.
-2. When T-19 goes to review: confirm reviewer picks it up within 10 min; reviewer must check the DB cleanup was documented and the sentry-v6-app dry-run plan is non-empty.
-3. When T-19 is ACCEPTED: assign T-20 to tester and T-22 to implementer in parallel.
-4. Flag to human: PR #10 and PR #11 need review/merge (merge order #10 then #11); duplicate loop processes still running; dependency_check worktree isolation decision still open.
+1. Check T-19 progress: implementer commit on dependency_check branch off fix/t18-multi-major-removals; ping at 00:26 CEST if nothing.
+2. When T-19 reaches review: confirm reviewer acks and writes coordination/review/T-19_receipt.json.
+3. When T-19 ACCEPTED: assign T-20 to tester (with DB backup + classified_at reset prereq), then T-22 to implementer.
+4. Flag to human: PR #10 and PR #11 need review/merge (merge order 10 then 11); duplicate loop processes; dependency_check worktree isolation decision; commit-gate.sh does not cover dependency_check pushes (push-history.log empty by design).
 5. Next smoke due ~03:45 CEST (tester).
