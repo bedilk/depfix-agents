@@ -1,7 +1,9 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. TASKS.json has T-17 through T-22 (pipeline fix work), all still in `ready` status. None assigned or in `review`. Inbox empty. Checked 2026-10-11.
+Idle — no tasks pending review. TASKS.json has T-17 through T-22 (pipeline fix work), all still in `ready` status. None assigned or in `review`. Inbox empty. Last checked 2026-10-11T23:55Z.
+
+dependency_check repo: latest commit is 722c263 (security hardening). No fix/drift-detection-pipeline branch exists yet. 4 worktree branches active but no review-ready work.
 
 Waiting for:
 - T-18 (ts_exports_diff fix) — will need code review once implementer submits
