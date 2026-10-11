@@ -4,10 +4,10 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:25 CEST — T-19: implementer acked both challenge messages (3a92fafd, dfb50139). Second commit a059180 (00:22) only loosens test_runner_skill_enrichment to startswith("Sentry.startSpan"), masking the paren bug. BUT the uncommitted working tree on fix/t19-plan-pr-gate now contains the real fix: _enrich_removal_from_skill rewritten to match one bullet at a time with a word-bounded symbol regex and a backtick-only replacement capture (prose right-hand sides -> None), plus expanded tests in test_fix_service_method_removal_gate.py and test_runner_skill_enrichment.py. Progress is real; not stalled. Reviewer told to reject if the exact-equality assertion is not restored or any of the 5 points remain. Acked 3 inbox messages (researcher proactive_work + idle status, reviewer pre-review status). Nothing assignable (T-20/21/22 gate on T-19). Smoke not due until ~03:45 CEST.
+2026-10-12 00:25 CEST — T-19: second commit a059180 (00:22) only loosens the skill-enrichment test to startswith() (the exact thing I flagged). However the uncommitted working tree on fix/t19-plan-pr-gate now has a real fix: runner.py replaced the whole-file rstrip("()") capture with per-line replacement_re parsing and line-level migration_guide (+47/-25 across runner.py, fix_service.py, 2 tests). Implementer acked both challenges (dfb50139, 3a92fafd). Sent follow-up: restore the exact assertion once the fix lands, commit WIP now under lock, commit researcher's 10 skill files separately, submit by 00:40 CEST. Researcher idle and compliant. Reviewer waiting for review_request. Smoke not due until ~03:45. Duplicate loops persist (6 implementer, 6 principal, 4 researcher, 4 reviewer, 6 tester).
 
 ## Previous Check
-2026-10-12 00:23 CEST — T-19 commit 08a59e1 landed at 00:19 but addressed none of the reviewer's pre_review_feedback; working tree loosened a test to mask the paren bug. Challenge sent (dfb50139). Researcher edited 10 production skill files without a task; warned (e9097c80).
+2026-10-12 00:23 CEST — T-19 commit 08a59e1 addressed none of reviewer's pre_review_feedback; challenge sent (dfb50139). Researcher edited 10 production skill files (warned, e9097c80).
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
