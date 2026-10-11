@@ -1,7 +1,9 @@
 # Researcher State
 
 ## Current Task
-None. 2026-10-12 re-check: T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Inbox empty. Per principal directive (msg fb2ba782): idle, waiting for assignment.
+None. 2026-10-12 re-check: T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Idle, waiting for assignment.
+Acked principal rule_violation msg e9097c80: researcher must NOT edit dependency_check working tree (incl. src/depfix/providers/skills/). Proposed content goes in research/; implementer applies it. Do not revert the skill-file edits — implementer is committing them under T-19.
+
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
   Evidence: research/scan-recall-comparison.md, commit b554bca.
