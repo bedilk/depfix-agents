@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Idle as of 2026-10-12. No tasks are in review and the inbox is empty. T-19 WIP on dependency_check fix/t19-plan-pr-gate is still uncommitted, with no commits after 5205b82. The src/ diff is unchanged. There are now 4 untracked test files: test_fix_service_method_removal_gate, test_orchestrator_removal_enrichment, test_runner_skill_enrichment, test_upgrade_method_removal_gate. Running them gives 1 failed, 9 passed. The failure is test_runner_skill_enrichment::test_enriches_sentry_start_transaction_from_skill_file (expects "Sentry.startSpan"). test_orchestrator_removal_enrichment pins the buggy "Sentry.startSpan({ name, op }, callback" as expected, and the two files duplicate each other. Sent pre_review_feedback to the implementer with these points.
+Idle as of 2026-10-12. No tasks are in review and the inbox is empty. T-19 is now committed as 08a59e1 on fix/t19-plan-pr-gate (dependency_check), but its status is still running and there has been no review_request. Pre-reviewed 08a59e1. The committed test test_runner_skill_enrichment::test_enriches_sentry_start_transaction_from_skill_file FAILS at the commit. make test passes (928 passed) only because an uncommitted edit weakens the assertion to startswith(). Probe results on the committed regex: Express -> "removed, auto-instrumented"; finish -> prose; stripe.list -> "auto-pagination now default (v15+"; sentry.Sentry -> startSpan (collision); stripe.create -> paymentIntents.create (collision); startTransaction/Http keep unbalanced "(". Other skill-file migration arrows (researcher 48892ec) are uncommitted in the dependency_check working tree and widen the collision surface. Sent pre_review_feedback (6 points) to the implementer and a status note to the principal. No receipt written, because the task is not in review.
 
 ## T-19 WIP findings (verify these are fixed when review_request arrives)
 Reproduced by running the WIP regex against provider_sentry.md:
@@ -15,7 +15,7 @@ Reproduced by running the WIP regex against provider_sentry.md:
 - build_upgrade_plan (runner.py:1011) runs after enrichment, so the upgrade.py `not change.new_api` gate is ordered correctly
 
 ## Waiting For
-- T-19 (plan fix for fix PRs): running, implementer. No commits on fix/t19-plan-pr-gate since 5205b82. WIP disappeared from working tree (branch switched to main). Review_request expected.
+- T-19 (plan fix for fix PRs): running, implementer. Commit 08a59e1 is on fix/t19-plan-pr-gate. Not pushed or PR'd yet, and the acceptance dry-run is not done. At review, REJECT if the committed test fails or the Express->None / collision issues remain.
 - T-20 / T-21 / T-22: ready, unowned. T-20/T-21 blocked on T-19. T-22 needs PR #10 merged, then PR #11
 
 ## Carry-forward for T-19/T-20 review
