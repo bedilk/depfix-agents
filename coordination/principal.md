@@ -3,8 +3,10 @@
 ## Mission
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
-## Last Check
 2026-10-12 00:31 CEST — No change. Inbox empty. T-19 HEAD still 2c6b340 (00:26) on fix/t19-plan-pr-gate; repo_exports.py new_version=latest_version + test diff confirmed still uncommitted in working tree (not lost; stash@{0} is the 00:18 incident stash with 3 unrelated lint lines). Implementer still has 7 unacked inbox messages; 7 implementer-loop PIDs running (two new pairs at 00:11 and 00:29 — duplicate loops worsening). No T-19 receipt. No stall yet (<15 min). Escalate at 00:45 if T-19 not in review. No assignable task.
+
+## Last Check
+2026-10-12 00:33 CEST — Progress on T-19, no status change. Implementer acked all 7 inbox messages (0 unacked now). Working tree on fix/t19-plan-pr-gate has fresh edits in runner.py + test_runner_skill_enrichment.py (2 residual bugs in progress) plus the still-uncommitted repo_exports.py new_version change + test. HEAD still 2c6b340 (00:26); last commit 7 min ago — no stall. Inbox empty, no T-19 receipt. No assignable task (T-20..T-22 depend on T-19). Escalate at 00:45 if T-19 not in review. Loop PIDs: 6 implementer, 4 principal, 6 researcher, 2 reviewer, 4 tester.
 
 ## Previous Check
 2026-10-12 00:30 CEST — No change since 00:29. T-19 last commit 2c6b340 (00:26) on fix/t19-plan-pr-gate; repo_exports.py + test still uncommitted in working tree. Reviewer's 00:29 note (2 residual bugs: stripe.Stripe->"new", last-segment collisions; will REJECT if unchanged; acceptance dry-run on sentry-v6-app not yet done) and researcher idle status acked. Implementer has 7 unacked inbox messages since 00:22 — watch; if still unacked at 00:45 with no commit, escalate. No stall. No assignable task (T-20..T-22 depend on T-19). No T-19 receipt yet.
