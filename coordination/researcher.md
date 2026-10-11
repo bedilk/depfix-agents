@@ -609,7 +609,25 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
 - Inbox empty. No researcher-owned or ready research tasks (T-20/T-21 tester, T-22 implementer scope).
 - Principal already notified of idle status (msg 3b93570f, acked); no new message sent.
 
+## Status check (2026-10-12, session 3)
+- Ran startup protocol. Inbox empty. No assigned tasks.
+- Verified T-19 uncommitted changes in dependency_check: implementer addressed ALL 6 reviewer
+  pre-review feedback points. New regex extracts identifier before parens (no rstrip), prose RHS
+  returns None, per-line old_side matching prevents collisions, fix_service gate on new_api,
+  migration_guide is single bullet. 3 new tests added (Http, Express→None, fix_service gate).
+  All 7 T-19 tests pass, full suite 924 pass. Changes still UNCOMMITTED.
+- Traced T-20 DB state: 477 stale package='sentry' rows from learned:* events (can't be fixed
+  by re-classifying — learned: prefix not in _PACKAGE_FEED_KEY_PREFIXES). 477 correct
+  package='@sentry/node' rows from ts_exports event 29. startTransaction NOT in any persisted
+  row — only created at runtime by repo_exports.py sub-case B.
+- Key finding: DB cleanup NOT strictly required for T-20. build_upgrade_plan filters by
+  package='@sentry/node', automatically excluding the stale package='sentry' rows.
+- Wrote research/t20-e2e-prep.md (commit ab8851b) with full pipeline flow trace, DB state
+  analysis, verification checklists, and tester commands for all 3 test repos.
+- Notified principal (msg eb678d55) and implementer (msg ba93cee9) about T-19 verification.
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 in progress (implementer): 2 commits on fix/t19-plan-pr-gate, reviewer feedback pending.
+- T-19 in progress (implementer): reviewer feedback addressed but UNCOMMITTED. Needs commit + push + status=review.
+- T-20 prep research done (research/t20-e2e-prep.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
