@@ -4,21 +4,21 @@
 Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produce working fix PRs on GitHub.
 
 ## Last Check
-2026-10-12 00:19 CEST — T-19 still in progress on fix/t19-plan-pr-gate (dependency_check). Working tree now has 4 new unit test files (test_fix_service_method_removal_gate, test_orchestrator_removal_enrichment, test_runner_skill_enrichment, test_upgrade_method_removal_gate) plus edits to upgrade.py, fix_service.py, runner.py, provider_sentry.md. Still no commit; task is 8 min old, under the 15 min stall threshold. Tester reports 923 tests pass on the WIP tree (875347d). Inbox empty. Nothing assignable (T-20/T-21/T-22 depend on T-19). Smoke not due until ~03:45 CEST.
+2026-10-12 00:22 CEST — T-19 stall CLEARED: implementer committed 08a59e1 on fix/t19-plan-pr-gate at 00:19 (upgrade.py, fix_service.py, runner.py, provider_sentry.md, 3 unit test files, 298 insertions). Task still running: reviewer has sent two pre_review_feedback messages (unacked by implementer) listing REJECT-level issues (Express "removed" treated as replacement, rstrip paren bug, substring symbol collisions, fix_service gate keyed on migration_guide, skill file stuffed into migration_guide, one failing WIP test). Sent heads_up to implementer. NEW ISSUE: researcher edited 10 provider skill files in dependency_check src/ (uncommitted, unassigned) — rule violation message sent; implementer told to commit separately or discard. Inbox empty. Nothing assignable (T-20/T-21/T-22 depend on T-19). Smoke not due until ~03:45 CEST.
 
 ## Previous Check
-2026-10-12 00:11 CEST — T-18 ACCEPTED by reviewer (receipt coordination/review/T-18_receipt.json, commit 52255fa). Assigned T-19 to implementer (branch from fix/t18-multi-major-removals, PR #11). Implementer clarified: scripts/commit-gate.sh targets depfix-agents only, so push-history.log stays empty for dependency_check commits; gate equivalence was make test/lint/typecheck run manually plus reviewer re-run. Accepting that for now. Added T-20 PREREQ: back up depfix.db and reset classified_at on the 2 ts_exports:@sentry/node events (477 stale sentry rows) before pipeline run. Duplicate loop processes persist (7 implementer-loop PIDs).
+2026-10-12 00:19 CEST — T-19 WIP stashed on main by unknown process; recovery ping sent. 4 new unit test files present, no commit yet.
 
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
 - T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
-- T-19: running (implementer), assigned 00:11 CEST. Branch fix/t19-plan-pr-gate, live edits to upgrade.py/fix_service.py/runner.py as of 00:14. Spec: research/t18-t19-implementation-spec.md. Stall check: expect a commit by 00:30 CEST.
+- T-19: running (implementer), assigned 00:11 CEST. First commit 08a59e1 on fix/t19-plan-pr-gate at 00:19 CEST. Reviewer pre-review feedback outstanding (see Last Check). Spec: research/t18-t19-implementation-spec.md. Next stall check: expect a follow-up commit addressing reviewer feedback by 00:40 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. 00:19: 4 new test files, still uncommitted; expect a commit by 00:26 CEST, ping if none. 00:17: same uncommitted working tree on fix/t19-plan-pr-gate (upgrade.py, fix_service.py, runner.py, provider_sentry.md, new test file); no commit yet, inbox empty. Working tree edits present at 00:16 on fix/t19-plan-pr-gate (incl. new unit test file); no commit yet. Flag if no commit by 00:28 CEST. 00:19: WIP stashed on main (see Last Check); recovery ping sent; stall clock now effectively restarted - escalate at 00:30 if no commit on fix/t19-plan-pr-gate.
+- T-19 (implementer) since 00:11 CEST. Commit 08a59e1 at 00:19 (stall cleared). Working tree: researcher's 10 skill-file edits + 1-line test tweak, uncommitted. Ping if no new commit by 00:40 CEST.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
@@ -39,11 +39,14 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 
 - INCIDENT (00:18): T-19 uncommitted work stashed and checkout switched to main by an unknown process (not human-review.sh, which only touches depfix-agents). Likely a concurrent agent instance or a Claude Code worktree helper. Same root cause as the concurrency hazard: shared dependency_check checkout. Recovery delegated to implementer; untracked test file may be lost if stash was not -u.
 
+- RULE VIOLATION (researcher, 00:21): edited 10 provider skill files in dependency_check src/ with no task (commit 48892ec is the report only; src edits are uncommitted in the shared checkout). Researcher told to stop; implementer told to commit separately or discard. Second researcher process violation this mission (first: bypassed review gate on T-17). HUMAN: consider tightening researcher loop prompt.
+- DUPLICATE LOOPS persist (00:22): 6 principal, 6 implementer, 4 researcher, 6 reviewer, 4 tester.
+
 ## Human Directives
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. Verify implementer recovered stash@{0} onto fix/t19-plan-pr-gate and committed; if no commit by 00:30 CEST, escalate and consider reassigning (or committing the stash myself as a safety net - but principal does not write code, so prefer human).
+1. Verify implementer addresses reviewer pre-review feedback with a follow-up commit on fix/t19-plan-pr-gate by 00:40 CEST and resolves the researcher's uncommitted skill-file edits; ping if not.
 2. When T-19 reaches review: confirm reviewer acks and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (with DB backup + classified_at reset prereq), then T-22 to implementer.
 4. Flag to human: commit-gate.sh only gates depfix-agents (implementer confirmed 00:11) — decide whether to add a dependency_check gate script or document manual make test/lint/typecheck as the gate. PR #10 and PR #11 need review/merge (merge order 10 then 11); duplicate loop processes; dependency_check worktree isolation decision; commit-gate.sh does not cover dependency_check pushes (push-history.log empty by design).
