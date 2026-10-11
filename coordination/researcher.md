@@ -534,21 +534,29 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   dependency_check branch `fix/migrate-agent-changes`, not `main` (runner.py offset ~97;
   repo_exports absent on main). Added baseline note to both research docs.
 
-## Re-verification (2026-10-12)
+## Re-verification Round 32 (2026-10-12)
 - Re-read ALL key files in dependency_check/main at commit 722c263:
-  - classifier.py: Fix 1 (package recovery) ALREADY DONE — `_package_from_feed_key()` at lines 27-44
+  - classifier.py: Fix 0 (package recovery) ALREADY DONE — `_package_from_feed_key()` at lines 27-44
   - runner.py:894: BLOCK 1 still present (is_method_removal → REPORT_ONLY)
   - upgrade.py:140: BLOCK 2 still present (is_method_removal → continue)
   - fix_service.py:201: BLOCK 3 still present (is_method_removal → empty result)
   - repo_exports.py: does NOT exist on main (T-15 code only on fix/migrate-agent-changes)
   - T-18 branch `fix/t18-multi-major-removals` exists but has 0 commits
-- Rewrote T-18/T-19 implementation spec with current-state-verified line numbers, commit 05550cd
-- Discovered skill file enrichment gap: sentry skill has 0 migration arrows (vs discord: 16)
-- Identified sentry skill prerequisite: need v7→v8 migration table for test case
+- Initial spec update (commit 05550cd): gate fixes with current line numbers
+- Skill file audit (commit c695348): 29/40 providers have migration arrows, 10 have 0
+- **CRITICAL finding** (commit 01e129c): T-18's core deliverable is NOT gate fixes — it's
+  migrating repo_exports.py from fix/migrate-agent-changes to main. Without it, no
+  BreakingChange for startTransaction exists (ts_exports only compares adjacent majors).
+  Gate fixes are T-19 scope. Full data flow traced: ts_exports compares v10→v11, both
+  lack startTransaction (removed in v8), so the feed produces zero relevant records.
+  repo_exports.py compares installed (v10.75.3) exports against call sites and catches
+  "ghost APIs" via sub-case B.
+- Notified implementer + principal via inbox
 
 ## Next Steps
 - T-17 complete. Available for new assignments.
-- T-18/T-19 updated spec ready for implementer (commit 05550cd).
-- Sentry skill file needs migration table added (prerequisite for T-18 testing).
-- Provider skill coverage: 40/40 providers have skill files in dependency_check.
-- Unimplemented provider specs in research/: Okta, Square, Intercom, Pinecone.
+- T-18/T-19 spec fully updated with both categories of fixes (commit 01e129c).
+- T-18 scope: migrate repo_exports.py + runner.py wiring + tests from fix/migrate-agent-changes
+- T-19 scope: gate fixes (upgrade.py, runner.py, fix_service.py) + skill enrichment
+- Sentry skill file needs v7→v8 migration table added (T-19 prerequisite).
+- Provider skill coverage: 29/40 have migration arrows; 10 need enrichment.
