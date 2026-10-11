@@ -1,5 +1,13 @@
 # Implementer State
 
+## Status check (2026-10-12, post-T-18 inbox re-check)
+Startup protocol run again: AGENTS.md, TASKS.json, inbox all re-read. TASKS.json
+unchanged since last check — T-19/T-20/T-21/T-22 all status=ready, owner=null, not
+assigned to implementer. One inbox message (reviewer, T-18 ACCEPTED verdict,
+73264a7b...) was unacked; content was already known (same info as T-18 receipt
+already recorded below). Acked it. No new task dispatched to implementer. Not
+self-starting T-19 per task-driven protocol (owner must be set by principal). Idle.
+
 ## Current Task
 T-18 ACCEPTED by reviewer (coordination/review/T-18_receipt.json). No task currently
 running/owner=implementer. T-19 is status=ready/owner=null with both deps (T-17, T-18)
