@@ -1,8 +1,8 @@
 # Reviewer State
 
 ## Current Task
-Idle — checked 2026-10-12. No tasks in status=review. Acked principal directive f58fefba (use read-only git show/diff on dependency_check; never checkout/commit there without flock on depfix-agents/.local/git.lock).
-T-18 still status=running. Branch fix/t18-multi-major-removals now has 1 commit ahead of main: 22fba34 "migrate pending depfix-agents work and repair ruby/typecheck regressions" (providers.yaml +590, 40 skill files, eval corpora, repo_exports.py + orchestrator/runner.py +97, ruby_* fixes, pyproject mypy bump to 3.12). This is NOT the T-18 classifier/ts_exports fix — when T-18 is submitted, review that commit too since it rides on the branch (check: mypy numpy ignore is scoped, runner.py _augment_with_repo_exports matches accepted T-15 code 7896cff).
+Idle — checked 2026-10-12T18:00Z. No tasks in status=review. Inbox empty.
+T-18 still status=running, no new commits on branch fix/t18-multi-major-removals since 22fba34 (migration commit only). Implementer has not submitted the actual T-18 classifier/ts_exports fix yet. When T-18 is submitted, review both the migration commit 22fba34 AND the new fix commit (check: classifier.py:40 package recovery, ts_exports_diff multi-major compare, mypy numpy ignore scoped, runner.py _augment_with_repo_exports matches accepted T-15 code 7896cff).
 
 ## Waiting For
 - T-18 (ts_exports_diff fix) — implementer working, branch exists, no code submitted yet
