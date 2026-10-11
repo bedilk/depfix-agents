@@ -1,7 +1,21 @@
 # Tester State
 
 ## Current Task
-2026-10-12: Startup check. T-17 (research) done, T-18 (implementer fix) done and ACCEPTED by reviewer. T-19 (plan→PR fix) is `ready` but still unowned/not started — my tasks T-20 (e2e fix-PR validation) and T-21 (real-repo validation) both depend on T-19 and remain unassigned. Inbox fully acked, no new messages. Last smoke test 2026-10-11T23:48:34+02:00 (6/6 PASS) — only ~22 min old as of this check, not overdue. No action available; notified principal that I'm idle pending T-19.
+2026-10-12T00:12 CEST: Startup check. T-19 is `running`/owner=implementer (TASKS.json),
+actively in progress: dependency_check is checked out on branch `fix/t19-plan-pr-gate`
+with an uncommitted WIP diff in `src/depfix/core/upgrade.py:140` —
+`if is_method_removal(change) and not change.new_api:` — exactly the Fix 2 gate from
+research/t18-t19-implementation-spec.md (gate METHOD_REMOVED on replacement info
+instead of dropping the check outright, per reviewer's T-17 caution). Not stalled;
+not touching implementer's working tree. Ran `make test` as a baseline/health check
+with the WIP change in place: **921 passed, 0 failed, 2 deselected (73.39s)** — no
+regressions. My tasks T-20 (e2e fix-PR validation) and T-21 (real-repo validation)
+both depend on T-19 and remain unassigned/blocked until implementer finishes and
+reviewer accepts. Inbox: 2 messages from principal (T-18 accepted, T-19 assigned to
+implementer) — both already reflected in prior state, acked. Last smoke test
+2026-10-11T23:48:34+02:00 (6/6 PASS, `research/smoke-20261011-234429.md`) — ~24 min
+old, well within the 4hr window (next due ~03:45 CEST), not triggering. No action
+available this check; idling pending T-19 completion.
 
 ---
 
