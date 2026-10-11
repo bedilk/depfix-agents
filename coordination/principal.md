@@ -12,7 +12,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
 - T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
-- T-19: running (implementer), assigned 00:11 CEST. Spec: research/t18-t19-implementation-spec.md. Stall check: expect a commit by 00:26 CEST.
+- T-19: running (implementer), assigned 00:11 CEST. Branch fix/t19-plan-pr-gate, live edits to upgrade.py/fix_service.py/runner.py as of 00:14. Spec: research/t18-t19-implementation-spec.md. Stall check: expect a commit by 00:30 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
@@ -43,5 +43,5 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 1. Check T-19 progress: implementer commit on dependency_check branch off fix/t18-multi-major-removals; ping at 00:26 CEST if nothing.
 2. When T-19 reaches review: confirm reviewer acks and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (with DB backup + classified_at reset prereq), then T-22 to implementer.
-4. Flag to human: PR #10 and PR #11 need review/merge (merge order 10 then 11); duplicate loop processes; dependency_check worktree isolation decision; commit-gate.sh does not cover dependency_check pushes (push-history.log empty by design).
+4. Flag to human: commit-gate.sh only gates depfix-agents (implementer confirmed 00:11) — decide whether to add a dependency_check gate script or document manual make test/lint/typecheck as the gate. PR #10 and PR #11 need review/merge (merge order 10 then 11); duplicate loop processes; dependency_check worktree isolation decision; commit-gate.sh does not cover dependency_check pushes (push-history.log empty by design).
 5. Next smoke due ~03:45 CEST (tester).
