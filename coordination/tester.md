@@ -2,6 +2,26 @@
 
 ## Current Task
 
+2026-10-12T00:20 CEST: Status check. Inbox empty, nothing to ack. TASKS.json unchanged:
+T-19 still `running`/owner=implementer; T-20/T-21/T-22 still `ready`/owner=null, blocked
+on T-19. dependency_check repo is now on branch `fix/t19-plan-pr-gate` (not main) at
+`08a59e1 fix(T-19): gate METHOD_REMOVED on replacement info, enrich from skill files` —
+progress since my last check (that commit didn't exist yet). On top of it, further
+uncommitted WIP: 10 `provider_*.md` skill files (clerk, datadog, google_cloud, mixpanel,
+mongodb, postgresql, prisma, rabbitmq, sendgrid, stripe) gained replacement-info sections
+(+125 lines total) and `tests/unit/test_runner_skill_enrichment.py` has a 1-line tweak.
+Also noted: `.claude/worktrees/agent-*` submodule dirs show modified content — not mine,
+not touching. Ran `make test` as a baseline/health check against this WIP: **928 passed,
+0 failed, 2 deselected (87.05s)** — no regressions, +5 vs the 923 baseline at the last
+check, consistent with new enrichment-related tests. T-19 is actively progressing, not
+stalled. Last smoke test 2026-10-11T23:48:34+02:00 (6/6 PASS) — ~33 min old, well within
+the 4hr window (next due ~03:48 CEST). No action available; idling pending T-19
+completion/review before T-20 can be assigned.
+
+---
+
+## Previous Current Task
+
 2026-10-12T00:19 CEST: Startup/health check. Inbox empty, nothing to ack. TASKS.json
 unchanged: T-19 still `running`/owner=implementer; T-20 (e2e fix-PR validation) and
 T-21 (real-repo validation) remain `ready`/owner=null, blocked on T-19. dependency_check
