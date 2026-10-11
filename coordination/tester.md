@@ -2,6 +2,29 @@
 
 ## Current Task
 
+2026-10-12T00:31 CEST: Health check, overlapping closely with the 00:28 entry below (same
+WIP on `fix/t19-plan-pr-gate` at `a059180`, same conclusion: the committed test-loosening
+in a059180 is superseded by legitimate uncommitted WIP that fixes the real paren-extraction
+bug and restores the strict assertion — not feedback-dodging). Not re-deriving that
+analysis here. One new data point: my first `make test` run against this WIP came back
+**1 FAILED, 929 passed, 2 deselected (96.35s)** —
+`test_repo_aware_exports.py::test_subcaseB_callsite_absent_from_installed_creates_change`.
+It passed standalone and 3x in a tight loop, and an immediate full-suite rerun came back
+clean (**930 passed, 0 failed**), matching the 00:28 entry's result. `make test` has no
+`-n`/xdist (sequential), so this wasn't intra-run parallelism — most likely two tester
+processes (this one and the 00:28 one) running `make test` against the same shared
+dependency_check working tree/DB at nearly the same wall-clock time, causing transient
+contention. Flagging as an infra note, not a code regression: **running `make test`
+concurrently from multiple agents against the same checkout is unsafe** and can produce
+one-off false failures. No action needed unless it recurs outside of concurrent runs.
+Inbox empty, nothing to ack. Last smoke test 2026-10-11T23:48:34 CEST (6/6 PASS) — ~43 min
+old, well within the 4hr window. No tester task available; T-20/T-21/T-22 still blocked on
+T-19.
+
+---
+
+## Previous Current Task
+
 2026-10-12T00:28 CEST: Status check. Inbox empty, nothing to ack. TASKS.json unchanged:
 T-19 still `running`/owner=implementer; T-20/T-21/T-22 still `ready`/owner=null, blocked
 on T-19. dependency_check on `fix/t19-plan-pr-gate`, HEAD now `a059180` (new commit since
