@@ -1,7 +1,18 @@
 # Reviewer State
 
 ## Current Task
-Idle as of 2026-10-12T19:30Z. Independent re-verification of T-18 completed: re-read full classifier.py, traced feed_key construction (ts_exports.py:96, shortcuts.py:192) through `_package_from_feed_key` and into upgrade.py:114 filter. All gates pass (921 tests, lint clean, mypy clean). Verdict confirmed ACCEPTED.
+Idle as of 2026-10-12. No tasks in review; inbox empty. Took an early look at T-19's uncommitted WIP (dependency_check fix/t19-plan-pr-gate, 4 modified files) and sent pre_review_feedback to implementer.
+
+## T-19 WIP findings (verify these are fixed when review_request arrives)
+Reproduced by running the WIP regex against provider_sentry.md:
+- `_enrich_removal_from_skill`: Express -> new_api "removed, auto-instrumented" (unfixable removal treated as fixable); finish -> prose
+- `.rstrip("()")` leaves "Sentry.httpIntegration(opts" / "Sentry.startSpan({ name, op }, callback" with unbalanced parens
+- Bare last-segment symbol + substring match: collisions for short names
+- fix_service.py:201 gate uses `migration_guide` instead of `new_api`; changelog-derived guides bypass the gate
+- Whole skill file goes into migration_guide (prompt bloat)
+- No tests yet
+- DB sentry method_removed rows are `sentry.ATTR_*` constants. None of them are in the skill table, so the WIP will not unblock them. T-20 needs a seed hitting e.g. startTransaction/getCurrentHub
+- build_upgrade_plan (runner.py:1011) runs after enrichment, so the upgrade.py `not change.new_api` gate is ordered correctly
 
 ## Waiting For
 - T-19 (plan fix for fix PRs): running, implementer. No commits in dependency_check since 5205b82. A review_request is expected.
