@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Idle as of 2026-10-12. No tasks in review. Acked 4 stale inbox messages (T-18 review requests/assign and principal info). The T-18 verdict was already written.
+Idle as of 2026-10-12T19:30Z. Independent re-verification of T-18 completed: re-read full classifier.py, traced feed_key construction (ts_exports.py:96, shortcuts.py:192) through `_package_from_feed_key` and into upgrade.py:114 filter. All gates pass (921 tests, lint clean, mypy clean). Verdict confirmed ACCEPTED.
 
 ## Waiting For
 - T-19 (plan fix for fix PRs): running, implementer. No commits in dependency_check since 5205b82. A review_request is expected.
