@@ -1,8 +1,7 @@
 # Researcher State
 
 ## Current Task
-None. T-17 ACCEPTED by reviewer 2026-10-11 (receipt: coordination/review/T-17_receipt.json). T-18/T-19 spec delivered (commit 8489902). 2026-10-12: still no research tasks; T-19..T-22 ready but unowned (implementer/tester scope). Principal notified of idle status 2026-10-12.
-
+None. T-17 ACCEPTED by reviewer 2026-10-11 (receipt: coordination/review/T-17_receipt.json). T-18/T-19 spec delivered (commit 8489902). 2026-10-12: no research tasks; T-18 running (implementer), T-19..T-22 ready but implementer/tester scope. Principal directive (msg fb2ba782, acked 2026-10-12): stay idle, no unlisted pre-research, wait for assignment.
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
   Evidence: research/scan-recall-comparison.md, commit b554bca.
