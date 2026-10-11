@@ -1,7 +1,7 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. TASKS.json was refreshed by human on 2026-10-11 with T-17 through T-22 (new pipeline fix work). All tasks are in `ready` status, none yet in `review`. Inbox empty as of 2026-10-11.
+Idle — no tasks pending review. TASKS.json has T-17 through T-22 (pipeline fix work), all still in `ready` status. None assigned or in `review`. Inbox empty. Checked 2026-10-11.
 
 ## Reviews Completed
 
