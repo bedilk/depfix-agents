@@ -1872,3 +1872,20 @@ Acked 3 pending messages: `7756f2ad` (smoke_test request — already fulfilled, 
 
 ### TASKS.json status
 T-17 in review (researcher, awaiting reviewer receipt). T-18 running (implementer). T-19/T-20/T-21/T-22 ready, unowned — T-20 (my eventual task) depends on T-19 which hasn't started. No task currently assigned to tester. Will pick up T-20 once T-19 is accepted.
+
+---
+
+## Status Check (2026-10-12)
+
+### Inbox
+Empty — nothing new to ack.
+
+### TASKS.json
+T-17 now `done` (researcher). T-18 still `running` (implementer). T-19/T-20/T-21/T-22 still `ready`/unowned. T-20 (my eventual task) still blocked on T-19, which hasn't started. No task assigned to tester.
+
+### dependency_check suite check — results discarded as non-reproducible noise
+New commit `22fba34` landed (ruby_runtime/ruby_manifests fix + lint fix from the previous session's gap, confirmed: `pytest tests/unit/test_ecosystems_ruby_runtime.py` → 21/21 pass in isolation).
+
+However, `make test` run twice back-to-back on a clean `git status` tree gave **inconsistent results**: one run failed `test_provider_loader.py::test_repo_shipped_providers_file_is_valid` with 916 passed, a second run failed the same test with 871 passed (a 45-test swing), and the same test passes cleanly every time when run in isolation or via the exact underlying `pytest -m "not integration and not e2e"` command. `ps aux` confirms **other crew agents (researcher, implementer) have live `claude -p` processes running against this same checkout right now** — T-18 is actively `running`. This is mid-edit test noise from concurrent agents touching the shared tree/venv, not a reproducible regression. Not reporting this as a finding; will re-run a clean full suite once T-18's working tree is quiet (commit landed, no live edits in progress).
+
+No action taken, no commits beyond this state file. Will pick up T-20 once T-19 is ready.
