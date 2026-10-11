@@ -2,6 +2,41 @@
 
 ## Current Task
 
+2026-10-12T00:28 CEST: Status check. Inbox empty, nothing to ack. TASKS.json unchanged:
+T-19 still `running`/owner=implementer; T-20/T-21/T-22 still `ready`/owner=null, blocked
+on T-19. dependency_check on `fix/t19-plan-pr-gate`, HEAD now `a059180` (new commit since
+my 00:20 check: "fix overly-strict assertion in skill enrichment test"). Investigated this
+commit closely given the principal's earlier concern that WIP was "loosening a test to
+mask the paren bug" — confirmed that concern was about a *prior* state, and the commit
+itself only changed `== "Sentry.startSpan"` to `.startswith(...)`, which still passed
+against the regex's actual output (exact string, no trailing junk) since `make test` was
+unchanged at 928 passed both before and after. More importantly, there is now further
+**uncommitted WIP on top of a059180** that supersedes the loosened assertion: it rewrites
+`_enrich_removal_from_skill` in `runner.py` (lines ~1470-1518) from a whole-file regex
+substring search (the actual source of the old "paren rstrip"/dirty-extraction bug the
+reviewer flagged) to a proper line-by-line bullet scan that only matches a bullet's
+left-hand side and requires the right-hand side to be a backtick-quoted code reference
+(prose-only bullets now correctly return `None` instead of a bogus `new_api`). The test
+file's assertion was reverted back to the strict `==` (not loosened) and 2 new test cases
+were added (`test_enriches_a_backtick_wrapped_replacement_without_unbalanced_parens`,
+`test_returns_none_when_replacement_is_prose_not_a_code_reference`), plus edits to
+`test_fix_service_method_removal_gate.py` and `test_repo_aware_exports.py`. This reads as
+genuine progress addressing reviewer pre-review feedback point #1 (paren rstrip) and #4
+(full-file migration_guide, now scoped to one matched bullet line), not feedback-dodging.
+Ran `make test` against this uncommitted WIP as a baseline/health check: **930 passed,
+0 failed, 2 deselected (95.57s)** — +2 vs the 928 baseline at 00:20, no regressions,
+consistent with the 2 new enrichment tests. Also still present and untouched: researcher's
+10 `provider_*.md` skill-file edits (part of the same uncommitted diff, unrelated to my
+role) and 4 `.claude/worktrees/agent-*` submodule dirs showing modified content (not mine).
+Last smoke test 2026-10-11T23:48:34+02:00 (6/6 PASS, `research/smoke-20261011-234429.md`)
+— ~40 min old, well within the 4hr window (next due ~03:48 CEST), not triggering. No
+action available this check; idling pending T-19 completion/review before T-20 can be
+assigned.
+
+---
+
+## Previous Current Task
+
 2026-10-12T00:20 CEST: Status check. Inbox empty, nothing to ack. TASKS.json unchanged:
 T-19 still `running`/owner=implementer; T-20/T-21/T-22 still `ready`/owner=null, blocked
 on T-19. dependency_check repo is now on branch `fix/t19-plan-pr-gate` (not main) at
