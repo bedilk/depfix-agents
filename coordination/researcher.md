@@ -31,13 +31,13 @@ openai, stripe, anthropic, supabase, vercel-ai, sentry, prisma, clerk, langchain
 twilio, sendgrid, octokit, slack, discord, mongodb, redis, posthog, algolia, google-cloud,
 elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
 
-## Round 6 Status (2026-10-05)
+## Status check (2026-10-05)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. Proactively wrote remediation research.
 - T-3, T-4, T-5, T-6 are in review with reviewer — no researcher action needed.
 - T-11 blocked on human GitHub App installation — no researcher action possible.
 
-## Proactive Work Round 6
+## Proactive Work (2026-10-05)
 - **Nonsemver remediation plan** (2026-10-05):
   Deep-dived the full symbol-matching chain to find the CRITICAL gap:
   `symbols_for_change("stripe", API_VERSION_BUMP_change)` returns `()` because
@@ -47,25 +47,25 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Fix: ~8 lines in `scanners/repo.py` to map dated old_api → `<api_version_pin>` symbol.
   Evidence: research/nonsemver-api-version-remediation.md, commit a19a93d.
 
-## Round 7 Status (2026-10-05)
+## Status check (2026-10-05, later)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 7
+## Proactive Work (2026-10-05, later)
 - **Resend provider implementation spec** (2026-10-05):
   Wrote a complete, actionable implementation spec for adding resend (#1 uncovered provider,
   48.8M npm/month). Includes exact providers.yaml YAML block, complete skill file content,
   known v1→v6 breaking changes, seed repo fixture, and implementer checklist.
   Evidence: research/resend-provider-spec.md, commit 8d12bfa.
 
-## Round 8 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer (T-3 and T-6 re-submitted after rejection).
 - T-11 still blocked on GitHub App installation.
 
-## Proactive Work Round 8
+## Proactive Work
 - **Cloudflare provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding cloudflare (#2 uncovered provider,
   12.9M npm/month). Key finding: Cloudflare ships breaking changes in minor releases (v7.1.0
@@ -73,12 +73,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Anthropic/OpenAI — ts_exports_diff feed works directly.
   Evidence: research/cloudflare-provider-spec.md, commit 2497d3d.
 
-## Round 9 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 9
+## Proactive Work
 - **Datadog provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding datadog (#3 uncovered provider,
   12.7M npm/month). Key finding: 64 minor releases at v1.x each ship Removed/Changed items —
@@ -88,12 +88,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   No public OpenAPI spec URL; uses github_release + ts_exports_diff feeds.
   Evidence: research/datadog-provider-spec.md, commit 2bc71f1.
 
-## Round 10 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 10
+## Proactive Work
 - **Plaid provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding plaid (#1 by break frequency,
   ~1 major SDK bump/month). npm `plaid` at v47.0.0 (4.7M/mo), pypi `plaid-python` at v45.0.0,
@@ -103,12 +103,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Three ecosystems (npm + pypi + rubygems) in one entry. Financial domain = highest per-change pain.
   Evidence: research/plaid-provider-spec.md, commit e206137.
 
-## Round 11 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 11
+## Proactive Work
 - **HubSpot provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding hubspot (#4 in recommended add order,
   6.3M npm/month). npm `@hubspot/api-client` at v14.0.1, pypi `hubspot-api-client` at v12.0.0.
@@ -117,12 +117,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   for objectId in v11), method renames (get→download in v10), GDPR API removal (v12).
   Evidence: research/hubspot-provider-spec.md, commit c5a50d7.
 
-## Round 12 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 12
+## Proactive Work
 - **Shopify provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding shopify (#5 in recommended add order,
   2.5M npm/month). npm `@shopify/shopify-api` at v15.0.0, pypi `ShopifyAPI` at v12.7.0.
@@ -132,12 +132,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   `eventId`/`resourceId` removed from events webhook delivery types (v15).
   Evidence: research/shopify-provider-spec.md, commit 4963f8d.
 
-## Round 13 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 13
+## Proactive Work
 - **Segment provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding Segment (#4 in recommended add order,
   10.5M npm/month for `@segment/analytics-node` + 2.7M/month still on old `analytics-node`).
@@ -149,12 +149,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   node-fetch, native globalThis.fetch), v1.84.3 analytics-next (resolveAnonymousIdConflicts removed).
   Evidence: research/segment-provider-spec.md, commit 7b847e2.
 
-## Round 14 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 14
+## Proactive Work
 - **Python/Ruby drift path test cases + bug discovery** (2026-10-06):
   Read pypi_manifests.py, ruby_manifests.py, lockfile.py, fix_service.py, and all relevant
   test files. Wrote 28 specific implementable test cases covering:
@@ -170,12 +170,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   to allow major drifts, the manifest writers still decline them.
   Evidence: research/python-ruby-drift-test-cases.md, commit dccd09c.
 
-## Round 15 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 15
+## Proactive Work
 - **Mixpanel provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding Mixpanel (#7 in recommended add order,
   5.4M npm/month server + 10.5M npm/month browser). Two npm packages: `mixpanel` (server-side) and
@@ -186,12 +186,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Python 2.7/3.5-3.8 support dropped (v5.0.0), Ruby timestamps now milliseconds (v2.3.1).
   Evidence: research/mixpanel-provider-spec.md, commit 47fab2b.
 
-## Round 16 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 16
+## Proactive Work
 - **Bugsnag provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding Bugsnag (#8 in recommended add order,
   ~15M total npm/month across @bugsnag/js + @bugsnag/node + @bugsnag/browser). All three JS packages
@@ -203,12 +203,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - v8→v9: React Native + Electron only, no core API changes
   Evidence: research/bugsnag-provider-spec.md, commit aee6250.
 
-## Round 17 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 17
+## Proactive Work
 - **New Relic provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding New Relic (#9 in recommended add order,
   5.0M npm/month, Python agent at v13.6.1). Key insight: New Relic is agent-based (not REST SDK) but
@@ -218,12 +218,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   shim.argsToArray→v14), (4) ESM loader flag change (v11). 14 major npm versions documented.
   Evidence: research/newrelic-provider-spec.md, commit 28477ad.
 
-## Round 18 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 18
+## Proactive Work
 - **LaunchDarkly provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding LaunchDarkly (#11 — beyond T-8 top-10,
   ~41M combined downloads/month across npm + pypi). Key findings:
@@ -233,12 +233,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - Two package renames documented: `launchdarkly-node-server-sdk` → `@launchdarkly/node-server-sdk` (2023), `launchdarkly-js-client-sdk` → `@launchdarkly/js-client-sdk` (2026)
   Evidence: research/launchdarkly-provider-spec.md, commit 9349332.
 
-## Round 19 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 19
+## Proactive Work
 - **Amplitude provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding Amplitude (#12 — beyond T-8 top-10 + LaunchDarkly,
   ~22M combined downloads/month across npm + pypi). Key findings:
@@ -251,12 +251,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - Package-rename detection makes depfix especially valuable: 1.1M/month still on legacy
   Evidence: research/amplitude-provider-spec.md, commit d4ce948.
 
-## Round 20 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 20
+## Proactive Work
 - **Auth0 provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding Auth0 (~28M npm/month + 6.6M pypi/month).
   Key findings:
@@ -269,12 +269,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - No Python module name mismatch — `auth0-python` installs as `auth0` module (unlike sentry-sdk/ldclient)
   Evidence: research/auth0-provider-spec.md, commit 3a7109c.
 
-## Round 21 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - T-3, T-4, T-5, T-6 still in review with reviewer.
 
-## Proactive Work Round 21
+## Proactive Work
 - **Okta provider implementation spec** (2026-10-06):
   Wrote a complete, actionable implementation spec for adding Okta (separate from Auth0).
   Two SDK lines: `@okta/okta-auth-js` (3.4M npm/month) + `@okta/okta-sdk-nodejs` (1.9M npm/month)
@@ -289,7 +289,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - Python module is `okta` (no import mismatch)
   Evidence: research/okta-provider-spec.md, commit 83ea46d.
 
-## Round 22 Status (2026-10-06)
+## Status check (2026-10-06)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned from principal. All assigned research tasks remain done.
 - Checked providers.yaml: 34 providers now. Implementer has been picking up specs:
@@ -297,7 +297,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Remaining unimplemented specs: HubSpot, Mixpanel, Bugsnag, New Relic, LaunchDarkly,
   Amplitude, Okta (7 specs in queue).
 
-## Proactive Work Round 22
+## Proactive Work
 - **Square provider implementation spec** (2026-10-06):
   Wrote complete spec for Square payment SDK (#next candidate, 1.5M npm/month).
   Three ecosystems: npm `square` (1.5M/mo), pypi `squareup` (257K/mo), Ruby `square.rb` (2M total).
@@ -310,12 +310,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/square-provider-spec.md, commit 1cd926b.
   No public OpenAPI spec — uses npm_dist_tag + pypi_dist_tag + github_release feeds.
 
-## Round 23 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - T-15 was ready/unassigned. Claimed it, read all 4 root-cause files + orchestrator + models.
 - Wrote complete research spec: research/repo-version-aware-exports.md
 
-## Proactive Work Round 23
+## Proactive Work
 - **T-15 implementation spec** (2026-10-09):
   Traced root cause to 4 exact files/lines. Key finding: `TsExportsSource._exports_for(version)`
   at ts_exports.py:185 already fetches exports for ANY npm version — the escape hatch exists.
@@ -325,9 +325,9 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   and 15 test cases documented. T-15 owner set to implementer.
   Evidence: research/repo-version-aware-exports.md.
 
-## Round 24 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (1 message — T-15 assign from principal, acked).
-- T-15 research was already done in Round 23. Notified principal.
+- T-15 research was already done earlier. Notified principal.
 - Discovered untracked T-15 implementation files created by implementer:
   - src/depfix/sources/repo_exports.py (178 lines, complete helper module)
   - tests/unit/test_repo_aware_exports.py (16 tests, all pass)
@@ -338,7 +338,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - src/depfix/providers/skills/provider_mixpanel.md (untracked)
 - CRITICAL GAP found in T-15 implementation: sub-case B missing.
 
-## Proactive Work Round 24
+## Proactive Work
 - **T-15 sub-case B gap analysis** (2026-10-09):
   Discovered that `removed = installed_exports - latest_exports` (sub-case A) does NOT cover
   the primary test case `bedilk/depfix-test-sentry-v6-app`. `startTransaction` was removed in
@@ -350,7 +350,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/t15-subcaseB-gap.md, commit pending.
   Notified implementer and principal via inbox.
 
-## Proactive Work Round 24 (continued)
+## Proactive Work (continued)
 - **Intercom provider spec** (2026-10-09):
   Wrote complete implementation spec for Intercom. 9.2M combined npm/month:
   `@intercom/messenger-js-sdk` (7.2M, browser widget, beta/pre-1.0, watch-only until 1.0)
@@ -360,15 +360,15 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   as Square v40, Cloudflare v3. No public OpenAPI spec.
   Evidence: research/intercom-provider-spec.md.
 
-## Round 25 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
-- T-15 in review (owner: reviewer). Sub-case B gap from round 24 was identified correctly:
+- T-15 in review (owner: reviewer). Sub-case B gap from an earlier check was identified correctly:
   uncommitted changes exist in src/depfix/sources/repo_exports.py and tests/unit/test_repo_aware_exports.py.
   All 24 tests pass with the working-tree version. Alerted implementer to commit; alerted reviewer to wait.
-- providers.yaml now has 40 providers (amplitude added since round 22 state was written).
+- providers.yaml now has 40 providers (amplitude added since an earlier state was written).
 - No new tasks assigned from principal.
 
-## Proactive Work Round 25
+## Proactive Work
 - **Pinecone provider implementation spec** (2026-10-09):
   Pinecone is the leading managed vector DB — sits alongside OpenAI/Anthropic/LangChain (already covered).
   npm `@pinecone-database/pinecone`: 3.6M/month, v9.0.0. pypi `pinecone`: 3.9M/month, v10.0.0.
@@ -379,7 +379,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   No public OpenAPI spec (requires auth). Uses github_release + ts_exports_diff feeds.
   Evidence: research/pinecone-provider-spec.md.
 
-## Round 26 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - T-15 rejected (owner: implementer). Sub-case B IS in committed code but has mypy error at repo_exports.py:197.
   Test file (test_repo_aware_exports.py) has uncommitted changes. All 24 tests pass.
@@ -387,14 +387,14 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
 - Committed 4 previously untracked provider skill files (amplitude, hubspot, launchdarkly, mixpanel).
 - Wrote Twilio provider skill + research spec (47M downloads/month).
 
-## T-15 Current State (round 26)
+## T-15 Current State (earlier check)
 - Sub-case B IS committed in repo_exports.py (mypy error at line 197: `str | None` assigned to `str`-typed variable)
 - Fix: rename `export_name` to `sym_name` in lines 197-220 of sub-case B loop
 - tests/unit/test_repo_aware_exports.py has uncommitted changes (8 test patches for _exports_for_version)
 - All 24 tests pass in working tree
 - Implementer alerted via inbox (msg id: a453be15)
 
-## Proactive Work Round 26
+## Proactive Work
 - **Twilio provider skill + spec** (2026-10-09):
   Twilio is in providers.yaml but had no skill file. ~47M combined downloads/month (npm 27M + pypi 20M).
   3 Node.js majors (v3→v4→v5→v6), 3 Python majors (v6→v7→v8→v9).
@@ -404,12 +404,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   OpenAPI spec already in providers.yaml (twilio_api_v2010.yaml).
   Evidence: research/twilio-provider-spec.md, src/depfix/providers/skills/provider_twilio.md.
 
-## Round 27 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - T-15 in review with reviewer (committed sub-case B fix 7896cff, principal routed c07a61f).
 - No new tasks assigned from principal.
 
-## Proactive Work Round 27
+## Proactive Work
 - **17 missing provider skill files** (2026-10-09):
   All 40 providers in providers.yaml now have skill files. Wrote:
   Anthropic, Supabase, Vercel AI SDK, LangChain, AWS SDK (S3), Firebase, Octokit, Slack,
@@ -419,12 +419,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   AWS SDK v2→v3 (package rename, command pattern), Supabase v1→v2 (auth method renames).
   Evidence: 17 files in src/depfix/providers/skills/, commit 96f972e.
 
-## Round 28 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned. T-15 remains done/accepted.
 - Smoke test is running every 4 hours but producing 0/N successful scans (GitHub App blocker).
 
-## Proactive Work Round 28
+## Proactive Work
 - **Smoke test fix via --path mode** (2026-10-09):
   Root cause: smoke-real-repos.sh calls test_pipeline.sh → depfix scan --repo → GitHub App
   required even for public repos → 100% failure rate.
@@ -434,14 +434,14 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Also documented: add 5 bedilk/ forks with known call-site baselines to real-repos.txt.
   Evidence: research/smoke-test-path-fix.md, commit bdd5de7.
 
-## Round 29 Status (2026-10-09)
+## Status check (2026-10-09)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks from principal. All assigned research done.
-- Tester confirmed smoke test 6/6 PASS (round 60) — fixed --path mode and pass-rate logic.
+- Tester confirmed smoke test 6/6 PASS (earlier check) — fixed --path mode and pass-rate logic.
 - Committed uncommitted smoke script + AGENTS.md changes (590397d).
 - Found 44% of real-repos.txt are self-referential SDKs (langchain/langchain 38k sites = SDK itself).
 
-## Proactive Work Round 29
+## Proactive Work
 - **real-repos.txt audit + fix** (2026-10-09):
   Discovered that 20/45 entries were scanning SDK's own source code — not customer codebases.
   Removed: sentry-javascript, supabase monorepo, discord.js, discord.py, firebase-js-sdk,
@@ -453,12 +453,12 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Evidence: research/real-repos-audit.md, commit c2668d7.
   Notified principal via inbox.
 
-## Round 30 Status (2026-10-10)
+## Status check (2026-10-10)
 - Ran startup protocol: AGENTS.md (updated 90bbb0f: code→dependency_check), researcher.md, TASKS.json, inbox (empty).
 - Human committed 90bbb0f today directing code changes to dependency_check going forward.
 - Discovered CRITICAL finding: ALL agent code from T-3/T-4/T-5/T-6/T-15 + proactive work is in depfix-agents NOT dependency_check.
 
-## Proactive Work Round 30
+## Proactive Work
 - **Cross-repo migration gap analysis** (2026-10-10):
   Verified with diffs that dependency_check is missing: 15 providers from providers.yaml, 32 skill files,
   2 eval corpus YAMLs (sentry_v8_callsites.yaml + ruby_callsites.yaml), repo_exports.py, runner.py T-15 integration,
@@ -479,11 +479,11 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   - dependency_check has 5 new divergence commits (security hardening, license, etc.)
 - Sent message to principal: cross-repo gap still unresolved, T-16 not yet created.
 
-## Round 31 Status (2026-10-10)
+## Status check (2026-10-10)
 - Ran startup protocol: AGENTS.md, researcher.md, TASKS.json, inbox (empty).
 - No new tasks assigned. Re-verified cross-repo migration gap.
 
-## Proactive Work Round 31
+## Proactive Work
 - **Cross-repo migration gap re-verification** (2026-10-10):
   Re-verified ALL previously-documented gaps. Nearly everything has been migrated to dependency_check:
   - 40 providers in providers.yaml ✓, 43 skill files ✓, both eval YAMLs ✓
@@ -534,7 +534,7 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   dependency_check branch `fix/migrate-agent-changes`, not `main` (runner.py offset ~97;
   repo_exports absent on main). Added baseline note to both research docs.
 
-## Re-verification Round 32 (2026-10-12)
+## Re-verification (2026-10-12)
 - Re-read ALL key files in dependency_check/main at commit 722c263:
   - classifier.py: Fix 0 (package recovery) ALREADY DONE — `_package_from_feed_key()` at lines 27-44
   - runner.py:894: BLOCK 1 still present (is_method_removal → REPORT_ONLY)
