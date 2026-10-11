@@ -13,7 +13,7 @@
       "inbox": "coordination/inbox/principal.jsonl",
       "status": "idle",
       "current_task": null,
-      "last_active": "2026-10-11T21:54:03.297632+00:00"
+      "last_active": "2026-10-11T21:56:49.752281+00:00"
     },
     {
       "tag": "researcher",
@@ -57,7 +57,7 @@
       "state_file": "coordination/reviewer.md",
       "inbox": "coordination/inbox/reviewer.jsonl",
       "status": "running",
-      "current_task": "T-17 review",
+      "current_task": "T-17",
       "last_active": "2026-10-11T21:54:03.297632+00:00"
     },
     {
