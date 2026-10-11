@@ -4,15 +4,15 @@
     {
       "id": "T-17",
       "title": "Research: trace why plan produces 0 PRs after scan finds call sites",
-      "status": "running",
+      "status": "done",
       "owner": "researcher",
       "depends_on": [],
       "acceptance": "Researcher writes research/plan-zero-pr-root-cause.md documenting: (1) exact data flow from scan output \u2192 BreakingChange records \u2192 assess_scan_change() \u2192 plan filtering, (2) why no BreakingChange records exist for multi-major-version jumps, (3) what T-15's repo_exports.py was supposed to fix and whether its code is actually in dependency_check/src/. Include file paths, line numbers, and command outputs.",
       "evidence_paths": [
         "research/plan-zero-pr-root-cause.md"
       ],
-      "next_action": "Researcher: trace scan\u2192BreakingChange\u2192assess_scan_change\u2192plan data flow in dependency_check; write research/plan-zero-pr-root-cause.md with file:line evidence and command outputs; set status=review when done",
-      "notes": "Known context: ts_exports_diff only compares consecutive versions. _previous_major_release() in ts_exports.py:171 only goes back ONE major. assess_scan_change() in matching.py:43-106 requires pre-existing BreakingChange record. T-15 code (repo_exports.py) may still be in depfix-agents, not dependency_check. | Assigned to researcher 2026-10-11T21:48:14Z."
+      "next_action": "Done. T-18 and T-19 can proceed with findings from research.",
+      "notes": "COMPLETED 2026-10-11. Found 3 root causes: (1) METHOD_REMOVED\u2192REPORT_ONLY at runner.py:991, (2) package mismatch 'sentry' vs '@sentry/node' at classifier.py:40, (3) depfix plan never calls capture_repository_dependency_drift. T-15 code IS in dependency_check and wired up, but synthetic changes are METHOD_REMOVED so still REPORT_ONLY. See research/plan-zero-pr-root-cause.md for full data flow + fix recommendations."
     },
     {
       "id": "T-18",

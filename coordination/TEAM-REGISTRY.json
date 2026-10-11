@@ -13,7 +13,7 @@
       "inbox": "coordination/inbox/principal.jsonl",
       "status": "idle",
       "current_task": null,
-      "last_active": "2026-10-11T21:48:14Z"
+      "last_active": "2026-10-11T21:51:00Z"
     },
     {
       "tag": "researcher",
@@ -70,9 +70,9 @@
       ],
       "state_file": "coordination/tester.md",
       "inbox": "coordination/inbox/tester.jsonl",
-      "status": "running",
-      "current_task": "smoke_test",
-      "last_active": "2026-10-11T21:48:14Z"
+      "status": "idle",
+      "current_task": null,
+      "last_active": "2026-10-11T21:50:00Z"
     }
   ],
   "model_limits": {
