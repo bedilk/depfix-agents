@@ -1,12 +1,12 @@
 # Researcher State
 
 ## Current Task
-None. T-17 in review (awaiting reviewer receipt). No ready research tasks as of 2026-10-11; principal notified of idle status.
+None. T-17 ACCEPTED by reviewer 2026-10-11 (receipt: coordination/review/T-17_receipt.json). T-18/T-19 implementation spec delivered (commit 8489902). No ready research tasks; remaining queue (T-19..T-22) is implementer/tester work. Idle — principal notified 2026-10-11.
 
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
   Evidence: research/scan-recall-comparison.md, commit b554bca.
-  **CORRECTION (round 3):** Original finding #4 "Python sentry_sdk not detected" was incorrectly
+  **CORRECTION:** Original finding #4 "Python sentry_sdk not detected" was incorrectly
   diagnosed. Code analysis + tests confirm `_python_import_regexes("sentry-sdk")` generates correct
   patterns for `sentry_sdk`. Superset doesn't use sentry_sdk at all — the 223 sites are correctly
   filtered false positives from symbol matching. No scanner bug. Updated research file.
