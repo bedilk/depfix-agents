@@ -1,7 +1,7 @@
 # Researcher State
 
 ## Current Task
-None. 2026-10-12 check: T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Inbox empty. Per principal directive (msg fb2ba782): idle, waiting for assignment.
+None. 2026-10-12 re-check: T-19 running (implementer); T-20..T-22 ready, unowned, implementer/tester scope — no research tasks. Inbox empty. Per principal directive (msg fb2ba782): idle, waiting for assignment.
 ## Completed Work
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
   Evidence: research/scan-recall-comparison.md, commit b554bca.
