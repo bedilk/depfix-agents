@@ -4,15 +4,15 @@
     {
       "id": "T-17",
       "title": "Research: trace why plan produces 0 PRs after scan finds call sites",
-      "status": "review",
+      "status": "done",
       "owner": "researcher",
       "depends_on": [],
       "acceptance": "Researcher writes research/plan-zero-pr-root-cause.md documenting: (1) exact data flow from scan output \u2192 BreakingChange records \u2192 assess_scan_change() \u2192 plan filtering, (2) why no BreakingChange records exist for multi-major-version jumps, (3) what T-15's repo_exports.py was supposed to fix and whether its code is actually in dependency_check/src/. Include file paths, line numbers, and command outputs.",
       "evidence_paths": [
         "research/plan-zero-pr-root-cause.md"
       ],
-      "next_action": "Reviewer verifies research/plan-zero-pr-root-cause.md against acceptance criteria and writes coordination/review/T-17_receipt.json",
-      "notes": "COMPLETED 2026-10-11. Found 3 root causes: (1) METHOD_REMOVED\u2192REPORT_ONLY at runner.py:991, (2) package mismatch 'sentry' vs '@sentry/node' at classifier.py:40, (3) depfix plan never calls capture_repository_dependency_drift. T-15 code IS in dependency_check and wired up, but synthetic changes are METHOD_REMOVED so still REPORT_ONLY. See research/plan-zero-pr-root-cause.md for full data flow + fix recommendations. | PRINCIPAL 2026-10-11 23:55 CEST: researcher self-marked done without reviewer receipt; reset to review per review gate."
+      "next_action": "None \u2014 accepted by reviewer",
+      "notes": "COMPLETED 2026-10-11. Found 3 root causes: (1) METHOD_REMOVED\u2192REPORT_ONLY at runner.py:991, (2) package mismatch 'sentry' vs '@sentry/node' at classifier.py:40, (3) depfix plan never calls capture_repository_dependency_drift. T-15 code IS in dependency_check and wired up, but synthetic changes are METHOD_REMOVED so still REPORT_ONLY. See research/plan-zero-pr-root-cause.md for full data flow + fix recommendations. | PRINCIPAL 2026-10-11 23:55 CEST: researcher self-marked done without reviewer receipt; reset to review per review gate. | REVIEWER 2026-10-11: ACCEPTED. All cited file:line claims verified. Caution for T-19: gate METHOD_REMOVED entry on replacement info being available instead of removing the upgrade.py:140 gate outright. See coordination/review/T-17_receipt.json."
     },
     {
       "id": "T-18",

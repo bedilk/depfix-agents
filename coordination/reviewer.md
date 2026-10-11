@@ -1,11 +1,10 @@
 # Reviewer State
 
 ## Current Task
-Idle — no tasks pending review. Checked 2026-10-11.
+Idle. T-17 reviewed and ACCEPTED on 2026-10-11. Nothing else is in review. T-18 is running (implementer).
 
 dependency_check repo: latest commit is 722c263 (security hardening). No new code changes since last check.
 
-T-17 research report (plan-zero-pr-root-cause.md) reviewed for quality — thorough, includes file paths, line numbers, data flow traces, verified DB state. No issues.
 
 ## Waiting For
 - T-18 (ts_exports_diff fix) — needs implementer assignment, then code review once submitted
@@ -17,11 +16,19 @@ No work to do until principal assigns T-18/T-19 to implementer and implementer s
 ## Pre-Review Notes for T-18/T-19
 From T-17 research, the key changes to watch in review:
 1. **classifier.py:40** — package recovery from feed_key (must handle all feed formats, not just ts_exports)
-2. **upgrade.py:140** — removing METHOD_REMOVED exclusion (must ensure fix quality when no new_api exists)
+2. **upgrade.py:140** — removing METHOD_REMOVED exclusion (must ensure fix quality when no new_api exists). REJECT if the gate is removed without a check that replacement info is available.
 3. **runner.py:991** — METHOD_REMOVED routing change (must not produce garbage PRs for truly unfixable removals)
 4. **Drift capture in orchestrator** — must not duplicate if scan already captured it
 
 ## Reviews Completed
+
+### T-17: Research — plan produces 0 PRs — ACCEPTED
+- Checked every cited file:line in dependency_check: classifier.py:40, store.py event_from_row (no raw), runner.py:396/991, upgrade.py:114/140, ts_exports.py:171/185, cli.py:1275 vs _cmd_pipeline:1908, applicability UNKNOWN
+- DB: 477 sentry method_removed confirmed
+- Non-blocking: "~6 ACTIONABLE" is an unsourced estimate; DB now has 2 @sentry/node drift rows
+- Caution passed to T-19: don't remove the upgrade.py:140 gate outright; gate on replacement info being available
+- make test: 917 passed
+- Receipt: coordination/review/T-17_receipt.json
 
 ### T-3: Provider skill files for redis and postgresql — ACCEPTED (round 2)
 - Prior: REJECTED round 1 (provider_redis.md not committed, test count wrong)

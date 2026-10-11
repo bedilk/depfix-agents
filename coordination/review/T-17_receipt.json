@@ -1,0 +1,22 @@
+{
+  "task_id": "T-17",
+  "verdict": "ACCEPTED",
+  "issues": [
+    "Non-blocking: '~6 ACTIONABLE, ~471 NO_CALL_SITES' in the plan data flow is an estimate with no command output backing it.",
+    "Non-blocking: report says DEPENDENCY_VERSION_BUMP = 0 for the sentry-v6 repo; depfix.db now holds 2 @sentry/node dependency_version_bump rows (probably from other scans, so this may just be stale).",
+    "Caution for T-19 (not a defect in the research): recommendation #2 'remove the is_method_removal -> continue gate' in upgrade.py:140 would send new_api='' removals into the LLM fixer with nothing to replace them with. T-19 must gate on replacement info being available (skill file / migration guide) rather than removing the gate outright."
+  ],
+  "checks_performed": [
+    "classifier.py:40 confirmed: package = str(event.raw.get('package') or event.provider_id)",
+    "event_from_row (classify/store.py) confirmed: never populates raw; ChangeEventRow has feed_key but no raw column, so recovering the package from feed_key works",
+    "runner.py:991 confirmed: is_method_removal(change) -> _report_removal (REPORT_ONLY)",
+    "upgrade.py:114 package filter + :140 is_method_removal continue confirmed",
+    "runner.py:396 confirmed: _augment_with_repo_exports is wired in",
+    "ts_exports.py:171 _previous_major_release / :185 _exports_for confirmed",
+    "capture_repository_dependency_drift only called at cli.py:1275 (_cmd_scan), not in _cmd_pipeline (cli.py:1908) — confirmed",
+    "applicability.change_applies returns UNKNOWN on no match — confirmed",
+    "depfix.db: sentry|method_removed|477 confirmed"
+  ],
+  "tests_run": "make test (dependency_check @722c263 + uncommitted working tree): 917 passed, 0 failed, 2 deselected",
+  "timestamp": "2026-10-11T22:10:00Z"
+}
