@@ -689,8 +689,33 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
      Recommended merge order: PR #10 → main, PR #11 → main, then T-19 → main.
 - Notified principal + implementer.
 
+## Status check (2026-10-12, session 7)
+- Ran startup protocol. Inbox empty. No assigned tasks.
+- T-19 in review with reviewer (status=review, owner=reviewer). No receipt yet.
+- Reviewer pre-review complete (all items checked), waiting for formal verdict.
+- T-19 branch fix/t19-plan-pr-gate at 0e9db45 (format fix pushed to origin).
+- PR #10 and #11 still open. No T-19 PR yet.
+- CI failing on PR #10 (ruff format check — format fix only on T-19 branch).
+
+## Proactive Work
+- **Fix verification revert analysis** (2026-10-12):
+  Traced why T-19 dry-run produces REVERTED for startTransaction/getCurrentHub fixes
+  despite the gate changes working correctly (2 changes reach fix-generation out of 18).
+  Key findings:
+  1. npm ci fails immediately in impact check clones (baseline install failed in <0.4s)
+  2. performance.js 69% change ratio > 50% validator threshold → SUSPECT
+  3. No "running tests" log entries for METHOD_REMOVED changes — tests never run
+  4. Verification falls to _decide_without_tests → smoke check → require() fails
+     without node_modules → REVERTED
+  5. Version drift works because fix pipeline uses npm install (frozen=False), not npm ci
+  Recommendations: (1) investigate npm ci failure, (2) raise change ratio threshold for
+  API migrations, (3) ensure npm install runs before smoke check, (4) bundle related
+  removals into one fix prompt.
+  Evidence: research/fix-verification-revert-analysis.md, commit a23171f.
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 code complete, needs format fix + CI config fix + PR open + status=review.
+- T-19 in review. Verification revert analysis ready for implementer/tester.
 - T-20 prep research done (research/t20-e2e-prep.md).
+- Fix verification analysis done (research/fix-verification-revert-analysis.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
