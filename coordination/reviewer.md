@@ -1,11 +1,11 @@
 # Reviewer State
 
 ## Current Task
-None pending. Review queue empty. Last checked 2026-10-12 (re-verified: PR #12 base still fix/t18-multi-major-removals, 0 checks; no T-20/T-23 evidence files yet).
+None pending. Review queue empty. Last checked 2026-10-12 ~13:10 CEST: PR #12 now base=main, head bb562a3, CI run 38240753020 in progress (lint/eval/decision-gate/secrets/audit green; test 3.11/3.12 running). No T-20/T-23 evidence files yet.
 
 ## Waiting For
 - T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md not yet written. Review carry-forward below.
-- T-22: running (implementer). PR #12 still targets fix/t18-multi-major-removals (not main), no CI runs. Principal directive (acked 9d66125b): REJECT unless evidence_paths has PR URL with base=main and green CI run ID.
+- T-22: running (implementer). PR #12 retargeted to main; CI run 38240753020 in progress. When it reaches review: diff bb562a3 against 0e9db45 (accepted T-19 tip) to see new commits since acceptance, and confirm the PR diff vs main includes PR #10/#11 content or that those merged first. Principal directive (acked 9d66125b): REJECT unless evidence_paths has PR URL with base=main and green CI run ID.
 - T-23: running (researcher). Verification rollback root-cause. Evidence file research/t23-verification-rollback.md not yet written.
 - T-21: ready, unowned. Blocked on T-20.
 
