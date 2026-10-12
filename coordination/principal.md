@@ -6,6 +6,9 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 2026-10-12 00:31 CEST — No change. Inbox empty. T-19 HEAD still 2c6b340 (00:26) on fix/t19-plan-pr-gate; repo_exports.py new_version=latest_version + test diff confirmed still uncommitted in working tree (not lost; stash@{0} is the 00:18 incident stash with 3 unrelated lint lines). Implementer still has 7 unacked inbox messages; 7 implementer-loop PIDs running (two new pairs at 00:11 and 00:29 — duplicate loops worsening). No T-19 receipt. No stall yet (<15 min). Escalate at 00:45 if T-19 not in review. No assignable task.
 
 ## Last Check
+2026-10-12 12:46 CEST — T-19 UNBLOCKED, back to RUNNING. Load avg 44/230/213 (1-min down from 402 at 12:42). Implementer wake PID 20788 committed afb64ca at 12:44 (applicability.py change_applies: sub-case B sentinel old_version=="0.0.0"+METHOD_REMOVED always applies; repo_exports.py no longer bails on installed>=latest; +tests) AND pushed — origin/fix/t19-plan-pr-gate == afb64ca, working tree clean. Remaining before review: make lint still fails (unused import repo_version_exports_diff at tests/unit/test_repo_aware_exports.py:25 — researcher blocker c821e3dd, not fixed in afb64ca), no CI run visible for the branch, no sentry-v6-app dry-run evidence, status still not review. Set T-19 status=running, sent implementer directive 491fa51a (lint fix, gate, push, CI, dry-run, status=review by 13:15 CEST) and reviewer info 2951315b (verify the sentinel does not over-apply genuine METHOD_REMOVED records). Inbox empty. Loops: 16 PIDs (4 impl, 2 principal, 4 researcher, 4 reviewer, 2 tester) + 8 claude -p — duplicates persist, human reset still incomplete. Smoke next due ~16:17. Next: if no lint-fix commit by 13:15, stall_ping; when status=review, confirm reviewer receipt; on ACCEPT assign T-20 to tester.
+
+## Previous Check
 2026-10-12 12:44 CEST — T-19 still BLOCKED (status unchanged), LOAD DROPPING, implementer wake progressing. Load avg 140/294/232 (1-min down from 402 at 12:42). 14 loop PIDs (4 impl, 2 principal, 4 researcher, 2 reviewer, 2 tester) and 4 claude -p processes — down from 20/10; the duplicate loops are being culled (reset appears in progress). Implementer wake PID 20788 (3h00m) still alive: after the 12:42 applicability.py + repo_exports.py edits it touched tests/unit/test_applicability.py and tests/unit/test_repo_aware_exports.py at 12:43 (installed==latest edge case tests). HEAD still b8b4988, unpushed. Acked tester smoke_results 7c1503b6 (4/6, already recorded) and researcher d6db7b9b: full suite 927/927 in 101s on fix/t19-plan-pr-gate with the uncommitted changes, no hanging tests (earlier timeouts were slow collection) — so the make test gate is viable for T-19 now. Implementer has 3 unacked messages. No pings sent — live progress visible. Next: expect a commit of the 4-file edge-case change; on next wake, if HEAD moved, set T-19 to running and remind implementer to push + status=review; if no commit by 13:15 and mtimes unchanged, note the wake died.
 
 ## Previous Check
@@ -47,13 +50,13 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
 - T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
-- T-19: BLOCKED 09:32 CEST (host overload; needs human reset). 12:44: load falling (140), wake also editing 2 test files; researcher confirms 927/927 full suite passes with the WIP. 12:42: live implementer wake editing the installed==latest edge case (applicability.py + repo_exports.py, uncommitted). Previously running (implementer) — unstalled 06:46 (d4e25f0, b8b4988). installed==latest edge case + push + dry-run evidence outstanding; review expected by 08:30 CEST. Assigned 00:11 CEST. Commits 08a59e1, a059180, c80ccff (00:26, 5 reviewer points), 2c6b340 (skill files). 2 reviewer bugs outstanding + uncommitted repo_exports.py new_version change. Spec: research/t18-t19-implementation-spec.md. Expect status=review by 00:45 CEST.
+- T-19: RUNNING again 12:46 CEST (load 44; afb64ca pushed; lint fix + dry-run + review outstanding, deadline 13:15). Was BLOCKED 09:32 CEST (host overload). 12:44: load falling (140), wake also editing 2 test files; researcher confirms 927/927 full suite passes with the WIP. 12:42: live implementer wake editing the installed==latest edge case (applicability.py + repo_exports.py, uncommitted). Previously running (implementer) — unstalled 06:46 (d4e25f0, b8b4988). installed==latest edge case + push + dry-run evidence outstanding; review expected by 08:30 CEST. Assigned 00:11 CEST. Commits 08a59e1, a059180, c80ccff (00:26, 5 reviewer points), 2c6b340 (skill files). 2 reviewer bugs outstanding + uncommitted repo_exports.py new_version change. Spec: research/t18-t19-implementation-spec.md. Expect status=review by 00:45 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. Last commit b8b4988 at 06:46. Not pushed. Deadline for status=review: 08:30 CEST.
+- T-19 (implementer) since 00:11 CEST. Last commit afb64ca at 12:44, pushed. Deadline for status=review: 13:15 CEST.
 - Smoke test (tester) restarted 07:41 CEST -> research/smoke-20261012-074124.md; 3/6 done at 10:08 (2 PASS, Rocket.Chat FAIL(128)); two 05:39 header-only stubs to be cleaned up by tester.
 
 ## Smoke Tests
@@ -91,7 +94,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. T-19 is blocked. When the human resets the team (load < 50, one loop per role), set T-19 back to running and confirm implementer acks its inbox and commits within 15 min.
+1. T-19 running (directive 491fa51a). Watch for lint-fix commit + status=review by 13:15 CEST; stall_ping otherwise.
 2. When T-19 reaches review: confirm reviewer verifies the 5 points + researcher skill-file arrows and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (DB backup + classified_at reset prereq; seed must hit startTransaction/getCurrentHub, not sentry.ATTR_* constants), then T-22 to implementer.
 4. Human flags: PR #10 then #11 need review/merge; duplicate loop processes; shared dependency_check checkout (per-agent worktree decision); commit-gate.sh does not cover dependency_check; stale .claude/worktrees/agent-* can likely be removed; researcher editing production files.
