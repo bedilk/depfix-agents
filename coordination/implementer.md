@@ -543,3 +543,13 @@ TASKS.json unchanged otherwise: T-23 status=review/owner=researcher (no
 receipt yet), T-24 status=queued/owner=null (blocked on T-23). No task has
 status=running/owner=implementer. Not self-starting anything per task-driven
 protocol. Idle, waiting for T-23 verdict or a new dispatch.
+
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json unchanged: T-23 done/owner=researcher (reviewer
+ACCEPTED, receipt present), T-24 status=queued/owner=null even though its only
+dep (T-23) is done — not yet dispatched by principal to implementer. T-20
+running/owner=tester, T-21 ready/owner=null (blocked on T-20). No task has
+status=running/owner=implementer. Not self-starting T-24 per task-driven
+protocol. Not resending the ready_to_dispatch ping (4b68ed73, still unacked) —
+nothing new to add. Idle.
