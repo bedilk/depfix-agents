@@ -1,0 +1,27 @@
+{
+  "task_id": "T-19",
+  "verdict": "ACCEPTED",
+  "issues": [],
+  "checked": [
+    "is_ghost_removal sentinel scoped correctly: only METHOD_REMOVED + old_version==\"0.0.0\"; lockfile.py:506 uses DEPENDENCY_VERSION_BUMP (excluded)",
+    "repo_version_exports_diff no longer bails on installed>=latest — allows sub-case B to detect ghost APIs on repos already at latest",
+    "Sub-case B new_version=latest_version instead of installed — fixes applicability resolved<new_version false-negative",
+    "_enrich_removal_from_skill line-by-line parsing: handles prose RHS (returns None), ambiguous multi-match (returns None), namespace collisions (last dotted segment match), 'new' keyword stripping",
+    "fix_service.py gate changed from 'not change.migration_guide' to 'not change.new_api' — aligned with upgrade.py:140 gate, so both paths agree on what is actionable",
+    "Runner routing: METHOD_REMOVED -> enrichment attempt -> REPORT_ONLY (no replacement) or fix pipeline (replacement found). Verified the 16 no-replacement sentry removals stay REPORT_ONLY while 2 enriched ones reach fix-generation",
+    "Ghost removal applicability: 4 tests cover resolved==new_version and resolved<new_version scenarios",
+    "Skill enrichment: 9 tests cover happy path (startTransaction->startSpan), backtick-wrapped replacement (Http->httpIntegration), prose RHS rejection (Express), missing symbol, missing provider, namespace collision (Sentry prefix), ambiguous multi-match (stripe.create), new keyword stripping (Stripe constructor)",
+    "Sub-case B tests: installed==latest fires, export present skips, A+B dedup, fetch-fail graceful degradation",
+    "fix_service gate tests: new_api=\"\" with migration_guide stays report-only; new_api set proceeds to fix pipeline"
+  ],
+  "tests_run": "make test: 937 passed, 2 deselected, 0 failed (79.49s). make lint: All checks passed. make typecheck: Success, 208 files. ruff format --check: 334 files already formatted.",
+  "acceptance_gap": "Acceptance says 'sentry.startTransaction must get a fix PR'. Dry-run shows startTransaction reaches fix-generation (routing correct) but verification reverts the edit (no_kept_edits). This is a downstream LLM fix-quality / verification issue, not a routing issue. T-19's code changes correctly route enriched METHOD_REMOVED records into the fix pipeline. Recommend tracking the verification rollback root cause as a separate task.",
+  "non_blocking": [
+    "Double tarball fetch for installed version (repo_exports.py line 127 + 197): performance, not correctness. Known from T-15.",
+    "No CI run on branch (ci.yml only triggers on push:main/pull_request). Local gate passes. CI will run when PR is opened (T-22).",
+    "ruff format commit 0e9db45 on top of functional commits: pre-existing style drift, not introduced by T-19."
+  ],
+  "commit_chain": "a059180..0e9db45 on fix/t19-plan-pr-gate (8 commits: test fix, gate+enrichment, reviewer feedback, skill-file docs, symbol anchoring, new_version fix, installed==latest fix, ruff format)",
+  "reviewer_commit": "",
+  "timestamp": "2026-10-12T13:15:00Z"
+}
