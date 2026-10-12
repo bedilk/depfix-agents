@@ -2,6 +2,58 @@
 
 ## Current Task
 
+2026-10-12T10:08 CEST: **INFRA OVERLOAD CONFIRMED WORSE, NOT RESOLVED — escalating again.**
+Woke at 10:08 CEST. Inbox empty, nothing to ack. TASKS.json file still shows the stale
+`last_updated: 2026-10-11T22:11:16Z` snapshot (T-19 `running`/owner=implementer, T-20/T-21/T-22
+blocked) — but `coordination/principal.md` and dependency_check's git log show real T-19 progress
+since then (HEAD now `b8b4988` on `fix/t19-plan-pr-gate`; principal set an 08:30 CEST review
+deadline per `46f3bba`). That deadline is **~1.5h past due** with T-19 still not `status: review`.
+Not re-deriving the T-19 content review — out of scope for tester — just noting it for principal.
+
+Re-checked the 07:41 critical infra finding (same entry, now below) to see if it had cleared.
+**It has not — it is measurably worse:**
+- `uptime`: load averages **371.95 / 260.17 / 157.05**, up from the 306→333 climb reported at
+  07:41, and up from the 267 the principal logged at 07:45 right after writing "gate relaxed for
+  load... smoke restarted" (`46f3bba`) — that intervention has not reduced load.
+- Still **26 concurrent `*-loop.sh` processes**, but the generations have kept stacking: the
+  overnight Oct-11 23:35PM/23:36PM/23:37PM/23:56PM/23:57PM batch is *still alive* alongside newer
+  batches at 4:29AM, 6:40AM, 7:41AM, 8:42AM, 9:15AM, and 9:43AM — a new batch every ~30-40 min,
+  none reaped. Re-confirmed via read-only `grep` on `scripts/run-team.sh`: it only writes
+  `.local/pids.json`, no PID-check or lock guard against a prior still-running generation.
+- Counted **14 concurrent `claude -p` processes** right now (includes multiple simultaneous
+  tester instances running this exact prompt — I am one of several).
+- The smoke test the principal said was "restarted" at 07:41 (PID 17448, `smoke-real-repos.sh 6`)
+  is **still running 2h27m later** (`ps -o etime` confirms). Its output file
+  `research/smoke-20261012-074124.md` has only 2 of 6 rows after that long: row 1
+  (twilio/calcom.com) PASSed but took **6650s (111 min)** to scan — vs. a healthy baseline of low
+  single-digit minutes for comparable repos in earlier rounds; row 2 (mongodb/Rocket.Chat)
+  **FAILed (exit 128)** after 652s. Right now it's mid-retry on the mongodb scan again (PID
+  20367/20368, started 9:43AM, 25+ min elapsed for a scan that completed cleanly and quickly in
+  the T-11 baseline round). This is CPU starvation, not a code regression — consistent with the
+  07:41 root-cause analysis.
+- Two stray header-only smoke stubs from the earlier 05:39 contention window
+  (`research/smoke-20261012-053919.md`, `research/smoke-20261012-053930.md`, 6 lines each, no
+  data rows) are still sitting uncommitted — principal's note said tester should clean these up,
+  but leaving them until the in-flight 07:41 smoke run (which may still produce a real result)
+  finishes, so as not to destroy a reference point mid-investigation.
+
+**Action taken this check: none that adds load.** Did NOT start a redundant `make test` or a
+second `smoke-real-repos.sh` — one is already in flight (PID 17448) and starting a competing run
+would only deepen the exact contention being diagnosed. Did NOT `pkill` any loop/agent/scan
+process — shared state affecting other roles' in-flight work, still a human/principal decision,
+not a unilateral tester action (same reasoning as the 07:41 entry, unchanged).
+
+**Recommendation unchanged, now with harder evidence that the lighter fix didn't work:** human
+needs to run `bash scripts/run-team.sh --stop`, confirm with `ps aux | grep -E '\-loop\.sh'` that
+zero PIDs remain, then start exactly one fresh `bash scripts/run-team.sh`. "Gate relaxed for load"
+without killing the duplicate generations has not helped — load went up, not down, in the 2.5h
+since that commit. Until the duplicate processes are actually killed, expect continued
+multi-hour hangs on `make test`, smoke tests, and pipeline scans — not a depfix code problem.
+
+---
+
+## Previous Current Task
+
 2026-10-12T07:41 CEST: **CRITICAL INFRA FINDING — stop normal testing, flagging system overload.**
 Woke at 04:29 CEST. TASKS.json unchanged (T-19 still `running`/owner=implementer; T-20/T-21/T-22
 still blocked). Inbox empty, nothing new to ack since the 22:11:16 Oct-11 principal messages.
