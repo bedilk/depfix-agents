@@ -117,12 +117,15 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - RULE VIOLATION (researcher, 00:21): edited 10 production skill files in dependency_check (never edits production code). Warned. Edits left in place for implementer to commit under T-19.
 - EVIDENCE CONCERN (implementer, 00:19): 08a59e1 ignores reviewer pre-review feedback; working tree loosens a test assertion to hide the paren bug. Challenged; watch for review submission that still has these.
 
+2026-10-12 13:02 CEST — T-19 ACCEPTED (receipt coordination/review/T-19_receipt.json, substantive: 10 checks, 937 tests pass, lint/typecheck clean; receipt was untracked so committed here; its timestamp 13:15Z is wrong, reviewer told). T-19 status=done. Load avg 4.75 (recovered). Dispatched: T-20 -> tester (e2e on 3 test repos, DB backup + classified_at reset prereq, branch fix/t19-plan-pr-gate), T-22 -> implementer (gh pr create for fix/t19-plan-pr-gate, CI-gated, PRs #10/#11 still open), NEW T-23 -> researcher (gap from receipt acceptance_gap: verification reverts startTransaction/getCurrentHub fixes, no_kept_edits; read-only root cause report). Reviewer idle. All inboxes acked (0 unacked). Duplicate loops persist (6 principal, 4 impl, 4 res, 4 rev, 2 tester; 10 claude -p) — human item. Smoke 12:17 4/6 (2 git clone FAIL 128: Rocket.Chat, twenty — likely host overload at the time); next due ~16:17. Stall check: no running task older than 15 min yet (all assigned 13:02). Next: stall ping at 13:20 if no commit from tester/implementer/researcher; on T-22 review confirm PR number + green CI run id before reviewer verdict; on T-20 report, record PR outcomes here.
+
 ## Human Directives
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. T-19 in review. Format commit 0e9db45 pushed. Await reviewer receipt (ping at 13:20 if absent); implementer still owes the verification-rollback cause.
-2. When T-19 reaches review: confirm reviewer verifies the 5 points + researcher skill-file arrows and writes coordination/review/T-19_receipt.json.
-3. When T-19 ACCEPTED: assign T-20 to tester (DB backup + classified_at reset prereq; seed must hit startTransaction/getCurrentHub, not sentry.ATTR_* constants), then T-22 to implementer.
-4. Human flags: PR #10 then #11 need review/merge; duplicate loop processes; shared dependency_check checkout (per-agent worktree decision); commit-gate.sh does not cover dependency_check; stale .claude/worktrees/agent-* can likely be removed; researcher editing production files.
-5. Smoke test dispatched 04:30 CEST; record result in Smoke Tests when tester reports.
+1. T-20 (tester), T-22 (implementer), T-23 (researcher) running since 13:02 CEST. Stall ping at 13:20 if no commit.
+2. T-22 review: require PR number and green CI run id in evidence_paths; reject if CI not green.
+3. T-20 report: record per-repo PR outcomes in this file; if verification rollback blocks fix PRs, T-23 output feeds a follow-up implementer task.
+4. T-21 depends on T-20.
+5. Human flags: PR #10/#11 need review/merge; duplicate loop processes; shared dependency_check checkout; commit-gate.sh does not cover dependency_check; researcher editing production files (now explicitly read-only in T-23).
+6. Smoke next due ~16:17 CEST; 12:17 run had 2 clone failures (Rocket.Chat, twenty) during host overload — re-check in next smoke.

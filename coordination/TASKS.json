@@ -45,14 +45,14 @@
         "/tmp/t19_plan_dryrun.log (implementer's machine) -- depfix plan bedilk/depfix-test-sentry-v6-app --provider sentry",
         "coordination/review/T-19_receipt.json"
       ],
-      "next_action": "None — ACCEPTED by reviewer. Verification rollback (startTransaction fix reverted by verification, no_kept_edits) is a separate downstream gap to track as a new task.",
+      "next_action": "None \u2014 ACCEPTED by reviewer. Verification rollback (startTransaction fix reverted by verification, no_kept_edits) is a separate downstream gap to track as a new task.",
       "notes": "Key files: matching.py (assess_scan_change), learned.py (_detected_entry, _is_behind, _reason), applicability.py (change_applies), repo_exports.py (synthetic_changes_for_scan). T-17 findings: Three fixes needed in dependency_check: (1) classifier.py:40 \u2014 recover package from feed_key when event.raw is empty. (2) upgrade.py:140 \u2014 allow METHOD_REMOVED in upgrade migrations when replacement info is available (skill files). (3) runner.py:991 \u2014 allow METHOD_REMOVED with known replacements to enter fix pipeline. Also: orchestrator should capture drift if not already captured (currently only depfix scan does this). | PRINCIPAL 2026-10-12: assigned to implementer. Researcher skill-file audit (c695348, 29/40 providers ready) is input for Fix 3. Reviewer caution from T-17: gate METHOD_REMOVED on replacement info, keep the upgrade.py:140 gate. | principal 00:23 CEST: commit 08a59e1 landed but reviewer pre-review points (paren rstrip, Express prose target, gate field mismatch, full-file migration_guide, missing tests) unaddressed; working tree loosens a test to mask the paren bug. Challenge sent; expect fix commit + status=review by 00:45 CEST. Researcher's 10 skill-file edits sit uncommitted on this branch - implementer to commit separately. | 05:41 CEST principal: STALLED \u2014 no commit since 2c6b340 (00:26), no edit since 00:32; stall_ping 0e81156f, deadline 06:15 CEST then blocked/escalate. | 09:32 CEST principal: BLOCKED. Missed 08:30 review deadline; no commit since b8b4988 (06:46), branch not pushed, 5 unacked implementer messages. Root cause is host overload from duplicate loops, not code. Human must reset the team. | 12:00 CEST principal: still BLOCKED, unchanged. HEAD b8b4988, branch unpushed, load avg 356 (worse), 22 loop PIDs, implementer claude -p PID 10634 hung 8h11m on gtimeout 20m. Inbox empty, no human reset yet. Smoke 07:41 finished 12:17: 4/6 PASS, 2 FAIL(128) git clone (Rocket.Chat, twenty). | 12:46 unblocked by principal: load 44, afb64ca pushed. | IMPLEMENTER 12:48 CEST: fixed the installed==latest edge case (two bugs: repo_version_exports_diff bailed entirely at installed>=latest, blocking sub-case B outright; change_applies() blocked on resolved<new_version which is false by construction once a repo reaches latest). Committed+pushed afb64ca. 44 targeted tests pass, ruff clean, mypy clean (208 files). Dry-run on bedilk/depfix-test-sentry-v6-app (read-only `depfix plan`, no PR/DB writes): sub-case B now fires (2 synthetic changes), startTransaction+getCurrentHub both reach fix-generation (unlike the other 16 no-replacement sentry removals, which correctly stayed report_only) -- confirms the gate discriminates correctly. But both got reverted by verification (no_kept_edits); only the version-drift bump PR (10.75.3\u219211.6.0) was actually planned. Did not chase the verification-rollback root cause (scope: installed==latest edge case, not fix-generation quality) -- flagging for reviewer/principal to decide if that's in T-19's scope or a new gap. No PR opened (that's T-22, after review acceptance); ci.yml only triggers on push:main/pull_request so CI can't run pre-PR, same as T-18's pattern. | 12:52 CEST principal: in review; lint ok; format-only diff pending commit; acceptance gap: startTransaction fix reverted by verification in dry-run \u2014 implementer told to investigate. | 12:53 CEST principal: status=review (implementer 12:50, afb64ca pushed, lint clean). Open before done: ruff-format diff uncommitted (20 files) and no CI run on branch; dry-run shows verification reverted the startTransaction/getCurrentHub fixes (no_kept_edits) \u2014 reviewer to rule on acceptance. Reviewer + implementer messaged."
     },
     {
       "id": "T-20",
       "title": "End-to-end test: full pipeline produces fix PRs on test repos",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "tester",
       "depends_on": [
         "T-19"
       ],
@@ -60,8 +60,8 @@
       "evidence_paths": [
         "research/e2e-fix-pr-results.md"
       ],
-      "next_action": "Assign to tester after T-19",
-      "notes": "Use --dry-run first, then real apply with PR. The GitHub App is installed on these repos (credentials in dependency_check/.env). PREREQ (from T-18 receipt): live depfix.db has 477 stale sentry/method_removed breaking_change rows with package=sentry whose ts_exports source events have classified_at set, so they will not re-classify. Back up depfix.db, then reset classified_at on the 2 ts_exports:@sentry/node source events (and clear the stale rows) before running the pipeline, else build_upgrade_plan filters them on package mismatch. Merge order: PR #10 then PR #11."
+      "next_action": "Back up depfix.db; reset classified_at on the 2 ts_exports:@sentry/node source events and clear stale sentry/method_removed rows; checkout fix/t19-plan-pr-gate in dependency_check; run --dry-run first on all 3 repos, then real apply with PR; write research/e2e-fix-pr-results.md",
+      "notes": "Use --dry-run first, then real apply with PR. The GitHub App is installed on these repos (credentials in dependency_check/.env). PREREQ (from T-18 receipt): live depfix.db has 477 stale sentry/method_removed breaking_change rows with package=sentry whose ts_exports source events have classified_at set, so they will not re-classify. Back up depfix.db, then reset classified_at on the 2 ts_exports:@sentry/node source events (and clear the stale rows) before running the pipeline, else build_upgrade_plan filters them on package mismatch. Merge order: PR #10 then PR #11. | 13:02 CEST principal: assigned to tester after T-19 ACCEPTED. Use branch fix/t19-plan-pr-gate (contains T-18+T-19). Known gap: startTransaction/getCurrentHub fixes reverted by verification (no_kept_edits) in implementer dry-run - report exactly what happens, do not work around it (T-23 researcher owns root cause)."
     },
     {
       "id": "T-21",
@@ -81,16 +81,31 @@
     {
       "id": "T-22",
       "title": "Push all code changes to dependency_check GitHub as PR",
-      "status": "ready",
-      "owner": null,
+      "status": "running",
+      "owner": "implementer",
       "depends_on": [
         "T-18",
         "T-19"
       ],
       "acceptance": "All code changes from T-18 and T-19 are on a feature branch in dependency_check, pushed to GitHub, with a PR opened via `gh pr create`. PR description summarizes what changed and why. CI passes.",
       "evidence_paths": [],
-      "next_action": "Implementer opens PR after T-19 review is accepted",
-      "notes": "Branch name: fix/drift-detection-pipeline. Push to origin, open PR targeting main."
+      "next_action": "Open PR via gh pr create for fix/t19-plan-pr-gate -> main (stacked on PR #11/#10 or rebased, implementer decides and documents); wait for CI green; record PR number + CI run id in evidence_paths; set status=review",
+      "notes": "Branch name: fix/drift-detection-pipeline. Push to origin, open PR targeting main. | 13:02 CEST principal: assigned to implementer after T-19 ACCEPTED. Existing open PRs: #10 fix/migrate-agent-changes, #11 fix/t18-multi-major-removals. Branch fix/t19-plan-pr-gate already pushed at 0e9db45. Do NOT rename branch; the fix/drift-detection-pipeline name in notes is superseded. CI only runs on pull_request so the PR itself triggers CI; if red, fix and re-push before status=review."
+    },
+    {
+      "id": "T-23",
+      "title": "Root-cause verification rollback of enriched METHOD_REMOVED fixes (no_kept_edits)",
+      "status": "running",
+      "owner": "researcher",
+      "depends_on": [
+        "T-19"
+      ],
+      "acceptance": "Report in research/t23-verification-rollback.md explaining, with file:line and reproducible command, why the generated startTransaction->startSpan and getCurrentHub fixes on bedilk/depfix-test-sentry-v6-app are reverted by verification (no_kept_edits), and a concrete proposed code change for the implementer. Read-only: no src/ edits.",
+      "evidence_paths": [
+        "research/t23-verification-rollback.md"
+      ],
+      "next_action": "Researcher reproduces with read-only `depfix plan bedilk/depfix-test-sentry-v6-app --provider sentry` on branch fix/t19-plan-pr-gate and traces the verification path",
+      "notes": "Gap surfaced by T-19 receipt acceptance_gap: routing is correct but verification reverts the edit. Created by principal 13:02 CEST 2026-10-12. Researcher must NOT edit production code (two prior violations)."
     }
   ],
   "last_updated": "2026-10-12T10:49:50Z",

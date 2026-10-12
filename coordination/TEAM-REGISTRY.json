@@ -13,7 +13,7 @@
       "inbox": "coordination/inbox/principal.jsonl",
       "status": "running",
       "current_task": null,
-      "last_active": "2026-10-12T10:00:00Z"
+      "last_active": "2026-10-12T11:02:00Z"
     },
     {
       "tag": "researcher",
@@ -26,9 +26,9 @@
       ],
       "state_file": "coordination/researcher.md",
       "inbox": "coordination/inbox/researcher.jsonl",
-      "status": "idle",
-      "current_task": null,
-      "last_active": "2026-10-11T21:54:03.297632+00:00"
+      "status": "running",
+      "current_task": "T-23",
+      "last_active": "2026-10-12T11:02:00Z"
     },
     {
       "tag": "implementer",
@@ -42,8 +42,8 @@
       "state_file": "coordination/implementer.md",
       "inbox": "coordination/inbox/implementer.jsonl",
       "status": "running",
-      "current_task": "T-19",
-      "last_active": "2026-10-12T02:38:47Z"
+      "current_task": "T-22",
+      "last_active": "2026-10-12T11:02:00Z"
     },
     {
       "tag": "reviewer",
@@ -71,8 +71,8 @@
       "state_file": "coordination/tester.md",
       "inbox": "coordination/inbox/tester.jsonl",
       "status": "running",
-      "current_task": "smoke-test",
-      "last_active": "2026-10-12T02:38:47Z"
+      "current_task": "T-20",
+      "last_active": "2026-10-12T11:02:00Z"
     }
   ],
   "model_limits": {
