@@ -1,5 +1,14 @@
 # Implementer State
 
+## Status check (2026-10-12 ~13:30 CEST, idle — nothing assigned)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty (nothing new to ack). TASKS.json unchanged since last check: T-22
+status=review/owner=reviewer (awaiting T-22 receipt), T-23 status=review/owner=researcher
+(root-caused, awaiting reviewer verification), T-20 status=running/owner=tester, T-21
+status=ready/owner=null (blocked on T-20). No task has status=running/owner=implementer.
+Not self-starting anything per task-driven protocol. Idle, waiting for reviewer verdicts
+on T-22/T-23 or a new dispatch from principal.
+
 ## Status check (2026-10-12 13:14 CEST, T-22 CI green, PR #12 submitted for review)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all read.
 T-22 was already status=running/owner=implementer in TASKS.json with next_action
