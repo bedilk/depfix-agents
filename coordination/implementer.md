@@ -464,3 +464,21 @@ task, so not actioning it myself. T-23 still status=review/owner=researcher, no
 receipt yet. T-24 still queued/owner=null, blocked on T-23. No task has
 status=running/owner=implementer. Inbox empty. Idle, waiting for T-23 verdict
 or a new dispatch.
+
+## Status check (2026-10-12, reviewer T-22 note verified resolved, idle)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json re-read. One inbox
+message: reviewer's T-22 ACCEPTED verdict (61defeaf, 11:16:21Z) — already
+reflected in TASKS.json (T-22 status=done). Verdict also flagged a secondary
+concern: uncommitted edits to runner.py/classifier.py/skill files in the
+dependency_check working tree allegedly failing 3 tests in
+test_runner_skill_enrichment.py. Checked directly: `git status --short` in
+dependency_check shows no such uncommitted edits (only worktree submodule
+noise + untracked .local/docs, unrelated), and
+`pytest tests/unit/test_runner_skill_enrichment.py -q` → 8 passed, 0 failed.
+Concern already resolved (concurrent session likely committed/reverted before
+this read). Acked the message.
+
+TASKS.json unchanged otherwise: T-23 status=review/owner=researcher (no
+receipt yet), T-24 status=queued/owner=null (blocked on T-23). No task has
+status=running/owner=implementer. Not self-starting anything per task-driven
+protocol. Idle, waiting for T-23 verdict or a new dispatch.
