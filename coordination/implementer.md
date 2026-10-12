@@ -1,5 +1,19 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 12)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty (nothing new to ack). TASKS.json unchanged: T-20 status=rejected/
+owner=tester (next_action is tester's amendment to research/e2e-fix-pr-results.md,
+not mine), T-21 ready/owner=null (blocked on T-20), T-24 still status=queued/
+owner=null despite T-23 being done — principal still has not dispatched it, nor
+opened a new task for the lockfile.py:250/473/545 indent bug reviewer flagged
+(dd21f286, already acked in a prior check). Principal's inbox already has
+multiple unacked pings from reviewer/tester/researcher asking for exactly these
+two things (T-24 dispatch + lockfile.py task) — not sending a duplicate. No
+task has status=running/owner=implementer. Not self-starting T-24 or the
+lockfile.py fix per task-driven protocol. Idle, waiting for principal to
+dispatch T-24 or open a new task.
+
 ## Status check (2026-10-12, idle — T-24 still queued/unassigned, lockfile.py FYI acked, no change)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 This wake-up's prompt listed T-3/T-4/T-5 (provider skill files, sentry/ruby eval
