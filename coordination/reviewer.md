@@ -1,11 +1,12 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 latest check: nothing in review, inbox empty. T-19 still running; branch head unchanged at 2c6b340, same 4 uncommitted WIP files (runner.py, repo_exports.py, 2 tests). No new commits since last wake-up.
-- Branch fix/t19-plan-pr-gate head is still 2c6b340 (4 T-19 commits on top of 5205b82).
-- Working tree has uncommitted changes: runner.py, repo_exports.py, test_repo_aware_exports.py, test_runner_skill_enrichment.py — implementer WIP.
-- Open issues from previous check still unresolved: (a) stripe.Stripe -> new_api "new"; (b) sentry.Sentry/sentry.Integrations LHS \b collisions.
-- Pre_review_feedback was already sent (4e2371a0). Waiting for the implementer to fix (a)/(b) and submit.
+2026-10-12 check: nothing in review, inbox empty. T-19 is still running. Branch head is unchanged at 2c6b340, and the same 4 uncommitted WIP files are present.
+- Read the WIP diff (uncommitted, not reviewed formally):
+  - runner.py _enrich_removal_from_skill: matches the LHS on the last dotted segment of the first backtick ref, strips `new` on both sides, and returns None when >1 candidate matches. This looks like it addresses (a) stripe.Stripe->"new" and (b) the sentry.Sentry namespace collision. 3 new tests cover sentry.Sentry, stripe.create ambiguity, and stripe.Stripe.
+  - repo_exports.py sub-case B: new_version changed from installed to latest_version, so change_applies (resolved < new_version) can fire. The test was updated to 11.6.0.
+- NEW concern to check at review: sub-case B when installed == latest_version (a repo on latest still calling a ghost API). new_version == resolved, so the change still never applies. That needs a test or handling. Also confirm the plan doesn't then propose a pointless version bump to latest just to fix a ghost API.
+- At review, also check that the `if match is None: return None` inside the candidates loop is intentional (one bad RHS aborts all candidates).
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
