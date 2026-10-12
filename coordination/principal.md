@@ -6,6 +6,9 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 2026-10-12 00:31 CEST — No change. Inbox empty. T-19 HEAD still 2c6b340 (00:26) on fix/t19-plan-pr-gate; repo_exports.py new_version=latest_version + test diff confirmed still uncommitted in working tree (not lost; stash@{0} is the 00:18 incident stash with 3 unrelated lint lines). Implementer still has 7 unacked inbox messages; 7 implementer-loop PIDs running (two new pairs at 00:11 and 00:29 — duplicate loops worsening). No T-19 receipt. No stall yet (<15 min). Escalate at 00:45 if T-19 not in review. No assignable task.
 
 ## Last Check
+2026-10-12 10:08 CEST — T-19 STILL BLOCKED, host degrading. Load avg 450/321/191 (was 237 at 09:32). 22 loop PIDs (6 impl, 6 researcher, 6 tester, 2 principal, 2 reviewer) and 14 claude -p processes, oldest 6h29m (10634) and 3h18m (17262) past their 20m gtimeout. dependency_check HEAD unchanged b8b4988 (06:46) on fix/t19-plan-pr-gate, clean tree, origin still at 2c6b340 (not pushed). No T-19 receipt. Implementer has not acked the 07:59 stall_ping (4422c55b); no new ping sent — it would only add noise while wakes cannot run. Acked implementer 07:32 status (full make test retry with 2h timeout, b3y1mve2p) and researcher 07:43 verification (stale: those changes are now committed). Smoke 07:41 in progress: 1 twilio cal.com PASS 6650s, 2 mongodb Rocket.Chat FAIL(128) 652s (exit 128 = git failure, likely clone/checkout under load), 3 mongodb parse-server PASS 1504s. Human appears to be editing loop scripts in the working tree (uncommitted diff removes round/iteration wording in all *-loop.sh, run-team.sh, AGENTS.md, OPERATING-MODEL.md) — likely the reset is being prepared. No assignable task (T-20..T-22 depend on T-19).
+
+## Previous Check
 2026-10-12 09:32 CEST — T-19 BLOCKED. Missed the 08:30 review deadline and the 09:00 blocked threshold: HEAD still b8b4988 (06:46) on fix/t19-plan-pr-gate, working tree clean (installed==latest edge case not started), branch not pushed (origin at 2c6b340), 5 unacked implementer messages since 04:38 UTC. Implementer claude -p PIDs 10634 (5h13m on gtimeout 20m) and 17262 (2h02m) are hung; load avg 237/225/141 with 22 loop PIDs (6 impl, 4 each other role). Tester escalation (acked): 26+ loop processes, make test and smoke hung 30 min with zero output, recommends run-team.sh --stop + single restart. Smoke restarted 07:41 got repo 1/6 (twilio calcom/cal.com) PASS in 6650s — still running. Sent implementer stall_ping 4422c55b, reviewer info 07cee15b. No assignable task (T-20..T-22 depend on T-19).
 
 ## Previous Check
@@ -42,12 +45,13 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 
 ## Running Tasks
 - T-19 (implementer) since 00:11 CEST. Last commit b8b4988 at 06:46. Not pushed. Deadline for status=review: 08:30 CEST.
-- Smoke test (tester) restarted 07:41 CEST -> research/smoke-20261012-074124.md; two 05:39 header-only stubs to be cleaned up by tester.
+- Smoke test (tester) restarted 07:41 CEST -> research/smoke-20261012-074124.md; 3/6 done at 10:08 (2 PASS, Rocket.Chat FAIL(128)); two 05:39 header-only stubs to be cleaned up by tester.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
 
 ## Issues Found
+- LOAD WORSENING (10:08): load avg 450; 14 claude -p processes, oldest 6.5h. Rocket.Chat smoke FAIL(128) is probably a load-induced git failure, not a product regression — tester should re-run it after reset before counting it. Human's uncommitted loop-script edits suggest a reset is underway; nothing more the principal can do until load drops.
 - T-19 BLOCKED (09:32): host overload makes every implementer wake hang; no progress for 2h46m. HUMAN: `bash scripts/run-team.sh --stop`, verify `pgrep -f -- '-loop.sh'` and `pgrep -f 'claude -p'` are empty, then start one loop per role. T-19 WIP is committed and safe on fix/t19-plan-pr-gate (b8b4988).
 - LOAD (07:45): load avg 267 with 28 loop PIDs and ~13 claude -p processes on one dependency_check checkout; make test cannot complete. HUMAN: kill all loops (pkill -f -- '-loop.sh'; pkill -f 'claude -p') and restart exactly one per role; otherwise the T-19 gate and smoke test cannot finish.
 - T-19 STALL (05:41): >5h without commit, >1h with live implementer processes doing nothing visible (0-byte logs, gtimeout 20m exceeded and ignored). HUMAN: (a) kill PIDs 10460/10600 if still idle after 06:15 so the loop respawns a fresh wake, or run the implementer once interactively on fix/t19-plan-pr-gate; the uncommitted WIP is intact. (b) Add -k 1m to gtimeout in the loop scripts so hung wakes actually die.
