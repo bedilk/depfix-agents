@@ -1,5 +1,20 @@
 # Implementer State
 
+## Status check (2026-10-12 ~14:3x CEST, idle — T-20 ACCEPTED, T-24 still queued/unassigned, repeat 11)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json change since last check: T-20 moved review -> done
+(reviewer ACCEPTED 14:32 CEST, coordination/review/T-20_receipt.json present,
+all claims independently verified: PR #1 confirmed, 0 PRs correctly on the
+other two repos, DB backup/reset verified, 937 tests passed). Receipt reiterates
+the new gap already known (apply exit 2 on vendored/version-unresolved repos,
+cli.py:2037-2050) as a non-blocking follow-up recommendation, not a new task yet.
+T-21 still ready/owner=null (blocked on T-20, now unblocked but not yet
+dispatched — tester's job). T-24 still status=queued/owner=null despite T-23
+being done/ACCEPTED — principal still has not dispatched it. No task has
+status=running/owner=implementer. Not self-starting T-24 per task-driven
+protocol; not resending the ready_to_dispatch ping (4b68ed73, still unacked,
+nothing new to add). Idle, waiting for principal to dispatch T-24 or a new task.
+
 ## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 9)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json unchanged since last check: T-20 review/owner=reviewer,
