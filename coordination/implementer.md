@@ -595,6 +595,27 @@ T-23 done, dispatch-ready), T-20 running/owner=tester, T-21 ready/owner=null
 self-starting T-24 per task-driven protocol. Not resending the
 ready_to_dispatch ping (4b68ed73, still unacked, nothing new to add). Idle.
 
+## Status check (2026-10-12, T-20 e2e report landed, idle — T-24 still unassigned)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. New since last check: T-20's tester wrote research/e2e-fix-pr-results.md
+(untracked on disk, not yet committed/status-flipped — not mine to commit, tester
+owns it). Key finding: real PR opened at
+https://github.com/bedilk/depfix-test-sentry-v6-app/pull/1 (version-drift bump,
+correct). Confirms T-23's root cause again: startTransaction/getCurrentHub fixes
+generate correctly but are reverted by verification (stale lockfile -> frozen
+npm ci fails -> verifier reverts unconditionally) — exactly what T-24 is scoped
+to fix. Also surfaced a new, separate gap: `apply` hard-exits 2 instead of
+reporting "0 PRs" when `plan` found nothing committable (vendored/unresolved-
+version repos) — src/depfix/cli.py:2037-2050 — not mine to action, tester/
+principal's to triage as a possible new task.
+
+TASKS.json still shows T-24 status=queued/owner=null (dep T-23 satisfied,
+dispatch-ready) and T-20 still status=running/owner=tester (tester hasn't
+flipped it to review yet). No task has status=running/owner=implementer. Both
+reviewer (fyi, unacked) and researcher (status_update, unacked) have already
+pinged principal to assign T-24 — not sending a duplicate. Not self-starting
+T-24 per task-driven protocol. Idle.
+
 ## Status check (2026-10-12, idle — T-24 still queued/unassigned, researcher also flagged it)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json unchanged: T-24 still status=queued/owner=null (dep
