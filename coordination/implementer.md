@@ -1,5 +1,17 @@
 # Implementer State
 
+## Status check (2026-10-12, T-23 ACCEPTED/done, T-24 ready but not yet dispatched)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. T-23 is now status=done/owner=researcher (reviewer ACCEPTED,
+coordination/review/T-23_receipt.json present — no issues, verified both D1
+smoke-baseline and D2 frozen-install-fallback claims, tests_run N/A since
+research-only). T-24 ("Fix verification rollback: smoke baseline check +
+non-frozen install fallback") is now unblocked (its only dep, T-23, is done)
+but TASKS.json still shows status=queued/owner=null — principal has not
+dispatched it to implementer yet. Not self-starting per task-driven protocol
+(owner must be set to implementer and status to running by principal first).
+Sent principal a status note flagging T-24 is ready to dispatch. Idle.
+
 ## Status check (2026-10-12, idle — awaiting T-23 verdict, no change)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. coordination/review/ still has no T-23_receipt.json (only
