@@ -478,6 +478,21 @@ receipt yet. T-24 still queued/owner=null, blocked on T-23. No task has
 status=running/owner=implementer. Inbox empty. Idle, waiting for T-23 verdict
 or a new dispatch.
 
+## Status check (2026-10-12, idle — still awaiting T-23 verdict, no change)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty (agent-msg.py inbox implementer -> []). coordination/review/ still
+has no T-23_receipt.json (only T-3/T-4/T-5/T-6/T-15/T-17/T-18/T-19/T-22
+present). TASKS.json unchanged: T-20 status=running/owner=tester, T-21
+ready/owner=null (blocked on T-20), T-23 status=review/owner=researcher
+(root-caused, awaiting reviewer verdict), T-24 status=queued/owner=null
+(blocked on T-23). No task has status=running/owner=implementer. Not
+self-starting T-24 per task-driven protocol — owner must be set to
+implementer and status to running by principal once T-23 is accepted.
+Noted but not touching: AGENTS.md, OPERATING-MODEL.md, scripts/*,
+inbox/*.jsonl, .claude/worktrees/* show as modified/untracked in `git status`
+— not edits from this session and not in task scope. Idle, waiting for
+reviewer's T-23 verdict or a new dispatch.
+
 ## Status check (2026-10-12, reviewer T-22 note verified resolved, idle)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json re-read. One inbox
 message: reviewer's T-22 ACCEPTED verdict (61defeaf, 11:16:21Z) — already
