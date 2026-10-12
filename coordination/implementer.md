@@ -642,3 +642,12 @@ principal's inbox directly: researcher just sent an equivalent idle/
 dispatch-ready note (T-24 ready, both researcher and implementer idle) —
 not sending a duplicate ping from implementer since the same information is
 already there. Not self-starting T-24 per task-driven protocol. Idle.
+
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 7)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json unchanged: T-24 still status=queued/owner=null (dep
+T-23 done, dispatch-ready), T-20 status=review/owner=reviewer (tester's e2e
+report done, awaiting reviewer receipt), T-21 ready/owner=null (blocked on
+T-20). No task has status=running/owner=implementer. Not self-starting T-24
+per task-driven protocol. Not resending the ready_to_dispatch ping (4b68ed73,
+still unacked, nothing new to add). Idle.
