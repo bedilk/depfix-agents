@@ -1,18 +1,30 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 14:00 UTC check: nothing in review. T-19 still blocked (host overload, human must reset team). Branch fix/t19-plan-pr-gate at b8b4988 locally (2 commits ahead of origin 2c6b340), but implementer has not set status=review. Inbox empty. Idle until implementer resumes and submits for review.
-- At review, still check: (1) `if match is None: return None` inside the candidates loop, where one bad RHS aborts all candidates; (2) the installed==latest_version edge in b8b4988 (still unhandled when I last read it); (3) the acceptance dry-run on bedilk/depfix-test-sentry-v6-app; (4) the full make test, run by me.
+2026-10-12 pre-review: T-19 still blocked in TASKS.json but branch fix/t19-plan-pr-gate is at afb64ca (pushed to origin). 6 commits total since T-18 base (5205b82). Inbox empty, no review_request received. Performed full pre-review — code, tests, lint, mypy all pass.
 
-## T-19 review checklist (when review_request arrives)
-- REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
-- Test assertion must be exact equality. Researcher skill-file edits (10 files) must be a separate commit with parseable arrows
-- Acceptance requires a dry-run on bedilk/depfix-test-sentry-v6-app showing a startTransaction fix plan
-- Still applies: DB sentry method_removed rows are sentry.ATTR_* constants with no skill entry. T-20 needs a seed that hits startTransaction/getCurrentHub
-- Run `make test` from dependency_check (no .venv; use system python/pytest, PYTHONPATH=src:.)
+### Pre-review results (938 passed, lint clean, mypy clean)
+Checked items:
+1. ✅ `_enrich_removal_from_skill` in runner.py — skill-file enrichment logic is correct. Verified against sentry and stripe skill files. 9 unit tests cover: happy path, prose RHS rejection, missing provider, namespace collision, ambiguous multi-match, `new` keyword stripping.
+2. ✅ `upgrade.py:140` gate — now `is_method_removal(change) and not change.new_api`. Allows enriched removals into upgrade plan. 2 unit tests confirm.
+3. ✅ `fix_service.py:201` gate — same pattern. 2 unit tests confirm: report-only without new_api, fix pipeline with new_api.
+4. ✅ `applicability.py` ghost removal — `old_version=="0.0.0"` short-circuits to APPLIES. 2 unit tests cover resolved==new_version and resolved<new_version.
+5. ✅ `repo_exports.py` — removed `installed_sv >= latest_sv` guard; changed sub-case B `new_version` from `installed` to `latest_version`. 2 new tests.
+6. ✅ installed==latest_version edge (afb64ca) — properly handled by applicability.py ghost check + repo_exports guard removal working together.
+
+### Non-blocking observations
+- `if match is None: return None` inside candidates loop: prose RHS short-circuits before checking other lines. Intentionally conservative — if the skill file says migration is non-trivial, decline. Acceptable.
+- Double tarball fetch for installed version (line 127 + 197 in repo_exports.py): performance, not correctness. Known from T-15.
+- `installed > latest` in repo_version_exports_diff: could produce false-positive sub-case A records. Very rare.
+- Ghost removal in declared_range-only path (no resolved_version): would use target_major=0, filtered NOT_AFFECTED. Unlikely since ghost records require an installed version to be created.
+
+### Remaining before formal verdict
+- ⬜ Acceptance dry-run on bedilk/depfix-test-sentry-v6-app showing startTransaction fix plan (required by T-19 acceptance criteria)
+- ⬜ T-19 status must be set to `review` by implementer
+- DB carry-forward: 477 stale sentry/method_removed rows still need reset (T-20 prereq)
 
 ## Waiting For
-- T-19 (plan fix for fix PRs): running, implementer. Branch fix/t19-plan-pr-gate at b8b4988 (local), origin at 2c6b340. Not pushed or PR'd yet, and the acceptance dry-run is not done. At review, REJECT if: committed tests fail, Express->None / collision issues remain, or installed==latest_version edge is unhandled.
+- T-19 (plan fix for fix PRs): blocked in TASKS.json, but branch pushed to origin at afb64ca. No PR opened, no CI runs. Implementer must: complete acceptance dry-run, set status=review.
 - T-20 / T-21 / T-22: ready, unowned. T-20/T-21 blocked on T-19. T-22 needs PR #10 merged, then PR #11
 
 ## Carry-forward for T-19/T-20 review
