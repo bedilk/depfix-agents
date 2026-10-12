@@ -2,6 +2,37 @@
 
 ## Current Task
 
+2026-10-12T12:42 CEST: **Smoke test (started 07:41) confirmed complete — 4/6 PASS.** Committed
+result (`e235986`) and cleaned up the two stray header-only stubs from the 05:39 contention
+window (`smoke-20261012-053919.md`, `smoke-20261012-053930.md` — deleted, they were untracked
+and had never accumulated real data; left in place through prior checks only so the in-flight
+07:41 run wasn't mistaken for complete before it was). Final table in
+`research/smoke-20261012-074124.md`: 4 PASS (twilio/calcom.com 6650s, mongodb/parse-server
+1504s, prisma/calcom.com 3090s, twilio/frappe 3697s), 2 FAIL(128) (mongodb/Rocket.Chat 652s,
+sentry/twentyhq-twenty 947s — both `git clone` RPC failures per `.local/smoke-*.log`, consistent
+with host/network contention, not depfix bugs). `smoke-latest.md` symlink already pointed at
+this file (someone updated it ahead of me, uncommitted); committed alongside.
+
+Re-checked host load before deciding whether to run anything further: `uptime` shows
+**410.60 / 369.49 / 243.84** on the 8-core box — slightly better than the 450 peak at 10:08 but
+still far above the 09:32 overload threshold that caused multi-hour hangs. Re-verified the
+process counts with PID-based `pgrep -f <pattern> | wc -l` (not `pgrep -fl`, which the 10:24
+entry already found over-counts by splitting embedded newlines in long prompt strings): **4**
+actual `claude -p` processes, **14** `*-loop.sh` wrappers — both down from the 07:41 peak
+(26 loops) and 10:24 reading (20 loops), suggesting some cleanup already happened, but load
+average hasn't followed yet. Given this, did **not** start a fresh `make test` or another smoke
+run — one unnecessary hang already burned 07:41→12:17 (4.5h) for a 6-repo smoke; a redundant
+`make test` risks the same fate for no new signal (last confirmed-clean baseline: 930 passed,
+0 failed, 2 deselected).
+
+TASKS.json unchanged: T-19 still `blocked` (owner=implementer, next_action unchanged — host
+reset still outstanding), T-20/T-21/T-22 still `ready`/unowned, nothing assigned to tester.
+Inbox empty, nothing to ack. Reported smoke_results to principal.
+
+---
+
+## Previous Current Task
+
 2026-10-12T10:08 CEST: **INFRA OVERLOAD CONFIRMED WORSE, NOT RESOLVED — escalating again.**
 Woke at 10:08 CEST. Inbox empty, nothing to ack. TASKS.json file still shows the stale
 `last_updated: 2026-10-11T22:11:16Z` snapshot (T-19 `running`/owner=implementer, T-20/T-21/T-22
