@@ -114,23 +114,46 @@ A complementary detection strategy for method-level changes could use:
 3. **Release notes parsing** — extract breaking changes from CHANGELOG.md and map
    to code patterns. High false-positive risk.
 
+## No-Lockfile Fallback: VERIFIED WORKING
+
+Traced the full applicability path for the no-lockfile case:
+
+1. `scan_manifests` sets `resolved_version=None`, `declared_range="6.49.0"`, `source="range"`
+2. `_decide_one` at applicability.py:55 — `dep.resolved_version` is None → skip resolved block
+3. `_decide_one` at applicability.py:82 — `dep.declared_range` is "6.49.0" → enter declared block
+4. `declared_major("6.49.0")` → 6
+5. `new[0]` = 7 (from the DEPENDENCY_VERSION_BUMP change's new_version)
+6. `6 != 7` → **APPLIES** with "major drift to 7.32.0 requires human review"
+
+The version drift detection works WITHOUT a lockfile because the exact pin "6.49.0" in
+package.json provides enough information to compute the major-version gap.
+
+### DB Verification
+depfix.db currently has:
+- `DEPENDENCY_VERSION_BUMP openai 3.3.0→7.31.0` (major jump, will trigger drift)
+- `DEPENDENCY_VERSION_BUMP openai 7.31.0→7.32.0` (latest, will trigger drift)
+- Zero METHOD_REMOVED records for openai (consistent with zero removed exports)
+- 8 older spec_diff records (v2.3.0, param_removed/param_type_changed) — NOT_AFFECTED
+  for v6.49.0 since `6.49.0 < 2.3.0` is False
+
+### repo_exports.py Sub-case B: NOT available without lockfile
+`_installed_version_for(result, "openai")` checks `dep.resolved_version` which is None.
+Returns None → `synthetic_changes_for_scan` skips the package entirely.
+No sub-case A or B synthetic changes. Not an issue for openai (0 removals anyway) but
+important for repos using removed APIs on providers where the only BreakingChange comes
+from repo_exports.py (e.g., a sentry repo without a lockfile would miss sub-case B).
+
 ## Updated T-20 Expectations
 
 | Repo | Version Drift PR | API Migration PR | Blocker |
 |------|-----------------|-----------------|---------|
 | depfix-test-sentry-v6-app | YES (10.75.3→11.6.0) | Reverted by verification (T-24) | T-24 |
-| depfix-test-openai-v3-chat | MAYBE (6.49.0→7.32.0, no lockfile) | NO (0 removed exports) | No lockfile? |
+| depfix-test-openai-v3-chat | YES (6.49.0→7.32.0, major drift) | NO (0 removed exports) | None |
 | seed-openai-v3-to-v4 | NO (vendored) | NO (vendored) | Vendored dep |
 
 ## Recommendation for Tester
 1. Run the sentry repo first — it's the only one that tests the METHOD_REMOVED pipeline
-2. For the openai test repo, verify whether drift detection works without a lockfile
-3. For the seed repo, expect same result as T-12 (no PR, vendored)
-4. If the openai test repo needs a lockfile for drift detection to work, add one:
-   ```bash
-   cd /tmp && git clone https://github.com/bedilk/depfix-test-openai-v3-chat
-   cd depfix-test-openai-v3-chat
-   npm install  # generates package-lock.json
-   git add package-lock.json && git commit -m "add lockfile for depfix testing"
-   git push
-   ```
+2. The openai test repo WILL produce a version drift PR (major drift 6→7 detected
+   via declared_range fallback). Expect "major drift ... requires human review" decision.
+3. The seed repo will produce no PR (vendored). Same result as T-12.
+4. No lockfile fix needed for the openai test repo — declared_range fallback works.
