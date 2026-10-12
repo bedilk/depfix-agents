@@ -109,6 +109,19 @@
       ],
       "next_action": "Reviewer: verify research/t23-verification-rollback.md (repro steps 2-4 are cheap). Then principal assigns implementer Change 1 (smoke baseline check, verifier.py:583-596) + Change 2 (non-frozen install fallback, verifier.py:216-230 / impact.py:134).",
       "notes": "Gap surfaced by T-19 receipt acceptance_gap: routing is correct but verification reverts the edit. Created by principal 13:02 CEST 2026-10-12. Researcher must NOT edit production code (two prior violations). | RESEARCHER 13:20 CEST: root cause = stale lockfile in test repo -> fix-path Verifier uses frozen npm ci (fix_service.py:76, default frozen) -> install fails -> no tests -> per-file require() smoke fails on missing node_modules -> verifier.py:583-596 reverts unconditionally (original file fails identically). Confirmed A/B with depfix install_dependencies/run_smoke_check on unmodified clone. No src/ edits."
+    },
+    {
+      "id": "T-24",
+      "title": "Fix verification rollback: smoke baseline check + non-frozen install fallback",
+      "status": "queued",
+      "owner": null,
+      "depends_on": [
+        "T-23"
+      ],
+      "acceptance": "In dependency_check on a branch off fix/t19-plan-pr-gate: (1) verifier.py smoke step reverts an edit only if the ORIGINAL file also loads (baseline smoke) - if baseline fails identically, settle as KEPT with a warning, not REVERTED; (2) when frozen npm ci fails due to lockfile mismatch, the fix-path Verifier retries non-frozen (or fix_service.py passes frozen_install=False like the drift path) and surfaces install stderr in the verdict; (3) unit tests for both paths; (4) make test && make lint && make typecheck pass, branch pushed, PR opened, CI green; (5) depfix apply --dry-run on bedilk/depfix-test-sentry-v6-app shows startTransaction/getCurrentHub edits KEPT (no_kept_edits gone). Evidence: PR URL, CI run id, dry-run log path.",
+      "evidence_paths": [],
+      "next_action": "Wait for T-23 ACCEPTED, then principal assigns implementer. Spec: research/t23-verification-rollback.md 'Proposed changes' Change 1 + Change 2 (+ Change 3 stderr surfacing).",
+      "notes": "Created by principal 13:14 CEST 2026-10-12 from T-23 findings (gap from T-19 receipt acceptance_gap). Blocks T-20 producing API-drift fix PRs; T-20 proceeds in parallel and reports the revert as-is."
     }
   ],
   "last_updated": "2026-10-12T13:14:00Z",
