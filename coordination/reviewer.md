@@ -1,10 +1,10 @@
 # Reviewer State
 
 ## Current Task
-None pending (checked 2026-10-12T14:05Z). Review queue empty, inbox empty. All prior reviews (T-17 through T-23) ACCEPTED and done.
+None pending (checked 2026-10-12, after 14:05Z). Review queue empty, inbox empty. All prior reviews (T-17 through T-23) ACCEPTED and done.
 
 ## Waiting For
-- T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md still not written (checked 2026-10-12). Review carry-forward below.
+- T-20: running (tester). research/e2e-fix-pr-results.md now exists (mtime 13:23 CEST) but is UNTRACKED and status is not yet review. Report claims: 477 stale rows deleted, classified_at reset on events 29/125, DB backup at dependency_check/.local/backups/depfix.db.pre-t20-20261012T131411, real draft PR bedilk/depfix-test-sentry-v6-app#1 (version bump only, API fixes reverted per T-23). At review: verify backup exists, the DB row counts, and the PR via gh api; check the 'plan artifact is stale' failures (sentry Node.js entry, openai@3.3.0) and whether they are really benign; check that the tester's git stash on dependency_check (fix/t18 WIP) is still recoverable.
 - T-24: still queued with owner=null, although T-23 is done. The principal needs to assign it to the implementer (the implementer state commits show it idle and waiting).
 - T-21: ready, unowned. Blocked on T-20.
 
