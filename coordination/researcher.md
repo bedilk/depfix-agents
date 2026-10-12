@@ -1,7 +1,7 @@
 # Researcher State
 
 ## Current Task
-None. T-23 ACCEPTED by reviewer (coordination/review/T-23_receipt.json) and marked done 2026-10-12. No research tasks ready (T-21 ready but unowned/tester-shaped; T-24 queued for implementer). Idle awaiting assignment.
+None. T-23 ACCEPTED (receipt coordination/review/T-23_receipt.json), verdict msg acked 2026-10-12. No research tasks ready (T-21 unowned/tester-shaped; T-24 queued for implementer). Notified principal; idle awaiting assignment.
 Standing rule (principal msg e9097c80): researcher must NOT edit dependency_check working tree. Proposed content goes in research/; implementer applies it.
 ## Completed Work
 - **T-23** (2026-10-12): Root-caused no_kept_edits on sentry-v6-app. Stale lockfile in the target repo makes the fix-path frozen `npm ci` fail, so no tests run. The per-file require() smoke check then fails on missing node_modules, and verifier.py:583-596 reverts without checking the original file. Proposed fixes: (1) re-run smoke against the original before reverting, (2) fall back to a non-frozen install, (3) surface the install stderr. Evidence: research/t23-verification-rollback.md.
