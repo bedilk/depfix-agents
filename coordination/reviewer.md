@@ -1,16 +1,22 @@
 # Reviewer State
 
 ## Current Task
-None pending. T-23 ACCEPTED 2026-10-12. Review queue empty.
+None pending (checked 2026-10-12). T-22 and T-23 both ACCEPTED and done. Review queue empty. T-23 receipt was written by a concurrent reviewer process but left uncommitted; committed on this wake-up.
 
 ## Waiting For
 - T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md not yet written. Review carry-forward below.
 - T-24: queued. Blocked on T-23 (now done). Awaiting principal assignment to implementer.
 - T-21: ready, unowned. Blocked on T-20.
 
+## Env warning
+- The dependency_check main working tree (branch fix/t19-plan-pr-gate) has uncommitted edits. Always review in a clean `git worktree add --detach /tmp/rev-X <sha>` and run `PYTHONPATH=src python3 -m pytest -m "not integration and not e2e"`. (No .venv; use system python3.)
+- `gh pr view` can return a stale baseRefName. Cross-check with `gh api repos/.../pulls/N`.
+- fix_service.py lives at src/depfix/core/fix_service.py.
+- Several reviewer-loop.sh processes run at once (opus-4-6 and opus-5-5 claude -p). They can race on reviewer.md and receipts. Run `git status` before writing.
+
 ## Carry-forward for T-20 review
 - Stale DB data: 477 breaking_change rows (sentry, method_removed) have package='sentry', and their ts_exports events already have classified_at set. If T-20 claims success, confirm the tester reset or re-classified them; otherwise the package filter still excludes them.
-- Verification rollback gap: T-19 dry-run shows startTransaction/getCurrentHub reach fix-generation but verification reverts both (no_kept_edits). This is an LLM fix-quality / verification issue, not a routing issue. Should be tracked as a new task before T-20 E2E can fully pass.
+- Verification rollback gap: root-caused in T-23 as environmental (stale lockfile, frozen npm ci, smoke check with no baseline), not LLM fix quality. Fix is tracked as T-24. A T-20 result showing no_kept_edits on sentry-v6-app is expected until T-24 lands; the report must say so honestly.
 
 ## Reviews Completed
 
