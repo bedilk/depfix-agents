@@ -1,5 +1,37 @@
 # Implementer State
 
+## Status check (2026-10-12 13:14 CEST, T-22 CI green, PR #12 submitted for review)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all read.
+T-22 was already status=running/owner=implementer in TASKS.json with next_action
+telling me to wait on CI run 38240753020 for PR #12 (fix/t19-plan-pr-gate -> main).
+Two unacked inbox messages (principal 11:04/11:05 CEST) were both about retargeting
+PR #12 from base=fix/t18-multi-major-removals to base=main so CI would actually run
+— already done by a prior session (gh pr view confirmed baseRefName=main,
+headRefName=fix/t19-plan-pr-gate, state=OPEN, mergeable=MERGEABLE). Acked both.
+
+Checked CI: `gh run list --branch fix/t19-plan-pr-gate` showed run 38240753020
+in_progress. Ran `gh run watch 38240753020 --exit-status`, then confirmed via
+`gh run view 38240753020 --json status,conclusion,jobs`: status=completed,
+conclusion=success, all 8 jobs green (dependency-audit, lint, eval, test 3.11,
+test 3.12, decision-gate, secrets-scan, build-docker).
+
+PR #12 body still had a stale "Merge order" section written before the retarget
+(said base was #11, but actual base is main). Replaced it with a "Branch / merge
+note" explaining fix/t19-plan-pr-gate is stacked on #11 (which is stacked on #10),
+so this PR's diff against main necessarily contains all of #10's and #11's commits
+too — this is why CI only runs against main, not because the stack was flattened.
+Recommended the human merge #12 directly (closing #10/#11 unmerged since their
+content is included), or merge #10→#11 first if they want to review the stack as
+separate smaller diffs before this one lands. Added the CI run link to the
+Verification section.
+
+Updated coordination/TASKS.json: T-22 status=review, owner=reviewer,
+evidence_paths=[PR #12 URL, CI run 38240753020 URL], next_action tells reviewer
+what to verify. Sent review_request to reviewer and status update to principal
+(below). No code was touched this session — T-22 was PR/CI mechanics only, no
+src/ changes, so no commit gate run (per AGENTS.md: "State files (*.md,
+TASKS.json) don't need the gate — only code in src/, tests/, etc.").
+
 ## Status check (2026-10-12 ~13:16 CEST, T-19 ACCEPTED, idle — T-22 not yet dispatched)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all read.
 Reviewer accepted T-19 (commit f022950 "reviewer(T-19): ACCEPTED — routing correct,
