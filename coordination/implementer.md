@@ -181,6 +181,99 @@ systemic hazard (dependency_check has no commit lock like depfix-agents' .local/
 Be careful with branch checkouts in dependency_check until this is addressed -- verify
 `git branch --show-current` right before committing, not just at the start.
 
+## Status check (2026-10-12 12:48 CEST, T-19 installed==latest edge case closed, dry-run evidence)
+Picked up T-19 per inbox (principal ping 3ea30d1d, reviewer notes e4b38cfb/509ab3d8,
+principal stall_ping 0e81156f, principal directive ef4b81b2). All acked. Confirmed
+d4e25f0 + b8b4988 already committed on fix/t19-plan-pr-gate (reviewer's prior two bugs).
+
+Fixed the installed==latest edge case reviewer flagged twice (05:41, repeated in
+ef4b81b2): two separate bugs, not one.
+1. `repo_version_exports_diff` (src/depfix/sources/repo_exports.py) returned `None`
+   outright whenever `installed_sv >= latest_sv`, so when a repo is already on
+   latest, sub-case B (ghost-API detection) never even ran — not just
+   under-triggered, literally skipped. Fixed: only bail on unparseable versions;
+   let removed-exports computation naturally yield an empty set when
+   installed==latest, while still returning latest_version for sub-case B to use.
+2. Even with (1) fixed, `change_applies()` (src/depfix/scanners/applicability.py)
+   blocks on `resolved < new_version`, which is false by construction once a repo
+   reaches latest — but the ghost API is still missing at latest too, so there is
+   no upper boundary past which the repo stops being affected. Fixed: added an
+   `is_ghost_removal` check (`kind is METHOD_REMOVED and old_version == "0.0.0"`,
+   the exact sentinel repo_exports.py's sub-case B already sets) that short-circuits
+   to APPLIES whenever `dep.resolved_version` is present, regardless of the
+   resolved/new_version comparison. Scoped narrowly to that sentinel+kind pair so
+   it can't affect DEPENDENCY_VERSION_BUMP's own old_version="0.0.0" usage in
+   codemods/lockfile.py (different kind, different branch, untouched).
+   Considered adding a dedicated BreakingChange field instead (e.g.
+   `version_boundary_exempt`) but that touches serde.py, classify/store.py, and
+   the live depfix.db schema — out of proportion for an edge case fixable with a
+   2-line, well-commented guard on an existing sentinel. Flagging here in case
+   reviewer disagrees and wants the explicit field.
+
+Added 4 tests: 2 in tests/unit/test_applicability.py (ghost removal applies at
+resolved==new_version and resolved<new_version), 2 in
+tests/unit/test_repo_aware_exports.py (synthetic_changes_for_scan still fires
+sub-case B when repo_version_exports_diff reports installed==latest; the real
+un-mocked repo_version_exports_diff no longer bails at that boundary).
+
+Verification (not full `make test` — host still shared/contended, and principal's
+ef4b81b2 explicitly accepted targeted pytest + lint + typecheck + tester
+corroboration as T-19 gate evidence):
+- `pytest tests/unit/test_scan_matching.py tests/unit/test_applicability.py
+  tests/unit/test_repo_aware_exports.py tests/unit/test_runner_skill_enrichment.py
+  tests/unit/test_upgrade_method_removal_gate.py -q` → 44 passed.
+- `ruff check src tests` → All checks passed.
+- `mypy src` → Success: no issues found in 208 source files.
+Committed afb64ca on fix/t19-plan-pr-gate (4 files: applicability.py,
+repo_exports.py, test_applicability.py, test_repo_aware_exports.py). Pushed to
+origin (verified `git branch --show-current` was fix/t19-plan-pr-gate immediately
+before both the commit and the push, under flock .local/git.lock, per the
+concurrency protocol). No PR exists yet for this branch — correct, PR creation is
+T-22's job after review acceptance; the ci.yml workflow only triggers on push to
+main or pull_request, so CI cannot run pre-PR, consistent with how T-18 only got
+CI once PR #11 existed.
+
+Dry-run evidence for the acceptance criterion ("sentry.startTransaction must get
+a fix PR"): ran `PYTHONPATH=src depfix plan bedilk/depfix-test-sentry-v6-app
+--provider sentry` (read-only, writes no DB state/branches/PRs per depfix's own
+plan command contract — the correct AGENTS.md-compliant way to test this without
+risking a real PR). Full log: /tmp/t19_plan_dryrun.log. Findings:
+- `repo_exports: 2 synthetic change(s) for bedilk/depfix-test-sentry-v6-app/sentry`
+  — confirms sub-case B fired (startTransaction + getCurrentHub).
+- `considering a49fb6c59168: @sentry/node sentry.startTransaction -> (removed, no
+  replacement)` then `generating and verifying a fix for a49fb6c59168` — the
+  record REACHED the fix-generation stage. This is the actual T-19 gate win: 16
+  other sentry.* METHOD_REMOVED records with no replacement (connectIntegration,
+  SentryContextManager, validateOpenTelemetrySetup, etc.) stayed `report_only` as
+  designed; only startTransaction/getCurrentHub — the two with skill-documented
+  replacements — got attempted, confirming the skill-enrichment gate (this
+  session's and prior sessions' runner.py work) discriminates correctly instead
+  of either blocking everything or attempting everything.
+- BUT: final outcome was `no_kept_edits -- no committable edits (2 file(s)): 
+  src/performance.js: reverted -- this fix was rolled back by verification
+  src/tracing.js: reverted -- this fix was rolled back by verification`. The LLM
+  (bedrock, 2 calls, $0.0128) generated edits for both files but verification
+  (npm test / jest) rolled them back. I did NOT dig into why the generated fix
+  failed verification (jest output isn't at INFO level, and bisecting LLM
+  fix-generation quality is a different investigation than the gate-wiring bug
+  this session was scoped to fix) — flagging this honestly rather than claiming
+  the acceptance criterion is fully met. The one PR actually planned this run was
+  the version-drift bump (@sentry/node 10.75.3 → 11.6.0), not an API-migration PR
+  for startTransaction.
+- getCurrentHub also entered fix generation and was also reverted (1 file,
+  src/tracing.js).
+
+This is real, honest progress on the acceptance criterion (gate now routes the
+right records to fix generation, instead of everything or nothing) but not full
+closure (no kept/committable startTransaction fix in this run). Sending to
+reviewer as-is rather than re-running repeatedly to get a lucky pass — don't want
+to spend more LLM budget chasing non-determinism without reviewer/principal input
+on whether verification-rollback of fix-generation quality is in T-19's scope or
+a new gap for T-20/a follow-up task.
+
+Set T-19 status=review, owner=reviewer. Sent review_request to reviewer and
+status update to principal.
+
 ## Notes
 - typecheck: python_version updated to 3.12, manager.py None guard added.
 - make eval reports 91% (30/33 scored) due to 3 pre-existing spec_diff failures unrelated to my tasks.
