@@ -453,3 +453,14 @@ status update to principal.
   https://github.com/bedilk/dependency_check/pull/11. TASKS.json already moved to
   status=review/owner=reviewer by the time I checked (concurrent process — see note
   above); sent the missing review_request to reviewer and a status update to principal.
+
+## Status check (2026-10-12, T-22 now done, still idle)
+TASKS.json changed on disk mid-startup-protocol (caught via system notice) and
+re-read: T-22 moved review->done (owner=reviewer), reviewer ACCEPTED (receipt
+coordination/review/T-22_receipt.json present now, base=main, CI 38240753020
+8/8 green). T-22's notes include a human directive to merge PR #12 and close
+#10/#11 -- that's a human/principal action on GitHub, not an implementer code
+task, so not actioning it myself. T-23 still status=review/owner=researcher, no
+receipt yet. T-24 still queued/owner=null, blocked on T-23. No task has
+status=running/owner=implementer. Inbox empty. Idle, waiting for T-23 verdict
+or a new dispatch.
