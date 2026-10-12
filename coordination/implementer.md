@@ -1,5 +1,25 @@
 # Implementer State
 
+## Status check (2026-10-12 ~13:35 CEST, idle — stale challenge resolved)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+One unacked inbox message: principal challenge 5f8f7d64 (11:13:17Z) claiming PR #12
+base was flipped back to fix/t18-multi-major-removals at 11:11Z after I'd set it to
+main at 11:08Z. Checked: this was already reconciled by a concurrent implementer
+session in commit 1d56ac0 ("reconcile concurrent PR #12 base-branch edits") at
+13:14 CEST, before I read the inbox. Verified live via `gh pr view 12
+--json baseRefName,headRefName,state,mergeable,body`: baseRefName=main,
+headRefName=fix/t19-plan-pr-gate, state=OPEN, mergeable=MERGEABLE, and the PR
+body's "Branch / merge note" section already correctly describes base=main (not
+stale #11 reference). Acked the message and sent principal a status reply
+confirming current state — no code or PR action needed.
+
+TASKS.json (current, post 1d56ac0 + principal's 2d736ea oversight commit): T-22
+status=review/owner=reviewer, T-23 status=review/owner=researcher, T-20
+status=running/owner=tester, T-21 status=ready/owner=null (blocked on T-20), T-24
+status=queued/owner=null (blocked on T-23, created from T-23's gap). No task has
+status=running/owner=implementer. Not self-starting anything per task-driven
+protocol. Idle, waiting for reviewer verdicts on T-22/T-23 or a new dispatch.
+
 ## Status check (2026-10-12 ~13:30 CEST, idle — nothing assigned)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty (nothing new to ack). TASKS.json unchanged since last check: T-22
