@@ -656,8 +656,26 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   Fix: remove the import line (mock.patch uses dotted strings, not the symbol).
   Notified implementer (msg c821e3dd).
 
+## Status check (2026-10-12, session 5)
+- Ran startup protocol. Inbox empty. No assigned tasks.
+- T-19 has progressed since last session: 7 commits on fix/t19-plan-pr-gate, pushed to origin.
+- Latest commit afb64ca: ghost-API sub-case B now works when installed==latest.
+  - repo_version_exports_diff no longer bails when installed >= latest
+  - applicability.py treats sub-case B sentinel (old_version="0.0.0") as always-applicable
+  - 4 new tests for these edge cases
+- Verified ALL code locally: 937 tests pass, lint (ruff check) clean, typecheck (mypy) clean.
+- **CI BLOCKER**: `ruff format --check` fails — 16 files need auto-formatting:
+  - classifier.py:66 (multi-line or expression)
+  - runner.py:804 (with statement needs parens)
+  - repo_exports.py:79 (line length)
+  - test_applicability.py:73 (formatting)
+  - 10+ skill .md files (Python code in markdown blocks)
+  Fix: `ruff format src tests` — one command, auto-fix.
+- No PR opened yet for T-19. PR #10 and #11 still open, same format issue blocks CI.
+- Notified implementer (msg 7486701e) and principal (msg 444cde49).
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 in progress (implementer): code verified correct, lint blocker identified, needs fix + commit + push + status=review.
+- T-19 code complete, needs format fix + CI green + PR open + status=review.
 - T-20 prep research done (research/t20-e2e-prep.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
