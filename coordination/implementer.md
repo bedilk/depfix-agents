@@ -662,3 +662,15 @@ report done, awaiting reviewer receipt), T-21 ready/owner=null (blocked on
 T-20). No task has status=running/owner=implementer. Not self-starting T-24
 per task-driven protocol. Not resending the ready_to_dispatch ping (4b68ed73,
 still unacked, nothing new to add). Idle.
+
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 8)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json unchanged: T-24 still status=queued/owner=null (dep
+T-23 done, dispatch-ready), T-20 status=review/owner=reviewer (no receipt in
+coordination/review/ yet), T-21 ready/owner=null (blocked on T-20). No task
+has status=running/owner=implementer. Note: the task prompt template listed
+T-3/T-4/T-5 (provider skills, sentry/ruby eval cases) but these do not exist
+in the live TASKS.json — ignoring as stale boilerplate, following actual
+TASKS.json state instead. Not self-starting T-24 per task-driven protocol.
+Not resending the ready_to_dispatch ping (4b68ed73, still unacked, nothing
+new to add). Idle.
