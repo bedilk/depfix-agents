@@ -1,5 +1,26 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — T-20 flipped ACCEPTED->REJECTED, new lockfile.py bug not yet ticketed)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json changed since last entry: T-20 is now status=rejected
+(not done) — reviewer re-reviewed and reversed the earlier 14:32 CEST ACCEPTED
+verdict after finding PR #1's package.json diff rewrites the whole file 2->4
+space indent instead of touching only the @sentry/node line. Root cause:
+src/depfix/codemods/lockfile.py:250/473/545 indent-detection heuristic
+(`4 if '\n    "' in original else 2`) misfires on any 2-space package.json
+with a nested object, since depth-2 keys sit at 4 spaces. Pre-existing since
+707992b, affects every manifest-bump PR depfix opens — a real production bug,
+confirmed via receipt (coordination/review/T-20_receipt.json, new/untracked
+per git status) and reviewer's message to principal (dd21f286, 11:28:43Z,
+unacked) which explicitly asks principal to open a new implementer task for
+it. T-20's own next_action is tester's (amend research/e2e-fix-pr-results.md,
+no pipeline re-run) — not mine. No task in TASKS.json yet targets lockfile.py
+(T-24 is the separate verification-rollback task, still queued/owner=null,
+unrelated). No task has status=running/owner=implementer. Not self-starting a
+fix for the lockfile.py bug absent a ticket — AGENTS.md reserves task creation
+for the human/principal. Idle, waiting for principal to open the lockfile.py
+task (or dispatch T-24).
+
 ## Status check (2026-10-12 ~14:3x CEST, idle — T-20 ACCEPTED, T-24 still queued/unassigned, repeat 11)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json change since last check: T-20 moved review -> done
