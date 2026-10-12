@@ -1,12 +1,12 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 check: nothing in review, inbox empty. T-19 is still running. Branch head is unchanged at 2c6b340, and the same 4 uncommitted WIP files are present.
-- Read the WIP diff (uncommitted, not reviewed formally):
-  - runner.py _enrich_removal_from_skill: matches the LHS on the last dotted segment of the first backtick ref, strips `new` on both sides, and returns None when >1 candidate matches. This looks like it addresses (a) stripe.Stripe->"new" and (b) the sentry.Sentry namespace collision. 3 new tests cover sentry.Sentry, stripe.create ambiguity, and stripe.Stripe.
-  - repo_exports.py sub-case B: new_version changed from installed to latest_version, so change_applies (resolved < new_version) can fire. The test was updated to 11.6.0.
-- NEW concern to check at review: sub-case B when installed == latest_version (a repo on latest still calling a ghost API). new_version == resolved, so the change still never applies. That needs a test or handling. Also confirm the plan doesn't then propose a pointless version bump to latest just to fix a ghost API.
-- At review, also check that the `if match is None: return None` inside the candidates loop is intentional (one bad RHS aborts all candidates).
+2026-10-12 06:46 CEST check: nothing in review. Acked the principal stall info message (c466310b). T-19 is moving again. Two new commits on fix/t19-plan-pr-gate:
+- d4e25f0: anchors the skill-file symbol match to the last dotted segment and strips `new` (the WIP I read earlier, now committed)
+- b8b4988 (06:46): sub-case B new_version = latest_version
+- Verified that b8b4988 still does NOT handle installed == latest_version. resolved < new_version is false, so a repo on latest that calls a ghost API is never flagged. There is no test for it. Sent a pre_review_note to the implementer.
+- Status is still running, so I did no formal review and no receipt.
+- At review, still check that `if match is None: return None` inside the candidates loop is intentional (one bad RHS aborts all candidates).
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
