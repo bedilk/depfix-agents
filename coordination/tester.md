@@ -1,5 +1,61 @@
 # Tester State
 
+## T-20 Cross-Check (2026-10-12, ~13:26 CEST)
+
+**Independently reproduced T-20, no discrepancies; discarded a duplicate draft.** Woke up,
+read TASKS.json, found T-20 (end-to-end fix-PR test on 3 repos) assigned to tester per the
+13:02 CEST principal note (after my last state entry at 12:42, which predates that
+assignment). Before starting, found a **second concurrent tester process already mid-flight**
+on the exact same task: PID 43748 (started 13:13, running a long-stale embedded prompt that
+still lists T-1/T-10/T-11/T-12 — a leftover generation from `run-team.sh`, the same
+duplicate-loop hazard flagged repeatedly since 07:41 today, still present after the reported
+12:46 "unblocked" fix). Evidence: a stash titled `"tester T-20: stale WIP found
+uncommitted..."` and a DB backup at `.local/backups/depfix.db.pre-t20-20261012T131411`, both
+already in place before I'd done anything myself.
+
+Rather than wait, ran the full T-20 sequence myself independently (own `.local/t20/*.log`
+files in dependency_check, not committed): `depfix init --keep-state`, then
+`scan`/`plan`/`apply --force` on all three repos (`bedilk/depfix-test-sentry-v6-app`,
+`bedilk/depfix-test-openai-v3-chat`, `bedilk/seed-openai-v3-to-v4`) on `fix/t19-plan-pr-gate`
+@ `bb562a3`. Checked the DB directly first: the T-18-receipt prereq (reset `classified_at` on
+the 2 `ts_exports:@sentry/node` events, clear stale `package='sentry'` rows) was already
+satisfied — 0 rows with `package='sentry'`, both source events `classified_at IS NULL`.
+Results matched the sibling process's independently **exactly**: sentry repo gets a real
+draft PR (https://github.com/bedilk/depfix-test-sentry-v6-app/pull/1, version bump only,
+`package.json`+`package-lock.json`); `startTransaction`/`getCurrentHub` fixes generated
+correctly but reverted by verification (`no_kept_edits`, confirms T-23 independently);
+openai-v3-chat gets 0 PRs by design (major-gap review); seed-openai-v3-to-v4's `apply`
+hard-fails exit 2 (`No plan artifact found`) because vendored/unresolved-version repos never
+get a plan artifact written. Also independently hit the same `"plan artifact is stale:
+repository HEAD changed since plan; run plan again"` (runner.py:1221) on stale classified
+rows on both sentry and openai-v3-chat, and independently noticed `depfix scan`'s exit code
+is actually the trailing eval-corpus gate's exit code (cli.py:1437-1446, pre-existing since
+707992bd on 2026-09-19), not the scan's own — both already called out in the sibling's report.
+
+By the time I finished and went to write results, the sibling process had already committed
+`research/e2e-fix-pr-results.md` + TASKS.json (`e17aa1a`, 13:21 CEST) and set T-20
+`status=review`, `owner=reviewer`. Wrote my own draft first (before re-reading TASKS.json),
+caught the collision on the next `git status`/`git log` check, compared content against
+`git show e17aa1a:research/e2e-fix-pr-results.md`, confirmed it's substantively complete and
+matches my independent run with no discrepancies (it also found a cleaner root-cause pointer
+for the seed-openai gap, `cli.py:2037-2050`, than I had). **Discarded my duplicate draft via
+`git checkout -- research/e2e-fix-pr-results.md`** rather than overwrite already-committed,
+already-in-review work — did not touch TASKS.json (already correctly `status=review`/
+`owner=reviewer`), did not send a `task_done` message (T-20 isn't mine to claim). No duplicate
+GitHub PRs resulted from running `apply` twice in parallel: my `apply` on sentry hit the same
+422s (branch/PR already exist) and reused PR #1 rather than creating a second one — verified
+via `gh pr view`/`gh pr list` before and after. No DB corruption observed.
+
+**Flagging for principal:** the duplicate-tester-process hazard (documented at
+07:41/10:08/10:24 today) is still live as of 13:13 CEST, after the 12:46 "unblocked"
+load-average fix — this is wasted LLM spend (my redundant `apply` runs cost real Bedrock
+dollars for no net benefit) and a real risk of duplicate PRs or DB races on tasks less
+idempotent than this one. Sent a status message, not a `task_done` (nothing new for me to
+claim credit for). Inbox empty, nothing to ack. No task currently assigned to tester; T-21
+depends on T-20 which is still in `review`, not yet assignable.
+
+---
+
 ## Status Check (2026-10-12, ~13:25 CEST)
 
 Inbox: empty, nothing new to ack (all prior messages already acked as of last session).
