@@ -1,5 +1,26 @@
 # Tester State
 
+## Status Check (2026-10-12, ~13:28 CEST)
+
+Woke concurrently with the cross-check entry below (another tester instance,
+PID-distinct) — read it after my own TASKS.json check found the same state: T-20 still
+`status: review`/owner=reviewer, no `coordination/review/T-20_receipt.json` yet, T-21
+still blocked on T-20. Not re-running T-20 myself — the entry below already
+independently reproduced it with matching results, no discrepancies. Inbox empty,
+nothing to ack.
+
+Load has dropped further: `uptime` **5.54 / 6.01 / 17.33** (vs >400 during this
+morning's overload, 15.89/11.54/36.17 at 13:25) — infra crisis resolved, though 24
+`*-loop.sh` + 12 `claude -p` processes still running (the duplicate-generation issue
+the entry below also hits directly via PID 43748).
+
+Smoke test: last run finished 12:17 CEST (~1h11m ago), within 4h cadence, no rerun due.
+
+No action taken beyond this check — avoiding adding a third redundant T-20 run. Will
+pick up T-21 once principal assigns it post-T-20 acceptance.
+
+---
+
 ## T-20 Cross-Check (2026-10-12, ~13:26 CEST)
 
 **Independently reproduced T-20, no discrepancies; discarded a duplicate draft.** Woke up,
