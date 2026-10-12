@@ -2,6 +2,58 @@
 
 ## Current Task
 
+2026-10-12T07:41 CEST: **CRITICAL INFRA FINDING — stop normal testing, flagging system overload.**
+Woke at 04:29 CEST. TASKS.json unchanged (T-19 still `running`/owner=implementer; T-20/T-21/T-22
+still blocked). Inbox empty, nothing new to ack since the 22:11:16 Oct-11 principal messages.
+
+Attempted two routine actions and both hung for the full 30-minute background limit with
+**zero bytes of output** before being killed:
+- `make test` in dependency_check (started 04:29, killed ~04:59, output file: 2 lines, just `[killed]`)
+- `bash scripts/smoke-real-repos.sh 6` (started ~05:00, killed ~05:40, output file: `[killed]`,
+  overdue anyway — last smoke was 2026-10-11T23:48:34, so by 03:48 it had already crossed the
+  4h window with no principal smoke_test trigger received)
+
+Root-caused via `ps aux` / `uptime`: the host is critically overloaded.
+- `uptime`: load averages climbed from **306 → 333** over the ~1h I was investigating (at 7:41
+  CEST), on a session that's otherwise idle — i.e., not caused by my own commands.
+- `ps aux | grep -E '\-loop\.sh'` shows **26 concurrent `*-loop.sh` processes**: 6 tester-loop.sh,
+  6 principal-loop.sh, 6 implementer-loop.sh, 4 reviewer-loop.sh, 4 researcher-loop.sh — spanning
+  at least 4 distinct, never-terminated generations (oldest from 11:35PM Oct 11, then 11:56PM,
+  then 04:29/05:11AM, then a newest batch starting 06:40-06:46AM Oct 12, all still alive
+  simultaneously).
+- No `coordination/*.stop` files exist, so nothing is in a stopping state — these are just
+  accumulating.
+- `scripts/run-team.sh` (read-only check, did not run it) launches each `*-loop.sh` once per
+  invocation with no PID-file/lock check against a prior still-running generation — so each
+  extra `run-team.sh` invocation (or whatever re-triggers it, e.g. a scheduler) piles another
+  full set of 5 loops on top of the existing ones instead of replacing them.
+- `.local/tester-lifecycle.log` corroborates: while I was mid-investigation, a **second tester
+  child process** started and exited (04:38:11 → 05:39:45) and a **third** started at 06:40:41
+  — concurrent with this very session — confirming the duplicate-generation hypothesis directly
+  rather than by inference alone.
+
+This fully explains the zero-output hangs: my `make test`/smoke subprocesses were CPU-starved,
+not stuck on a code bug or git lock. I did **not** `pkill` any of the stray loop/agent processes
+— that would kill other roles' possibly-legitimate in-flight work (e.g., implementer's T-19 WIP)
+and affects shared system state beyond my own role, so it needs a human or principal decision,
+not a unilateral tester action.
+
+**Recommendation (not yet actioned):** human should run `bash scripts/run-team.sh --stop`, wait
+for all loops to exit, verify with `ps aux | grep -E '\-loop\.sh'` that none remain, then start a
+single fresh `bash scripts/run-team.sh`. Until that happens, I expect continued flaky/hanging
+results from any agent's `make test`, smoke tests, or pipeline runs on this host — not because
+the depfix code regressed, but because the process pileup is starving every command of CPU.
+
+No test results to report this cycle beyond the above — both attempted commands produced no
+usable output. Will retry `make test` next wake if the process count has come down; will not
+re-attempt the smoke test until either the process pileup clears or principal explicitly
+re-sends the smoke_test trigger (it's now very overdue, but running it again into the same
+overload would likely just hang again).
+
+---
+
+## Previous Current Task
+
 2026-10-12T00:34 CEST: Status check (independent, concurrent with the 00:33 entry below —
 another confirmation of the multi-tester-process overlap it already flagged). Ran `make
 test` against the same working tree (dependency_check HEAD `2c6b340`, uncommitted WIP on
