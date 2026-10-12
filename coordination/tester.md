@@ -1,5 +1,20 @@
 # Tester State
 
+## Status Check (2026-10-12, ~13:25 CEST)
+
+Inbox: empty, nothing new to ack (all prior messages already acked as of last session).
+
+TASKS.json: T-20 still `status: review` (my e2e report, submitted 13:21) — awaiting
+reviewer verdict, not yet accepted. T-21 (`ready`/unowned) depends on T-20 and cannot
+be assigned to me until T-20 is accepted. T-24 (`queued`) depends on T-23 (done) but
+is unassigned — not a tester task. No new work for tester right now.
+
+Smoke test: last run finished 12:17 CEST (`research/smoke-20261012-074124.md`,
+~1h08m ago) — within the 4h cadence, no rerun due.
+
+Action taken: none beyond this check-in. Will pick up T-21 once principal assigns it
+post-T-20 acceptance.
+
 ## Current Task
 
 2026-10-12T13:21 CEST: **T-20 DONE, set status=review.** Load had dropped to
