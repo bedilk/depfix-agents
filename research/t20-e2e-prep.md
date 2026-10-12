@@ -11,8 +11,15 @@ This branch contains:
 - upgrade.py:140 gate on `new_api` (T-19)
 - fix_service.py:201 gate on `new_api` (T-19)
 
-**Important:** As of 2026-10-12, the T-19 fixes are UNCOMMITTED in the working tree.
-The implementer must commit them before T-20 can run.
+**Update 2026-10-12:** T-19 is DONE (afb64ca pushed, reviewer ACCEPTED). Branch
+`fix/t19-plan-pr-gate` contains all T-18+T-19 code. PR #12 targets main, CI green.
+
+**T-23 BLOCKER:** Verification reverts METHOD_REMOVED fixes (startTransaction, getCurrentHub)
+because of stale lockfile → `npm ci` fails → no `node_modules` → smoke check reverts
+unconditionally. Root cause in `research/t23-verification-rollback.md`. VERSION DRIFT fixes
+(package.json bump) are NOT affected — they use `frozen_install=False` (`npm install`).
+Expected T-20 result: version drift PR opens correctly; METHOD_REMOVED fixes are reverted
+by verification (`no_kept_edits`).
 
 ### DB State
 
@@ -66,7 +73,7 @@ sqlite3 depfix.db "SELECT package, COUNT(*) FROM breaking_change WHERE provider_
    absent → creates synthetic METHOD_REMOVED BreakingChange with `package="@sentry/node"`
 4. **`_enrich_removal_from_skill`** — reads provider_sentry.md:
    - `startTransaction` → `new_api="Sentry.startSpan"`, `migration_guide="(bullet line)"`
-   - `getCurrentHub` → `new_api="Sentry.getClient"` (if in skill file)
+   - `getCurrentHub` → `new_api="Sentry.getCurrentScope"` (per provider_sentry.md arrow)
 5. **upgrade.py:140** — allows through because `change.new_api` is set
 6. **fix_service.py:201** — allows through because `change.new_api` is set
 7. **LLM fixer** — generates code replacing `startTransaction(ctx)` with `startSpan({...})`
@@ -82,10 +89,18 @@ sqlite3 depfix.db "SELECT package, COUNT(*) FROM breaking_change WHERE provider_
 ## Test Repo 2: bedilk/depfix-test-openai-v3-chat
 
 ### Expected Flow
-This tests VERSION DRIFT, not API removal. The repo has an older openai SDK.
+This tests VERSION DRIFT primarily. The repo has an older openai SDK.
 - `depfix scan` detects version drift (old openai version → latest)
 - `build_upgrade_plan` builds a version bump plan
 - The drift path (not METHOD_REMOVED) handles this case
+
+### API Migration Potential
+repo_exports.py sub-case A may detect `OpenAIApi` and `Configuration` as removed top-level
+exports (present in v3 .d.ts, absent in v4). `createChatCompletion` is a class method, not a
+top-level export — sub-case B would fire if the scanner reports it as a call site with symbol
+`openai.createChatCompletion`. The openai skill file has one arrow:
+`createChatCompletion → chat.completions.create`. If enrichment succeeds, the LLM fixer gets
+both the old and new API in its prompt. Same T-23 verification caveat applies.
 
 ### Verification
 - [ ] PR opened with version bump in package.json
