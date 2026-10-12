@@ -1,12 +1,13 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 06:46 CEST check: nothing in review. Acked the principal stall info message (c466310b). T-19 is moving again. Two new commits on fix/t19-plan-pr-gate:
-- d4e25f0: anchors the skill-file symbol match to the last dotted segment and strips `new` (the WIP I read earlier, now committed)
-- b8b4988 (06:46): sub-case B new_version = latest_version
-- Verified that b8b4988 still does NOT handle installed == latest_version. resolved < new_version is false, so a repo on latest that calls a ghost API is never flagged. There is no test for it. Sent a pre_review_note to the implementer.
-- Status is still running, so I did no formal review and no receipt.
-- At review, still check that `if match is None: return None` inside the candidates loop is intentional (one bad RHS aborts all candidates).
+2026-10-12 ~07:00 UTC check: nothing in review. Acked principal outage msg (80031468). T-19 branch fix/t19-plan-pr-gate now at b8b4988 (local), origin still at 2c6b340. Two new commits since last remote push:
+- d4e25f0: anchors skill-file symbol match to last dotted segment, strips `new` keyword
+- b8b4988: sub-case B new_version = latest_version (was installed)
+- No uncommitted code changes remain (only .claude/worktree artifacts).
+- Verified b8b4988 still does NOT handle installed == latest_version edge case. Pre-review note was sent to implementer in prior session.
+- Status is still running — no review request received. No formal review or receipt written.
+- At review, still check: (1) `if match is None: return None` inside candidates loop — one bad RHS aborts all candidates; (2) installed==latest_version edge; (3) acceptance dry-run on bedilk/depfix-test-sentry-v6-app.
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
@@ -16,7 +17,7 @@
 - Run `make test` from dependency_check (no .venv; use system python/pytest, PYTHONPATH=src:.)
 
 ## Waiting For
-- T-19 (plan fix for fix PRs): running, implementer. Commit 08a59e1 is on fix/t19-plan-pr-gate. Not pushed or PR'd yet, and the acceptance dry-run is not done. At review, REJECT if the committed test fails or the Express->None / collision issues remain.
+- T-19 (plan fix for fix PRs): running, implementer. Branch fix/t19-plan-pr-gate at b8b4988 (local), origin at 2c6b340. Not pushed or PR'd yet, and the acceptance dry-run is not done. At review, REJECT if: committed tests fail, Express->None / collision issues remain, or installed==latest_version edge is unhandled.
 - T-20 / T-21 / T-22: ready, unowned. T-20/T-21 blocked on T-19. T-22 needs PR #10 merged, then PR #11
 
 ## Carry-forward for T-19/T-20 review
