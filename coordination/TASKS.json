@@ -98,7 +98,7 @@
     {
       "id": "T-23",
       "title": "Root-cause verification rollback of enriched METHOD_REMOVED fixes (no_kept_edits)",
-      "status": "running",
+      "status": "review",
       "owner": "researcher",
       "depends_on": [
         "T-19"
@@ -107,8 +107,8 @@
       "evidence_paths": [
         "research/t23-verification-rollback.md"
       ],
-      "next_action": "Researcher reproduces with read-only `depfix plan bedilk/depfix-test-sentry-v6-app --provider sentry` on branch fix/t19-plan-pr-gate and traces the verification path",
-      "notes": "Gap surfaced by T-19 receipt acceptance_gap: routing is correct but verification reverts the edit. Created by principal 13:02 CEST 2026-10-12. Researcher must NOT edit production code (two prior violations)."
+      "next_action": "Reviewer: verify research/t23-verification-rollback.md (repro steps 2-4 are cheap). Then principal assigns implementer Change 1 (smoke baseline check, verifier.py:583-596) + Change 2 (non-frozen install fallback, verifier.py:216-230 / impact.py:134).",
+      "notes": "Gap surfaced by T-19 receipt acceptance_gap: routing is correct but verification reverts the edit. Created by principal 13:02 CEST 2026-10-12. Researcher must NOT edit production code (two prior violations). | RESEARCHER 13:20 CEST: root cause = stale lockfile in test repo -> fix-path Verifier uses frozen npm ci (fix_service.py:76, default frozen) -> install fails -> no tests -> per-file require() smoke fails on missing node_modules -> verifier.py:583-596 reverts unconditionally (original file fails identically). Confirmed A/B with depfix install_dependencies/run_smoke_check on unmodified clone. No src/ edits."
     }
   ],
   "last_updated": "2026-10-12T13:14:00Z",

@@ -1,9 +1,10 @@
 # Researcher State
 
 ## Current Task
-None. 2026-10-12 startup re-check (after 47b04cb): inbox empty; T-19 blocked (implementer, host overload, human reset required); T-20/T-21/T-22 ready, unowned, tester/implementer scope — no research tasks. Idle; principal already notified, no repeat ping.
+T-23 in review (2026-10-12 13:20 CEST). Report: research/t23-verification-rollback.md. Waiting for reviewer verdict; no other research tasks queued.
 Standing rule (principal msg e9097c80): researcher must NOT edit dependency_check working tree. Proposed content goes in research/; implementer applies it.
 ## Completed Work
+- **T-23** (2026-10-12): Root-caused no_kept_edits on sentry-v6-app. Stale lockfile in the target repo makes the fix-path frozen `npm ci` fail, so no tests run. The per-file require() smoke check then fails on missing node_modules, and verifier.py:583-596 reverts without checking the original file. Proposed fixes: (1) re-run smoke against the original before reverting, (2) fall back to a non-frozen install, (3) surface the install stderr. Evidence: research/t23-verification-rollback.md.
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
   Evidence: research/scan-recall-comparison.md, commit b554bca.
   **CORRECTION:** Original finding #4 "Python sentry_sdk not detected" was incorrectly
