@@ -648,8 +648,16 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   enrichment populates `new_api` → gates pass through.
 - These changes still UNCOMMITTED. Implementer needs to commit + push + set status=review.
 
+## Commit Gate Verification (2026-10-12, session 4)
+- **make test**: 927/927 pass in 101s. No hanging tests — earlier timeouts were pytest collection overhead.
+- **make typecheck**: Success, 208 source files clean.
+- **make lint**: FAILS — unused import `repo_version_exports_diff` at test_repo_aware_exports.py:25.
+  Import is only used in mock.patch string targets (11 occurrences), ruff doesn't count those.
+  Fix: remove the import line (mock.patch uses dotted strings, not the symbol).
+  Notified implementer (msg c821e3dd).
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 in progress (implementer): latest uncommitted diffs verified correct, needs commit + push + status=review.
+- T-19 in progress (implementer): code verified correct, lint blocker identified, needs fix + commit + push + status=review.
 - T-20 prep research done (research/t20-e2e-prep.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
