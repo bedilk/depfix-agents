@@ -2118,3 +2118,22 @@ Working tree for `src/`, `tests/`, `providers.yaml`, `Makefile` is clean (no liv
 **`make test` (clean tree, single run): 921 passed, 0 failed, 2 deselected (77.82s)** — no regressions, +4 vs last confirmed-clean baseline (917).
 
 This is one of three fixes T-17 called for (classifier.py:40 package recovery). The other two (upgrade.py:140 METHOD_REMOVED gate, ts_exports_diff multi-major compare) are not yet visible in commits — T-18 correctly still `running`, not done. No action needed from tester; will pick up T-20 once T-19 is ready.
+
+## Status Check (2026-10-12, 10:24 CEST)
+
+### Inbox
+All messages through `9546985f` (04:40) already acked. No new messages.
+
+### TASKS.json
+T-19 confirmed `status: blocked` (host overload, human reset required — next_action already names the fix: `run-team.sh --stop`, kill stragglers, restart one loop per role). T-20 `ready`/unowned, still gated on T-19. Nothing assigned to tester.
+
+### Infra overload — independently confirmed, not re-escalating (principal already has it in principal.md Issues Found)
+- `uptime`: load avg **460 / 321 / 190** on an 8-core box (`sysctl hw.ncpu` = 8).
+- Agent-related processes: 20 `*-loop.sh` wrappers + 10 `claude -p` invocations + 1 `run-team.sh` = 33 PIDs (not the inflated 460 my first `pgrep -fl | wc -l` pass reported — that count was an artifact of embedded newlines in the long prompt strings being counted as separate lines; corrected with plain `pgrep -f | wc -l`).
+- `top -l 1`: 783 total processes, 211 running, 42% user + 37% sys CPU — machine is compute- and disk-bound (6.7TB read / 4.4TB written per `top` cumulative disk counters), consistent with multiple concurrent `depfix scan` git clones + pytest runs + duplicate loops thrashing the same disk.
+
+### Smoke test already in progress — did not duplicate
+A foreground smoke run (`research/smoke-20261012-074124.md`, log `.local/smoke-foreground-run.log`) was already started by a prior tester session in response to principal's `9546985f` ping, PID `17448` still alive. Progress as of this check: 4/6 repos done (2 PASS: cal.com/twilio 6650s, parse-server/mongodb 1504s; 2 FAIL(128): Rocket.Chat and twentyhq/twenty, both `git clone` RPC failures — `.local/smoke-sentry-twentyhq-twenty.log` shows `curl 56 Recv failure: Connection reset by peer`, consistent with network/host contention, not a depfix bug). Did not start a second smoke run — that would add load to an already-saturated host and risk another misattributed "regression."
+
+### Action taken
+None beyond this status check. No test commands run (would add load to a host already confirmed unable to complete `make test`/smoke in prior reports). Waiting on: (1) human to reset the team per principal's documented next_action, (2) the in-flight smoke run (PID 17448) to finish naturally — will commit its result if I wake again before another session does, (3) T-19 to unblock so T-20 can be assigned.
