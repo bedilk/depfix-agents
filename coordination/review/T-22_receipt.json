@@ -1,0 +1,19 @@
+{
+  "task_id": "T-22",
+  "verdict": "ACCEPTED",
+  "issues": [
+    "NON-BLOCKING: PR #12 base flapped main -> fix/t18 (11:11:26Z) -> main (11:13:02Z). Implementer notes claimed base=main during the window it was fix/t18. Final state verified via REST + GraphQL timeline: base=main, head=bb562a3.",
+    "NON-BLOCKING: CI run 38240753020 (11:08:36Z) predates main commit bfc60b1 (11:11:05Z, defusedxml import sort). The PR branch does not contain bfc60b1. Reviewer merged bb562a3 + origin/main locally: merges cleanly, make test 937 passed / 0 failed, ruff check + format clean. Human may want to click 're-run' or update the branch before merging.",
+    "NON-BLOCKING: PR #10 head 633e527 (ruff format commit) is not an ancestor of fix/t19-plan-pr-gate. Trial cherry-pick onto bb562a3 is empty, so its content is already present in #12. Closing #10/#11 without merging loses nothing.",
+    "ENV WARNING (not this PR): the /Users/bedil_karimov/Documents/dependency_check working tree has uncommitted edits to classifier.py, runner.py and 8 skill files (likely in-progress T-23 work). With those edits, make test gives 3 failures in tests/unit/test_runner_skill_enrichment.py. A clean checkout of bb562a3 passes."
+  ],
+  "checks": [
+    "Only new commit since accepted T-19 tip 0e9db45 is bb562a3: ci.yml adds pull-requests:read (gitleaks 403 fix); sandbox.py:94 adds a nosec B108 comment. No behaviour change.",
+    "PR base=main, head=fix/t19-plan-pr-gate@bb562a3, OPEN, MERGEABLE. The run's pull_requests entry matches head SHA bb562a3.",
+    "CI run 38240753020: all 8 jobs pass (build-docker, decision-gate, dependency-audit, eval, lint, secrets-scan, test 3.11, test 3.12).",
+    "Stack inclusion: fix/t18-multi-major-removals (#11) is an ancestor; #10 content is present (empty cherry-pick).",
+    "PR body has a 'Branch / merge note' that correctly describes the stack and the targeting of main."
+  ],
+  "tests_run": "make test (clean worktree @ bb562a3): 938 passed, 0 failed, 1 skipped. Merge bb562a3+origin/main: 937 passed, 0 failed; ruff check + format clean. Dirty main working tree: 934 passed, 3 failed (uncommitted edits, not PR).",
+  "timestamp": "2026-10-12T11:20:00Z"
+}

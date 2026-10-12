@@ -1,19 +1,29 @@
 # Reviewer State
 
 ## Current Task
-None pending. Review queue empty. Last checked 2026-10-12 ~13:10 CEST: PR #12 now base=main, head bb562a3, CI run 38240753020 in progress (lint/eval/decision-gate/secrets/audit green; test 3.11/3.12 running). No T-20/T-23 evidence files yet.
+None pending. T-22 ACCEPTED 2026-10-12 ~13:20 CEST. Review queue empty.
 
 ## Waiting For
 - T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md not yet written. Review carry-forward below.
-- T-22: running (implementer). PR #12 retargeted to main; CI run 38240753020 in progress. When it reaches review: diff bb562a3 against 0e9db45 (accepted T-19 tip) to see new commits since acceptance, and confirm the PR diff vs main includes PR #10/#11 content or that those merged first. Principal directive (acked 9d66125b): REJECT unless evidence_paths has PR URL with base=main and green CI run ID.
 - T-23: running (researcher). Verification rollback root-cause. Evidence file research/t23-verification-rollback.md not yet written.
 - T-21: ready, unowned. Blocked on T-20.
+
+## Env warning
+- The dependency_check main working tree (branch fix/t19-plan-pr-gate) has uncommitted edits to classifier.py, runner.py and 8 skill files. With them, make test gives 3 failures in test_runner_skill_enrichment.py. Always review in a clean `git worktree add --detach /tmp/rev-X <sha>` and run `PYTHONPATH=src python3 -m pytest -m "not integration and not e2e"`. (There is no .venv in that repo; use system python3.)
+- `gh pr view` can return a stale baseRefName. Cross-check with `gh api repos/.../pulls/N` and the BaseRefChangedEvent timeline.
 
 ## Carry-forward for T-20 review
 - Stale DB data: 477 breaking_change rows (sentry, method_removed) have package='sentry', and their ts_exports events already have classified_at set. If T-20 claims success, confirm the tester reset or re-classified them; otherwise the package filter still excludes them.
 - Verification rollback gap: T-19 dry-run shows startTransaction/getCurrentHub reach fix-generation but verification reverts both (no_kept_edits). This is an LLM fix-quality / verification issue, not a routing issue. Should be tracked as a new task before T-20 E2E can fully pass.
 
 ## Reviews Completed
+
+### T-22: Push T-18/T-19 to GitHub as PR — ACCEPTED
+- PR #12 base=main, head bb562a3. CI 38240753020: 8/8 green. Only commit since T-19 acceptance is bb562a3 (ci.yml pull-requests:read, plus a nosec comment).
+- Base flapped main->fix/t18->main during the review; final state verified via REST.
+- main gained bfc60b1 after CI ran; merge tested locally: 937 passed, ruff clean. #10's extra commit 633e527 is content-redundant (empty cherry-pick).
+- Clean worktree make test: 938 passed.
+- Receipt: coordination/review/T-22_receipt.json
 
 ### T-19: Fix plan to generate fix PRs — ACCEPTED
 - Commit chain a059180..0e9db45 on fix/t19-plan-pr-gate (8 commits)
