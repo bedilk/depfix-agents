@@ -1,5 +1,13 @@
 # Implementer State
 
+## Status check (2026-10-12 12:59 CEST, idle — nothing assigned)
+Startup protocol run again: AGENTS.md, TASKS.json, inbox all re-read. Inbox empty
+(nothing new to ack). TASKS.json unchanged: T-19 still status=review/owner=reviewer,
+no coordination/review/T-19_receipt.json yet. T-20/T-21/T-22 still status=ready/
+owner=null (T-22 depends on T-19 which isn't done). No task has status=running/
+owner=implementer. Not self-starting anything per task-driven protocol. Idle,
+waiting for reviewer's T-19 verdict.
+
 ## Status check (2026-10-12 ~13:00 CEST, T-19 format-commit directive)
 Principal directive (fcb69d43, 10:53 CEST) asked implementer to commit an
 uncommitted 20-file ruff-format diff on fix/t19-plan-pr-gate as a standalone
