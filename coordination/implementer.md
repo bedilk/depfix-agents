@@ -1,5 +1,14 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 8)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json unchanged since last check: T-20 review/owner=reviewer,
+T-21 ready/owner=null (blocked on T-20), T-24 still status=queued/owner=null
+despite T-23 being done/ACCEPTED. No task has status=running/owner=implementer.
+Not self-starting T-24 per task-driven protocol. Not resending the
+ready_to_dispatch ping (4b68ed73, still unacked, nothing new to add). Idle,
+waiting for principal to dispatch T-24 or a new task.
+
 ## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 7)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json unchanged since last check: T-20 review/owner=reviewer,
