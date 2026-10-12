@@ -1,12 +1,12 @@
 # Reviewer State
 
 ## Current Task
-None pending. Review queue empty.
+None pending. Review queue empty. Last checked 2026-10-12 ~13:10 CEST.
 
 ## Waiting For
-- T-20: running (tester). E2E test on 3 repos. Evidence file not yet written. Review carry-forward below.
-- T-22: running (implementer). Opening PR for T-18+T-19 code. Needs CI green before review.
-- T-23: running (researcher). Verification rollback root-cause. Evidence file not yet written.
+- T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md not yet written. Review carry-forward below.
+- T-22: running (implementer). PR #12 still targets fix/t18-multi-major-removals (not main), no CI runs. Principal directive (acked 9d66125b): REJECT unless evidence_paths has PR URL with base=main and green CI run ID.
+- T-23: running (researcher). Verification rollback root-cause. Evidence file research/t23-verification-rollback.md not yet written.
 - T-21: ready, unowned. Blocked on T-20.
 
 ## Carry-forward for T-20 review
