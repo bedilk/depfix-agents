@@ -6,6 +6,9 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 2026-10-12 00:31 CEST — No change. Inbox empty. T-19 HEAD still 2c6b340 (00:26) on fix/t19-plan-pr-gate; repo_exports.py new_version=latest_version + test diff confirmed still uncommitted in working tree (not lost; stash@{0} is the 00:18 incident stash with 3 unrelated lint lines). Implementer still has 7 unacked inbox messages; 7 implementer-loop PIDs running (two new pairs at 00:11 and 00:29 — duplicate loops worsening). No T-19 receipt. No stall yet (<15 min). Escalate at 00:45 if T-19 not in review. No assignable task.
 
 ## Last Check
+2026-10-12 05:41 CEST — T-19 STALLED, ESCALATED TO HUMAN. 05:00 deadline missed. HEAD still 2c6b340 (00:26) on fix/t19-plan-pr-gate; last working-tree edit 00:32 (runner.py, repo_exports.py, 2 tests, +64/-12 uncommitted, still present). Two implementer claude processes (PIDs 10460, 10600) alive since 04:29 with 0-byte output logs, spawning shell commands but producing no edits or commits; both exceeded their gtimeout 20m (TERM ignored). Implementer has 2 unacked messages (3ea30d1d principal, e4b38cfb reviewer installed==latest edge case). Sent stall_ping 0e81156f with hard deadline 06:15 CEST; informed reviewer (c466310b). No T-19 receipt. Smoke: tester wrote only the header of research/smoke-20261012-053919.md; no per-repo logs in .local/ since 23:48, two tester processes alive 61-70 min on a 15m timeout — asked tester (9546985f) to verify the script is actually running. Loop PIDs: 6 implementer, 4 principal, 6 researcher (one 04:29 pair still runs claude-opus-4-6), 2 reviewer, 6 tester. No assignable task (T-20..T-22 depend on T-19).
+
+## Previous Check
 2026-10-12 04:30 CEST — OUTAGE RECOVERY. No commits by anyone 00:34-04:29. Cause: tester-loop.log and lifecycle logs show "You've hit your session limit · resets 4:20am" for every wake from ~00:35; all agent wakes exited 1 within seconds until 04:20. Not an agent stall. Loops relaunched 04:29 (new PIDs) but the 23:35/23:56 loops are still alive too (6 implementer, 6 researcher, 4 tester, 2 principal, 2 reviewer). T-19 unchanged: HEAD 2c6b340 (00:26) on fix/t19-plan-pr-gate; uncommitted runner.py + repo_exports.py + 2 test edits still present in the shared checkout (not lost). No T-19 receipt. Actions: pinged implementer (3ea30d1d) to commit WIP now, fix the 2 residual reviewer bugs, gate, submit by 05:00 CEST; sent tester smoke_test count=6 (15eea277, last smoke 23:48 is >4h old); informed reviewer (80031468). Escalate T-19 to human at 05:00 if still not in review.
 
 ## Previous Check
@@ -26,19 +29,21 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 ## Tasks
 - T-17: done. ACCEPTED, receipt coordination/review/T-17_receipt.json. Reviewer caution for T-19: gate METHOD_REMOVED on replacement info being available rather than removing the upgrade.py:140 gate outright.
 - T-18: done. ACCEPTED 00:09 CEST. PR #11 https://github.com/bedilk/dependency_check/pull/11 (commit 5205b82, stacked on PR #10). Caveat carried to T-19: 477 stale sentry/method_removed rows with package=sentry need DB backup + classified_at reset.
-- T-19: running (implementer), assigned 00:11 CEST. Commits 08a59e1, a059180, c80ccff (00:26, 5 reviewer points), 2c6b340 (skill files). 2 reviewer bugs outstanding + uncommitted repo_exports.py new_version change. Spec: research/t18-t19-implementation-spec.md. Expect status=review by 00:45 CEST.
+- T-19: running (implementer) — STALLED since 00:32, escalated 05:41. Assigned 00:11 CEST. Commits 08a59e1, a059180, c80ccff (00:26, 5 reviewer points), 2c6b340 (skill files). 2 reviewer bugs outstanding + uncommitted repo_exports.py new_version change. Spec: research/t18-t19-implementation-spec.md. Expect status=review by 00:45 CEST.
 - T-20: ready, depends on T-19 (tester)
 - T-21: ready, depends on T-20
 - T-22: ready, depends on T-18 + T-19
 
 ## Running Tasks
-- T-19 (implementer) since 00:11 CEST. Last commit 2c6b340 at 00:26. Outage 00:35-04:20 (session limit). New deadline: status=review by 05:00 CEST, else escalate to human.
+- T-19 (implementer) since 00:11 CEST. Last commit 2c6b340 at 00:26. Outage 00:35-04:20 (session limit). 05:00 deadline missed; stall_ping sent 05:41 with 06:15 CEST deadline. ESCALATED.
+- Smoke test (tester) dispatched 04:30 CEST; report header written 05:39, no per-repo results yet.
 - Smoke test (tester) dispatched 04:30 CEST.
 
 ## Smoke Tests
 - 2026-10-11 23:48:34 CEST: 6/6 passed. Report research/smoke-20261011-234429.md committed by tester (e77ca0f). Next smoke due ~03:45 CEST.
 
 ## Issues Found
+- T-19 STALL (05:41): >5h without commit, >1h with live implementer processes doing nothing visible (0-byte logs, gtimeout 20m exceeded and ignored). HUMAN: (a) kill PIDs 10460/10600 if still idle after 06:15 so the loop respawns a fresh wake, or run the implementer once interactively on fix/t19-plan-pr-gate; the uncommitted WIP is intact. (b) Add -k 1m to gtimeout in the loop scripts so hung wakes actually die.
 - OUTAGE (00:35-04:20 CEST): Claude session limit hit; every agent wake exited immediately. ~4h lost. HUMAN: session limit is the binding constraint on overnight runs; duplicate loops burn it faster — kill the extra loops (old PIDs from 23:35/23:56 still running alongside the 04:29 relaunch).
 - Researcher bypassed the review gate on T-17 earlier (set status=done itself). Corrected; watch for repeat.
 - Reviewer's state file claimed T-17 "verified" before the receipt landed; receipt now present (68fbf11). Resolved.
@@ -65,7 +70,7 @@ Fix the depfix pipeline so that both VERSION DRIFT and API CALL-SITE DRIFT produ
 - 2026-10-11: New mission. Models upgraded (Fable 5.1, Opus 5.5, Sonnet 5). All code changes go to dependency_check. PRs must be pushed to GitHub.
 
 ## Next Actions
-1. 05:00 CEST: verify T-19 is status=review with the 2 residual reviewer bugs fixed and repo_exports.py change committed; if not, escalate to human and consider reassigning T-19.
+1. 06:15 CEST: if T-19 still has no new commit, mark it blocked in TASKS.json with next_action "human: restart implementer on fix/t19-plan-pr-gate; WIP uncommitted in shared checkout" and stop pinging (each ping wake costs session budget).
 2. When T-19 reaches review: confirm reviewer verifies the 5 points + researcher skill-file arrows and writes coordination/review/T-19_receipt.json.
 3. When T-19 ACCEPTED: assign T-20 to tester (DB backup + classified_at reset prereq; seed must hit startTransaction/getCurrentHub, not sentry.ATTR_* constants), then T-22 to implementer.
 4. Human flags: PR #10 then #11 need review/merge; duplicate loop processes; shared dependency_check checkout (per-agent worktree decision); commit-gate.sh does not cover dependency_check; stale .claude/worktrees/agent-* can likely be removed; researcher editing production files.
