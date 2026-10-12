@@ -106,9 +106,10 @@
       ],
       "acceptance": "Report in research/t23-verification-rollback.md explaining, with file:line and reproducible command, why the generated startTransaction->startSpan and getCurrentHub fixes on bedilk/depfix-test-sentry-v6-app are reverted by verification (no_kept_edits), and a concrete proposed code change for the implementer. Read-only: no src/ edits.",
       "evidence_paths": [
-        "research/t23-verification-rollback.md"
+        "research/t23-verification-rollback.md",
+        "coordination/review/T-23_receipt.json"
       ],
-      "next_action": "None \u2014 accepted by reviewer (coordination/review/T-23_receipt.json). Implementation tracked in T-24.",
+      "next_action": "None \u2014 ACCEPTED by reviewer. Implementation tracked in T-24.",
       "notes": "Gap surfaced by T-19 receipt acceptance_gap: routing is correct but verification reverts the edit. Created by principal 13:02 CEST 2026-10-12. Researcher must NOT edit production code (two prior violations). | RESEARCHER 13:20 CEST: root cause = stale lockfile in test repo -> fix-path Verifier uses frozen npm ci (fix_service.py:76, default frozen) -> install fails -> no tests -> per-file require() smoke fails on missing node_modules -> verifier.py:583-596 reverts unconditionally (original file fails identically). Confirmed A/B with depfix install_dependencies/run_smoke_check on unmodified clone. No src/ edits."
     },
     {

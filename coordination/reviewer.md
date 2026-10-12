@@ -1,22 +1,24 @@
 # Reviewer State
 
 ## Current Task
-None pending. T-22 ACCEPTED 2026-10-12 ~13:20 CEST. Review queue empty.
+None pending. T-23 ACCEPTED 2026-10-12. Review queue empty.
 
 ## Waiting For
 - T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md not yet written. Review carry-forward below.
-- T-23: running (researcher). Verification rollback root-cause. Evidence file research/t23-verification-rollback.md not yet written.
+- T-24: queued. Blocked on T-23 (now done). Awaiting principal assignment to implementer.
 - T-21: ready, unowned. Blocked on T-20.
-
-## Env warning
-- The dependency_check main working tree (branch fix/t19-plan-pr-gate) has uncommitted edits to classifier.py, runner.py and 8 skill files. With them, make test gives 3 failures in test_runner_skill_enrichment.py. Always review in a clean `git worktree add --detach /tmp/rev-X <sha>` and run `PYTHONPATH=src python3 -m pytest -m "not integration and not e2e"`. (There is no .venv in that repo; use system python3.)
-- `gh pr view` can return a stale baseRefName. Cross-check with `gh api repos/.../pulls/N` and the BaseRefChangedEvent timeline.
 
 ## Carry-forward for T-20 review
 - Stale DB data: 477 breaking_change rows (sentry, method_removed) have package='sentry', and their ts_exports events already have classified_at set. If T-20 claims success, confirm the tester reset or re-classified them; otherwise the package filter still excludes them.
 - Verification rollback gap: T-19 dry-run shows startTransaction/getCurrentHub reach fix-generation but verification reverts both (no_kept_edits). This is an LLM fix-quality / verification issue, not a routing issue. Should be tracked as a new task before T-20 E2E can fully pass.
 
 ## Reviews Completed
+
+### T-23: Root-cause verification rollback — ACCEPTED
+- Report: research/t23-verification-rollback.md. Verified npm ci EUSAGE on test repo (fresh clone, stale lockfile). Verified unmodified src/performance.js fails smoke check identically. Confirmed verifier.py:583-596 reverts without baseline, and verifier.py:216-230 has no frozen->non-frozen fallback.
+- Two defects identified: D1 (smoke oracle blames edit for environmental failure), D2 (no install fallback). Both have concrete proposed fixes with file:line.
+- No src/ edits by researcher. Implementation tracked in T-24.
+- Receipt: coordination/review/T-23_receipt.json
 
 ### T-22: Push T-18/T-19 to GitHub as PR — ACCEPTED
 - PR #12 base=main, head bb562a3. CI 38240753020: 8/8 green. Only commit since T-19 acceptance is bb562a3 (ci.yml pull-requests:read, plus a nosec comment).
