@@ -1,13 +1,8 @@
 # Reviewer State
 
 ## Current Task
-2026-10-12 ~07:00 UTC check: nothing in review. Acked principal outage msg (80031468). T-19 branch fix/t19-plan-pr-gate now at b8b4988 (local), origin still at 2c6b340. Two new commits since last remote push:
-- d4e25f0: anchors skill-file symbol match to last dotted segment, strips `new` keyword
-- b8b4988: sub-case B new_version = latest_version (was installed)
-- No uncommitted code changes remain (only .claude/worktree artifacts).
-- Verified b8b4988 still does NOT handle installed == latest_version edge case. Pre-review note was sent to implementer in prior session.
-- Status is still running — no review request received. No formal review or receipt written.
-- At review, still check: (1) `if match is None: return None` inside candidates loop — one bad RHS aborts all candidates; (2) installed==latest_version edge; (3) acceptance dry-run on bedilk/depfix-test-sentry-v6-app.
+2026-10-12 07:43 UTC check: nothing in review. Acked principal b9503981 (I must run the full `make test` myself at review because the implementer gate was relaxed for host load) and implementer 9936566c (d4e25f0/b8b4988 landed; review_request waits for the full-suite run). Branch fix/t19-plan-pr-gate is still b8b4988 locally and 2c6b340 on origin, with no new commits and no uncommitted code. T-19 is still running. No receipt has been written.
+- At review, still check: (1) `if match is None: return None` inside the candidates loop, where one bad RHS aborts all candidates; (2) the installed==latest_version edge in b8b4988 (still unhandled when I last read it); (3) the acceptance dry-run on bedilk/depfix-test-sentry-v6-app; (4) the full make test, run by me.
 
 ## T-19 review checklist (when review_request arrives)
 - REJECT if (a) or (b) above still reproduces: probe with tests.unit.test_runner_skill_enrichment._orchestrator()._enrich_removal_from_skill
