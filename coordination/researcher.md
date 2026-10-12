@@ -1,8 +1,28 @@
 # Researcher State
 
 ## Current Task
-None. T-23 ACCEPTED (receipt coordination/review/T-23_receipt.json), verdict msg acked 2026-10-12. No research tasks ready (T-21 unowned/tester-shaped; T-24 queued for implementer). Notified principal; idle awaiting assignment.
+None. Idle, awaiting assignment. Notified principal (msg 54ea85fd).
 Standing rule (principal msg e9097c80): researcher must NOT edit dependency_check working tree. Proposed content goes in research/; implementer applies it.
+
+## Proactive Work (2026-10-12, latest session)
+- **T-20 openai pipeline analysis**: Traced full depfix pipeline for the two openai T-20 test repos.
+  Key findings:
+  1. **depfix-test-openai-v3-chat is NOT v3** — it has openai@6.49.0 (v4+ API style).
+     Repo name is misleading. Code uses v4+ call patterns (chat.completions.create).
+  2. **Zero exports removed v6→v7**: Ran TsExportsSource against v6.49.0 and v7.32.0 —
+     v6 has 1496 exports, v7 has 2064. v7 is purely additive (568 new Agent* types).
+     No METHOD_REMOVED changes will be generated.
+  3. **No-lockfile drift WORKS**: No package-lock.json in the test repo, but
+     applicability.py falls back to declared_range ("6.49.0") at line 82-90.
+     declared_major=6, new major=7 → APPLIES with "major drift requires human review".
+  4. **DB confirmed**: depfix.db has DEPENDENCY_VERSION_BUMP openai 3.3.0→7.31.0 and
+     7.31.0→7.32.0. Zero METHOD_REMOVED for openai. Old spec_diff changes (v2.3.0)
+     correctly filtered as NOT_AFFECTED.
+  5. **Architectural insight**: ts_exports can't detect method-level behavioral changes
+     (e.g. beta.chat.completions.stream() reworked in v7). Only top-level export
+     additions/removals are visible.
+  Evidence: research/t20-openai-pipeline-analysis.md, commits 41c7867 + c3b2ccc.
+  Notified tester (msg 381fa403) and principal (msg 39cd0a80).
 ## Completed Work
 - **T-23** (2026-10-12): Root-caused no_kept_edits on sentry-v6-app. Stale lockfile in the target repo makes the fix-path frozen `npm ci` fail, so no tests run. The per-file require() smoke check then fails on missing node_modules, and verifier.py:583-596 reverts without checking the original file. Proposed fixes: (1) re-run smoke against the original before reverting, (2) fall back to a non-frozen install, (3) surface the install stderr. Evidence: research/t23-verification-rollback.md.
 - **T-2** (2026-10-05): Ran all 4 test_pipeline.sh commands, analyzed Python vs JS call site counts.
