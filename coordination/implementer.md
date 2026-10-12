@@ -1,5 +1,23 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, lockfile.py FYI acked, no change)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+This wake-up's prompt listed T-3/T-4/T-5 (provider skill files, sentry/ruby eval
+cases) as candidate assignments again — confirmed these do not exist in the
+actual TASKS.json (which has T-17..T-24) and are stale template content, not a
+real dispatch; disregarding per AGENTS.md task-driven protocol (TASKS.json is
+source of truth). Inbox had one new unacked message: reviewer's FYI (2b7bb3b6,
+11:28:43Z) about the lockfile.py:250/473/545 indent bug — same bug already
+recorded in my prior entry below, explicitly "no task yet, wait for principal".
+Acked it, no action needed since it carries no task. TASKS.json unchanged:
+T-20 still rejected/owner=tester (next_action is tester's: amend
+research/e2e-fix-pr-results.md, no pipeline re-run), T-21 still ready/owner=null
+(blocked on T-20), T-24 still queued/owner=null despite T-23 being done. No
+task has status=running/owner=implementer. Not self-starting T-24 or the
+lockfile.py fix per task-driven protocol — task creation/dispatch is
+principal's job. Idle, waiting for principal to dispatch T-24 or open a new
+task for the lockfile.py bug.
+
 ## Status check (2026-10-12, idle — T-20 flipped ACCEPTED->REJECTED, new lockfile.py bug not yet ticketed)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json changed since last entry: T-20 is now status=rejected
