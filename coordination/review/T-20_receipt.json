@@ -1,0 +1,20 @@
+{
+  "task_id": "T-20",
+  "verdict": "REJECTED",
+  "issues": [
+    "BLOCKING (report accuracy): Report states PR #1 is 'correct', but the package.json diff (+20/-20, which the report itself quotes) re-indents the whole file from 2 to 4 spaces. Only the '@sentry/node' line should change. Verify with: gh api repos/bedilk/depfix-test-sentry-v6-app/pulls/1/files --jq '.[]|select(.filename==\"package.json\").patch'. A human reviewer would reject this PR as whitespace churn. The acceptance criterion 'whether the fix is correct' was therefore assessed wrongly.",
+    "ROOT CAUSE (pre-existing production bug, not T-18/T-19): dependency_check src/depfix/codemods/lockfile.py:250, :473, :545 use `indent = 4 if '\\n    \"' in original else 2`. In any 2-space package.json with a nested object (scripts/dependencies), the depth-2 keys sit at 4 spaces, so the check returns 4. Reproduced on the repo's actual package.json: detected indent=4. Dates from 707992b (2026-09-19). This affects every manifest bump PR that depfix opens. Needs a new implementer task: detect indent from the first indented line (or use a targeted line rewrite instead of re-serialising), plus a regression test with a 2-space file that has nested objects.",
+    "MINOR (consistency): The report says the DB prereq 'was already satisfied, no reset needed' (done by a concurrent tester instance). TASKS.json notes say 'TESTER: 477 stale rows deleted, 2 classified_at reset'. The outcome is verified correct either way: the backup .local/backups/depfix.db.pre-t20-20261012T131411 has 477 package='sentry' method_removed rows, the live DB has 0, and events 29/125 were re-classified at 2026-10-12 11:15:42Z. Reconcile the two accounts.",
+    "To repair: amend research/e2e-fix-pr-results.md (summary table + Repo 1 + Acceptance check) to say PR #1 is semantically correct but has a full-file reformat defect, add it to Findings with the lockfile.py file:line, then resubmit. No re-run needed."
+  ],
+  "checked": [
+    "PR #1 via REST: open, draft, base=main, head=depfix/1c7851acaac9, created 11:18:13Z, 2 files (package.json +20/-20, package-lock.json +5179/-4800). Matches report.",
+    "depfix-test-sentry-v6-app has 1 PR total; depfix-test-openai-v3-chat has 0 PRs; seed-openai-v3-to-v4 has only #1, from 2026-09-14 (pre-existing). Matches report.",
+    "DB backup exists (8.5MB, 13:14 CEST). Stale rows removed from the live DB; events re-classified (see above).",
+    "Tester stash stash@{0} ('tester T-20: stale WIP ... fix/t18-multi-major-removals') is still present and recoverable.",
+    "runner.py:1221-1222 raise 'plan artifact is stale' exists as cited (artifact.base_sha != current_ref_sha). The report correctly labels its cause hypothesis as unverified.",
+    "dependency_check is at fix/t19-plan-pr-gate @ bb562a3, as the report states."
+  ],
+  "tests_run": "clean worktree @ bb562a3: PYTHONPATH=src pytest -m 'not integration and not e2e': 937 passed, 0 failed, 2 deselected (T-20 had no code changes)",
+  "timestamp": "2026-10-12T11:28:10Z"
+}
