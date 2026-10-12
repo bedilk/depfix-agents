@@ -626,8 +626,30 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   analysis, verification checklists, and tester commands for all 3 test repos.
 - Notified principal (msg eb678d55) and implementer (msg ba93cee9) about T-19 verification.
 
+## Status check (2026-10-12, session 4)
+- Ran startup protocol. Inbox empty. No assigned tasks.
+- T-19 still running (implementer). Branch fix/t19-plan-pr-gate has 4 commits now (latest 2c6b340).
+- Uncommitted changes: runner.py (+35/-12), repo_exports.py (+7/-1), 2 test files (+34/-1).
+- Verified ALL uncommitted changes are correct improvements over session 3:
+  1. **runner.py `_enrich_removal_from_skill`**: LHS matching now extracts last dotted segment
+     via `lhs_ref.rsplit(".", 1)[-1]` instead of `\b` regex — prevents "Sentry" matching
+     "Sentry.startTransaction" bullet's namespace. Ambiguous multi-match returns None.
+     Strips `new ` keyword from replacement. All 8 enrichment tests pass.
+  2. **repo_exports.py sub-case B**: `new_version=latest_version` instead of `installed`.
+     CRITICAL correctness fix: `affects_version()` checks `resolved < new_version`.
+     With `installed`, `10.75.3 < 10.75.3` = False → change never applies.
+     With `latest`, `10.75.3 < 11.6.0` = True → change correctly applies.
+     Also confirmed `in_upgrade_window` works: `migration (11.6.0) <= current (10.75.3)` is False
+     → `not False` = True → change is in window. All 24 repo_exports tests pass.
+  3. **3 new enrichment tests**: namespace-prefix no-match, ambiguous multi-bullet no-match,
+     `new` keyword stripping. All pass.
+- Full test suite hangs (likely a network-calling test) — T-19-specific tests (45 total) all pass in 0.58s.
+- All three METHOD_REMOVED gates (runner.py:991, upgrade.py:140, fix_service.py:201) are consistent:
+  enrichment populates `new_api` → gates pass through.
+- These changes still UNCOMMITTED. Implementer needs to commit + push + set status=review.
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 in progress (implementer): reviewer feedback addressed but UNCOMMITTED. Needs commit + push + status=review.
+- T-19 in progress (implementer): latest uncommitted diffs verified correct, needs commit + push + status=review.
 - T-20 prep research done (research/t20-e2e-prep.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
