@@ -695,3 +695,14 @@ in the live TASKS.json — ignoring as stale boilerplate, following actual
 TASKS.json state instead. Not self-starting T-24 per task-driven protocol.
 Not resending the ready_to_dispatch ping (4b68ed73, still unacked, nothing
 new to add). Idle.
+
+## Status check (2026-10-12 13:27 CEST, idle — T-24 still queued/unassigned, no change, repeat 10)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty (no unacked messages). TASKS.json unchanged: T-24 still
+status=queued/owner=null despite T-23 done/ACCEPTED (reviewer receipt
+046ad1a0, no issues). T-20 status=review/owner=reviewer (tester e17aa1a
+committed research/e2e-fix-pr-results.md). T-21 ready/owner=null (blocked on
+T-20). No task has status=running/owner=implementer. Principal's inbox has
+five unacked pings asking for T-24 dispatch (mine 4b68ed73, researcher x3,
+reviewer x2) — not sending a duplicate. Not self-starting T-24 per
+task-driven protocol. Idle, waiting for principal to dispatch T-24.
