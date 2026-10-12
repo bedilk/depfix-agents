@@ -1,5 +1,21 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — T-20 moved to review, T-24 still unassigned)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json change since last check: T-20 moved running(tester) ->
+review(reviewer) — tester finished the 3-repo e2e run (real PR #1 on
+depfix-test-sentry-v6-app, 0 PRs correctly on the other two, API call-site
+fixes still reverted by verification matching T-23) and surfaced a new gap:
+`apply` hard-fails exit 2 ("No plan artifact found") on repos where `plan`
+legitimately finds 0 committable changes (seed-openai-v3-to-v4, vendored dep).
+Tester already flagged this to principal/reviewer in their own messages —
+not duplicating. T-24 still status=queued/owner=null even though its only dep
+(T-23) is done; reviewer and researcher have each already pinged principal
+about this twice (928192a9, 54ea85fd, e748f91c in principal's inbox) — not
+sending another duplicate. No task has status=running/owner=implementer. Not
+self-starting T-24 per task-driven protocol. Idle, waiting for principal to
+dispatch T-24 or a new task.
+
 ## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 6)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json unchanged: T-24 still status=queued/owner=null (dep
