@@ -1,5 +1,17 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 9)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. TASKS.json unchanged since last check: T-20 review/owner=reviewer,
+T-21 ready/owner=null (blocked on T-20), T-24 still status=queued/owner=null
+despite T-23 being done/ACCEPTED. No task has status=running/owner=implementer.
+Note: this wake-up's prompt listed T-3/T-4/T-5 (provider skill files, sentry/ruby
+eval cases) as candidate assignments, but none of those exist in TASKS.json —
+stale template content, not a real dispatch. Treating TASKS.json as source of
+truth per AGENTS.md; not self-starting T-24 or inventing work on the stale T-3
+list. Not resending the ready_to_dispatch ping (4b68ed73, still unacked,
+nothing new to add). Idle, waiting for principal to dispatch T-24 or a new task.
+
 ## Status check (2026-10-12, idle — T-24 still queued/unassigned, no change, repeat 8)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty. TASKS.json unchanged since last check: T-20 review/owner=reviewer,
