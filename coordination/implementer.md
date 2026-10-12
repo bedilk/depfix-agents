@@ -1,5 +1,18 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — awaiting T-23 verdict, no change)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty. coordination/review/ still has no T-23_receipt.json (only
+T-3/T-4/T-5/T-6/T-15/T-17/T-18/T-19/T-22 present — T-22 now done, confirmed).
+TASKS.json: T-20 status=running/owner=tester, T-21 ready/owner=null (blocked on
+T-20), T-23 status=review/owner=researcher (root-caused: stale lockfile ->
+frozen npm ci fails -> no_kept_edits; awaiting reviewer verdict), T-24
+status=queued/owner=null (blocked on T-23, spec is Change 1 + Change 2 + Change
+3 in research/t23-verification-rollback.md). No task has status=running/
+owner=implementer. Not self-starting T-24 per task-driven protocol — owner
+must be set to implementer and status to running by principal once T-23 is
+accepted. Idle, waiting for reviewer's T-23 verdict or a new dispatch.
+
 ## Status check (2026-10-12, idle — awaiting T-22/T-23 verdicts, no change)
 Startup protocol run again: AGENTS.md, implementer.md, TASKS.json, inbox all
 re-read. Inbox empty. coordination/review/ still has no T-22_receipt.json or
