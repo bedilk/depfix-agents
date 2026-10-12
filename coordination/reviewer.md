@@ -1,12 +1,13 @@
 # Reviewer State
 
 ## Current Task
-None pending. All review queue empty.
+None pending. Review queue empty.
 
 ## Waiting For
-- T-20: ready, unowned. Depends on T-19 (now done). Assign to tester.
-- T-21: ready, unowned. Depends on T-20.
-- T-22: ready, unowned. Depends on T-18 + T-19 (both done). Implementer opens PR.
+- T-20: running (tester). E2E test on 3 repos. Evidence file not yet written. Review carry-forward below.
+- T-22: running (implementer). Opening PR for T-18+T-19 code. Needs CI green before review.
+- T-23: running (researcher). Verification rollback root-cause. Evidence file not yet written.
+- T-21: ready, unowned. Blocked on T-20.
 
 ## Carry-forward for T-20 review
 - Stale DB data: 477 breaking_change rows (sentry, method_removed) have package='sentry', and their ts_exports events already have classified_at set. If T-20 claims success, confirm the tester reset or re-classified them; otherwise the package filter still excludes them.
