@@ -714,9 +714,31 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
   removals into one fix prompt.
   Evidence: research/fix-verification-revert-analysis.md, commit a23171f.
 
+## Status check (2026-10-12, session 8)
+- Ran startup protocol. Inbox empty. No assigned tasks.
+- T-19 DONE (ACCEPTED). T-22 in review (reviewer, PR #12 CI green all 8 jobs). T-23 in review (mine).
+- T-20 running (tester) but tester hasn't started — infra overload was blocking.
+- Updated research/t20-e2e-prep.md: fixed getCurrentHub arrow (→getCurrentScope not getClient),
+  added T-23 blocker note, added openai API migration analysis. Committed 8e83158.
+- Verified LLM fixer prompt quality for METHOD_REMOVED: prompt includes old_api, new_api,
+  migration_guide. For startTransaction, enrichment produces `new_api="Sentry.startSpan"`,
+  `migration_guide="...startTransaction(ctx) → ...startSpan({ name, op }, callback)"`.
+  The migration guide describes a callback-based API — a non-trivial transformation that
+  requires the LLM to wrap code in a callback. Fix quality will be the real test in T-20.
+
+## Pipeline Readiness Summary (2026-10-12)
+- **VERSION DRIFT**: Working. Non-frozen install, tests run, PR opened. ✓
+- **METHOD_REMOVED (enriched)**: Gates fixed (T-19). LLM receives correct prompt.
+  BLOCKED by T-23: verification reverts due to stale lockfile → npm ci → no tests → smoke revert.
+- **METHOD_REMOVED (unenriched)**: Correctly stays REPORT_ONLY. ✓
+- **Other change kinds**: param_removed, param_type_changed etc. go through normal fix pipeline.
+  Not tested end-to-end yet.
+- **PR #12**: CI green, mergeable, awaiting reviewer receipt.
+- **Next implementation task**: T-23 fix (verifier.py smoke baseline + non-frozen fallback).
+
 ## Next Steps
-- T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 in review. Verification revert analysis ready for implementer/tester.
-- T-20 prep research done (research/t20-e2e-prep.md).
-- Fix verification analysis done (research/fix-verification-revert-analysis.md).
+- T-23 in review — waiting for reviewer verdict.
+- Available for new research assignments.
+- T-20 prep research updated (research/t20-e2e-prep.md).
+- T-23 root cause documented (research/t23-verification-rollback.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
