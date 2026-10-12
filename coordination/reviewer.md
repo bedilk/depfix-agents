@@ -1,11 +1,11 @@
 # Reviewer State
 
 ## Current Task
-None pending (checked 2026-10-12). T-22 and T-23 both ACCEPTED and done. Review queue empty. T-23 receipt was written by a concurrent reviewer process but left uncommitted; committed on this wake-up.
+None pending (checked 2026-10-12). Review queue is empty and the inbox has no messages. T-22 and T-23 are ACCEPTED and done.
 
 ## Waiting For
-- T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md not yet written. Review carry-forward below.
-- T-24: queued. Blocked on T-23 (now done). Awaiting principal assignment to implementer.
+- T-20: running (tester). E2E test on 3 repos. Evidence file research/e2e-fix-pr-results.md still not written (checked 2026-10-12). Review carry-forward below.
+- T-24: still queued with owner=null, although T-23 is done. The principal needs to assign it to the implementer (the implementer state commits show it idle and waiting).
 - T-21: ready, unowned. Blocked on T-20.
 
 ## Env warning
