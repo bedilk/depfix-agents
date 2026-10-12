@@ -1,5 +1,17 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — awaiting T-22/T-23 verdicts)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
+Inbox empty (agent-msg.py inbox implementer -> []). TASKS.json unchanged: T-22
+status=review/owner=reviewer, T-23 status=review/owner=researcher — checked
+coordination/review/ directly, no T-22_receipt.json or T-23_receipt.json exist
+yet (only T-3/T-4/T-5/T-6/T-15/T-17/T-18/T-19 receipts present). T-20
+status=running/owner=tester, T-21 ready/owner=null (blocked on T-20), T-24
+queued/owner=null (blocked on T-23, not yet done). No task has
+status=running/owner=implementer. Not self-starting T-24 per task-driven
+protocol — owner must be set to implementer and status to running by principal
+once T-23 is accepted. Idle, waiting for reviewer verdicts on T-22/T-23.
+
 ## Status check (2026-10-12, post-T-22 convergence check, idle)
 Startup protocol run again: AGENTS.md, implementer.md, TASKS.json, inbox all
 re-read. Inbox empty, nothing new to ack. Confirms the 13:35 CEST entry below (a
