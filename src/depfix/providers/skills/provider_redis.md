@@ -56,6 +56,7 @@ node-redis v3 → v4 is a major breaking change:
 ### redis-py (Python)
 ```python
 import redis
+
 r = redis.Redis(host, port, db, password)
 r.get(key)
 r.set(key, value, ex=ttl)

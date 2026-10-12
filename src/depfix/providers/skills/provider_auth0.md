@@ -23,8 +23,8 @@ import { Auth0Client } from '@auth0/auth0-spa-js'
 
 ### Python
 ```python
-from auth0.management import Auth0   # v4 pattern
-from auth0 import Auth0              # v5+ pattern
+from auth0.management import Auth0  # v4 pattern
+from auth0 import Auth0  # v5+ pattern
 import auth0
 ```
 

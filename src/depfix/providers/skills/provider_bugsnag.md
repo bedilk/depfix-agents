@@ -26,7 +26,8 @@ import Bugsnag from '@bugsnag/browser'
 ### Python
 ```python
 import bugsnag
-bugsnag.configure(api_key='...')
+
+bugsnag.configure(api_key="...")
 bugsnag.notify(exception)
 ```
 

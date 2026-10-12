@@ -31,7 +31,8 @@ amplitude.init(API_KEY)
 ### Python
 ```python
 from amplitude import Amplitude, BaseEvent, Identify
-client = Amplitude('API_KEY')
+
+client = Amplitude("API_KEY")
 ```
 
 ## Call sites (report these)

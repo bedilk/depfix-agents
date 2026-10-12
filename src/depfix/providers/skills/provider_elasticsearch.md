@@ -24,7 +24,7 @@ const client = new Client({ cloud: { id: cloudId }, auth: { apiKey } });
 from elasticsearch import Elasticsearch, AsyncElasticsearch
 from elasticsearch import helpers
 
-client = Elasticsearch('http://localhost:9200')
+client = Elasticsearch("http://localhost:9200")
 client = Elasticsearch(cloud_id=cloud_id, api_key=api_key)
 ```
 

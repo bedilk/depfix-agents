@@ -23,9 +23,9 @@ const client = new PostHog(process.env.POSTHOG_API_KEY);
 ### Python
 ```python
 from posthog import Posthog
-import posthog   # functional API
+import posthog  # functional API
 
-client = Posthog(project_api_key=key, host='https://us.posthog.com')
+client = Posthog(project_api_key=key, host="https://us.posthog.com")
 ```
 
 ## Call sites to look for

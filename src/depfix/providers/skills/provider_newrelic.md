@@ -18,7 +18,8 @@ import newrelic from 'newrelic'
 ### Python
 ```python
 import newrelic.agent
-newrelic.agent.initialize('newrelic.ini')
+
+newrelic.agent.initialize("newrelic.ini")
 newrelic.agent.register_application()
 ```
 

@@ -20,7 +20,7 @@ const channel = await conn.createChannel();
 import pika
 from pika import BlockingConnection, ConnectionParameters
 
-connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+connection = pika.BlockingConnection(pika.ConnectionParameters("localhost"))
 channel = connection.channel()
 ```
 

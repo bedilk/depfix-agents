@@ -801,10 +801,13 @@ class Orchestrator:
 
             from depfix.registry.client import NpmRegistryClient
 
-            with httpx.Client(timeout=self._settings.http_timeout) as http, NpmRegistryClient(
-                base_url=self._settings.npm_registry_url,
-                http_client=http,
-            ) as npm:
+            with (
+                httpx.Client(timeout=self._settings.http_timeout) as http,
+                NpmRegistryClient(
+                    base_url=self._settings.npm_registry_url,
+                    http_client=http,
+                ) as npm,
+            ):
                 for change in changes:
                     provider_id = change.provider_id
                     if provider_id in seen_provider_ids:

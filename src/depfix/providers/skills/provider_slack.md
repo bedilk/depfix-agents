@@ -30,7 +30,7 @@ const app = new App({ token, signingSecret });
 
 ### Python
 ```python
-from slack_sdk import WebClient            # module: slack_sdk (package: slack-sdk)
+from slack_sdk import WebClient  # module: slack_sdk (package: slack-sdk)
 from slack_sdk.web import WebClient
 from slack_bolt import App
 

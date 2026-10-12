@@ -76,7 +76,7 @@ def _call_site_uses_export(symbol: str, provider_id: str, export_name: str) -> b
     prefix = f"{provider_id}."
     if not symbol.startswith(prefix):
         return False
-    after_provider = symbol[len(prefix):]
+    after_provider = symbol[len(prefix) :]
     return after_provider == export_name or after_provider.startswith(f"{export_name}.")
 
 
@@ -89,7 +89,7 @@ def _export_name_from_symbol(symbol: str, provider_id: str) -> str | None:
     prefix = f"{provider_id}."
     if not symbol.startswith(prefix):
         return None
-    after = symbol[len(prefix):]
+    after = symbol[len(prefix) :]
     return after.split(".")[0]
 
 

@@ -26,7 +26,8 @@ mixpanel.init('TOKEN', { ... })
 ```python
 import mixpanel
 from mixpanel import Mixpanel
-mp = Mixpanel('TOKEN')
+
+mp = Mixpanel("TOKEN")
 ```
 
 ### Ruby
