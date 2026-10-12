@@ -26,7 +26,7 @@
       ],
       "state_file": "coordination/researcher.md",
       "inbox": "coordination/inbox/researcher.jsonl",
-      "status": "running",
+      "status": "review_submitted",
       "current_task": "T-23",
       "last_active": "2026-10-12T11:02:00Z"
     },
@@ -41,7 +41,7 @@
       ],
       "state_file": "coordination/implementer.md",
       "inbox": "coordination/inbox/implementer.jsonl",
-      "status": "running",
+      "status": "review_submitted",
       "current_task": "T-22",
       "last_active": "2026-10-12T11:02:00Z"
     },
@@ -56,8 +56,8 @@
       ],
       "state_file": "coordination/reviewer.md",
       "inbox": "coordination/inbox/reviewer.jsonl",
-      "status": "idle",
-      "current_task": null,
+      "status": "reviewing",
+      "current_task": "T-22,T-23",
       "last_active": "2026-10-11T22:11:11.998179+00:00"
     },
     {
