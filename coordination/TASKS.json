@@ -51,17 +51,18 @@
     {
       "id": "T-20",
       "title": "End-to-end test: full pipeline produces fix PRs on test repos",
-      "status": "running",
-      "owner": "tester",
+      "status": "review",
+      "owner": "reviewer",
       "depends_on": [
         "T-19"
       ],
       "acceptance": "Tester runs `depfix init && depfix scan && depfix plan && depfix apply` on: (1) bedilk/depfix-test-sentry-v6-app \u2014 version drift + API drift, (2) bedilk/depfix-test-openai-v3-chat \u2014 version drift, (3) bedilk/seed-openai-v3-to-v4. For each: document whether a PR was opened on GitHub, what the PR contains, whether the fix is correct. Write results to research/e2e-fix-pr-results.md.",
       "evidence_paths": [
-        "research/e2e-fix-pr-results.md"
+        "research/e2e-fix-pr-results.md",
+        "https://github.com/bedilk/depfix-test-sentry-v6-app/pull/1"
       ],
-      "next_action": "Back up depfix.db; reset classified_at on the 2 ts_exports:@sentry/node source events and clear stale sentry/method_removed rows; checkout fix/t19-plan-pr-gate in dependency_check; run --dry-run first on all 3 repos, then real apply with PR; write research/e2e-fix-pr-results.md",
-      "notes": "Use --dry-run first, then real apply with PR. The GitHub App is installed on these repos (credentials in dependency_check/.env). PREREQ (from T-18 receipt): live depfix.db has 477 stale sentry/method_removed breaking_change rows with package=sentry whose ts_exports source events have classified_at set, so they will not re-classify. Back up depfix.db, then reset classified_at on the 2 ts_exports:@sentry/node source events (and clear the stale rows) before running the pipeline, else build_upgrade_plan filters them on package mismatch. Merge order: PR #10 then PR #11. | 13:02 CEST principal: assigned to tester after T-19 ACCEPTED. Use branch fix/t19-plan-pr-gate (contains T-18+T-19). Known gap: startTransaction/getCurrentHub fixes reverted by verification (no_kept_edits) in implementer dry-run - report exactly what happens, do not work around it (T-23 researcher owns root cause)."
+      "next_action": "Reviewer: verify research/e2e-fix-pr-results.md against the 3 repos' actual GitHub/DB state (PR #1 on depfix-test-sentry-v6-app, 0 PRs on the other two) and write coordination/review/T-20_receipt.json.",
+      "notes": "Use --dry-run first, then real apply with PR. The GitHub App is installed on these repos (credentials in dependency_check/.env). PREREQ (from T-18 receipt): live depfix.db has 477 stale sentry/method_removed breaking_change rows with package=sentry whose ts_exports source events have classified_at set, so they will not re-classify. Back up depfix.db, then reset classified_at on the 2 ts_exports:@sentry/node source events (and clear the stale rows) before running the pipeline, else build_upgrade_plan filters them on package mismatch. Merge order: PR #10 then PR #11. | 13:02 CEST principal: assigned to tester after T-19 ACCEPTED. Use branch fix/t19-plan-pr-gate (contains T-18+T-19). Known gap: startTransaction/getCurrentHub fixes reverted by verification (no_kept_edits) in implementer dry-run - report exactly what happens, do not work around it (T-23 researcher owns root cause). | TESTER 13:21 CEST: DONE. Prereqs done (DB backed up to .local/backups/, 477 stale rows deleted, 2 classified_at reset; stashed unrelated uncommitted WIP found on fix/t18-multi-major-removals before checkout rather than discarding it). Repo 1 (sentry): scan 31 call sites, plan+apply confirmed, REAL PR opened https://github.com/bedilk/depfix-test-sentry-v6-app/pull/1 (version bump 10.75.3->11.6.0, draft, correct). API call-site fixes (startTransaction/getCurrentHub) generated correctly but reverted by verification -- confirms T-23 finding independently. Repo 2 (openai-v3-chat): 8 call sites, major-gap review, 0 PRs -- correct by design. Repo 3 (seed-openai-v3-to-v4): 1 call site, vendored dep version-unresolved, plan reports 0 PRs cleanly but apply hard-fails exit 2 'No plan artifact found' -- NEW gap, flagged for implementer, not fixed (out of tester scope). Also hit a concurrent-process log-file clobber on repo 3's first scan attempt (another process writing to the same relative log path in the shared checkout) -- re-ran with a unique debug log to get trustworthy output, noted as a recurrence of the known concurrency hazard. Full detail in research/e2e-fix-pr-results.md. Set status=review per AGENTS.md review gate."
     },
     {
       "id": "T-21",
@@ -126,6 +127,6 @@
       "notes": "Created by principal 13:14 CEST 2026-10-12 from T-23 findings (gap from T-19 receipt acceptance_gap). Blocks T-20 producing API-drift fix PRs; T-20 proceeds in parallel and reports the revert as-is."
     }
   ],
-  "last_updated": "2026-10-12T13:14:00Z",
-  "updated_by": "implementer"
+  "last_updated": "2026-10-12T13:21:00Z",
+  "updated_by": "tester"
 }

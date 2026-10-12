@@ -2,6 +2,54 @@
 
 ## Current Task
 
+2026-10-12T13:21 CEST: **T-20 DONE, set status=review.** Load had dropped to
+15.89/11.54/36.17 (from >400 earlier) — infra overload cleared, proceeded. Acked the
+T-20 assignment + stall ping (both still unacked from the overload period).
+
+Prereqs: backed up `depfix.db` to `.local/backups/depfix.db.pre-t20-20261012T131411`;
+deleted 477 stale `package='sentry', kind='method_removed'` rows; reset `classified_at`
+on the 2 `ts_exports:@sentry/node` change_event rows (ids 29, 125) — exactly the T-18
+receipt prereq. Checking out `fix/t19-plan-pr-gate` (origin `bb562a3`) hit uncommitted
+WIP on the prior branch (`fix/t18-multi-major-removals`: classifier.py, runner.py, 10
+provider skill files, repo_exports.py, test_repo_aware_exports.py) blocking the
+checkout — not mine to discard, `git stash push` with a descriptive message instead,
+recoverable.
+
+Ran `init`→`scan`→`plan`→`apply --dry-run`→`apply` on all 3 T-20 repos:
+- **depfix-test-sentry-v6-app (sentry):** 31 call sites. **Real PR opened:**
+  https://github.com/bedilk/depfix-test-sentry-v6-app/pull/1 (version bump
+  10.75.3→11.6.0, draft, correct). API fixes for startTransaction/getCurrentHub
+  generated correctly but reverted by verification (`no_kept_edits`) — independently
+  confirms T-23's root cause (stale lockfile → frozen `npm ci` fails → verifier
+  reverts unconditionally).
+- **depfix-test-openai-v3-chat (openai):** 8 call sites, major-gap review (6.49.0→
+  7.32.0), 0 PRs — correct by design, no auto-fix for major gaps.
+- **seed-openai-v3-to-v4 (openai):** 1 call site, vendored dep → version unresolved.
+  `plan` cleanly reports 0 PRs, but `apply` (both --dry-run and real) hard-fails
+  **exit 2** `No plan artifact found` instead of also reporting "0 PRs, nothing to
+  do" — because `plan` only writes a PlanArtifact when there's a committable
+  edit/upgrade, so `apply`'s artifact-discovery (cli.py:2037-2050) finds nothing and
+  errors instead of degrading gracefully. **New gap**, flagged for implementer in the
+  report, not fixed (out of tester scope).
+
+Also hit a live instance of the long-documented concurrent-process hazard: repo 3's
+first scan log (`.local/t20/scan-seed-openai.log`) got silently overwritten between
+my `wc -l` check (3 lines, exit 1) and a later `cat` (full 100+-line successful run)
+— some other process is running the identical scan command against the same shared
+checkout and writing to the same relative path. Re-ran with a unique `--log-level
+DEBUG` + unique filename to get trustworthy output for the report; did not chase
+further (not a depfix bug, same class of issue already flagged at 07:41/10:08 CEST).
+
+Full detail in `research/e2e-fix-pr-results.md`. Set TASKS.json T-20 status=review,
+owner=reviewer per AGENTS.md's review gate (not marking done unilaterally — T-1's
+"no review needed" carve-out was specific to that task's prompt, T-20 has no such
+exception). Committing this + TASKS.json + the research file next, then messaging
+principal.
+
+---
+
+## Previous Current Task
+
 2026-10-12T12:42 CEST: **Smoke test (started 07:41) confirmed complete — 4/6 PASS.** Committed
 result (`e235986`) and cleaned up the two stray header-only stubs from the 05:39 contention
 window (`smoke-20261012-053919.md`, `smoke-20261012-053930.md` — deleted, they were untracked
