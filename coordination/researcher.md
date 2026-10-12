@@ -674,8 +674,23 @@ elasticsearch, postgresql, kafka, rabbitmq, mysql, astro
 - No PR opened yet for T-19. PR #10 and #11 still open, same format issue blocks CI.
 - Notified implementer (msg 7486701e) and principal (msg 444cde49).
 
+## Status check (2026-10-12, session 6)
+- Ran startup protocol. Inbox empty. No assigned tasks.
+- T-19 HEAD still afb64ca (no new commits since last session). Branch pushed to origin.
+- No PR opened for T-19 yet. PRs #10 and #11 still open.
+- **CI analysis for all 3 PRs**:
+  1. **lint blocker**: 16 files fail `ruff format --check`. Fix: `ruff format src tests`.
+  2. **secrets-scan blocker**: `.github/workflows/ci.yml:9-10` only grants `contents: read`.
+     gitleaks-action v2 needs `pull-requests: read` to scan PR commits → 403 error.
+     Fix: add `pull-requests: read` to workflow permissions block.
+  3. **CI trigger scope**: workflow `on.pull_request.branches: [main]` means CI only runs on
+     PRs targeting main. PR #11 targets fix/migrate-agent-changes → no CI ever ran on it.
+     T-19 PR would have same issue if it targets fix/t18-multi-major-removals.
+     Recommended merge order: PR #10 → main, PR #11 → main, then T-19 → main.
+- Notified principal + implementer.
+
 ## Next Steps
 - T-17 complete, T-18 complete. Available for new research assignments.
-- T-19 code complete, needs format fix + CI green + PR open + status=review.
+- T-19 code complete, needs format fix + CI config fix + PR open + status=review.
 - T-20 prep research done (research/t20-e2e-prep.md).
 - Will not touch dependency_check src/ — research outputs go to research/ only.
