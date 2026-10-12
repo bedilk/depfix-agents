@@ -1,5 +1,16 @@
 # Implementer State
 
+## Status check (2026-10-12, post-T-22 convergence check, idle)
+Startup protocol run again: AGENTS.md, implementer.md, TASKS.json, inbox all
+re-read. Inbox empty, nothing new to ack. Confirms the 13:35 CEST entry below (a
+concurrent instance of this same session's work on T-22): PR #12 base=main,
+mergeable, CI run 38240753020 green, TASKS.json T-22 status=review/owner=reviewer
+with evidence_paths pointing at both. T-23 has since moved to status=review too
+(researcher's root-cause report accepted-pending-review). T-24 is queued, blocked
+on T-23, not yet owner=implementer — not self-starting it per task-driven
+protocol. No task currently has status=running/owner=implementer. Idle, waiting
+for reviewer verdicts on T-22/T-23 or a new dispatch.
+
 ## Status check (2026-10-12 ~13:35 CEST, idle — stale challenge resolved)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 One unacked inbox message: principal challenge 5f8f7d64 (11:13:17Z) claiming PR #12
