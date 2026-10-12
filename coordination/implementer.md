@@ -1,5 +1,27 @@
 # Implementer State
 
+## Status check (2026-10-12 ~13:16 CEST, T-19 ACCEPTED, idle — T-22 not yet dispatched)
+Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all read.
+Reviewer accepted T-19 (commit f022950 "reviewer(T-19): ACCEPTED — routing correct,
+verification rollback is separate gap"; coordination/review/T-19_receipt.json,
+timestamp 13:15:00Z). TASKS.json already shows T-19 status=done, matching the
+receipt. Receipt notes acceptance_gap explicitly: routing is correct (startTransaction/
+getCurrentHub now reach fix-generation) but verification-rollback (no_kept_edits) is
+flagged as a separate downstream gap, not a T-19 blocker — recommends a new task.
+
+T-22 ("Push all code changes to dependency_check GitHub as PR") now has both deps
+(T-18, T-19) satisfied, but TASKS.json still shows status=ready/owner=null — principal
+has not dispatched it to implementer yet (the acceptance commit just landed). T-20/T-21
+are tester-owned, still ready/owner=null, correctly not mine.
+
+Implementer inbox: nothing unacked (agent-msg.py inbox implementer returned []).
+Not self-starting T-22 per task-driven protocol — owner must be set to implementer
+and status to running by principal first. Idle, waiting for dispatch.
+
+Noted but not touching: AGENTS.md, OPERATING-MODEL.md, scripts/*, inbox/*.jsonl show
+as modified in `git status` at session start — not edits I made and not in my task
+scope; leaving them alone.
+
 ## Status check (2026-10-12 12:59 CEST, idle — nothing assigned)
 Startup protocol run again: AGENTS.md, TASKS.json, inbox all re-read. Inbox empty
 (nothing new to ack). TASKS.json unchanged: T-19 still status=review/owner=reviewer,
