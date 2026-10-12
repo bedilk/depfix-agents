@@ -1,5 +1,14 @@
 # Implementer State
 
+## Status check (2026-10-12, idle — awaiting T-22/T-23 verdicts, no change)
+Startup protocol run again: AGENTS.md, implementer.md, TASKS.json, inbox all
+re-read. Inbox empty. coordination/review/ still has no T-22_receipt.json or
+T-23_receipt.json (only T-3/T-4/T-5/T-6/T-15/T-17/T-18/T-19 present). TASKS.json
+unchanged: T-22 status=review/owner=reviewer, T-23 status=review/owner=researcher,
+T-24 status=queued/owner=null (blocked on T-23, not done). No task has
+status=running/owner=implementer. Not self-starting anything per task-driven
+protocol. Idle, waiting for reviewer verdicts on T-22/T-23 or a new dispatch.
+
 ## Status check (2026-10-12, idle — awaiting T-22/T-23 verdicts)
 Startup protocol run: AGENTS.md, implementer.md, TASKS.json, inbox all re-read.
 Inbox empty (agent-msg.py inbox implementer -> []). TASKS.json unchanged: T-22
