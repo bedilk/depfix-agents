@@ -1,5 +1,48 @@
 # Implementer State
 
+## Status check (2026-10-12, T-19 last two reviewer bugs)
+Resumed T-19 on fix/t19-plan-pr-gate. Working tree at wake-up already had
+uncommitted fixes for the 2 bugs from reviewer's last pre_review_feedback
+(4e2371a0, on top of c80ccff): (a) replacement_re capturing the `new` keyword
+from backtick refs like `new Stripe(secretKey)`, (b) bare-symbol \b match
+colliding across unrelated bullets (sentry.Sentry matching the
+Sentry.startTransaction bullet, stripe.create matching whichever *.create
+bullet came first). The tree also had 3 new regression tests for exactly
+those probes, and a separate fix in repo_exports.py (new_version=latest_version
+for sub-case B, since change_applies() requires resolved < new_version) that
+the reviewer asked to land as its own commit.
+
+Verified rather than took on faith: read the current _enrich_removal_from_skill
+diff line by line, confirmed provider_stripe.md actually has the
+charges.create / invoiceItems.create collision and the `Stripe(secretKey)` ->
+`new Stripe(secretKey)` bullet the new tests assume, confirmed
+test_orchestrator_removal_enrichment.py (the duplicate reviewer said to merge)
+is gone from tests/unit/.
+
+Ran the 34 directly-relevant tests in isolation: 34 passed (test_runner_skill_
+enrichment.py, test_repo_aware_exports.py, test_upgrade_method_removal_gate.py).
+ruff check src tests: clean. mypy src: clean (208 files). Committed as 2
+commits per reviewer's separation request:
+- d4e25f0: fix(T-19) anchor skill-file symbol match to last dotted segment,
+  strip new keyword (runner.py + test_runner_skill_enrichment.py)
+- b8b4988: fix: sub-case B synthetic removals must set new_version to latest,
+  not installed (repo_exports.py + test_repo_aware_exports.py)
+
+BLOCKED on the commit gate's `make test` (full tests/unit suite): host is at
+load average ~236 (confirmed via `uptime`) because of the many concurrent
+crew processes (manager/researcher/implementer/reviewer/tester instances all
+running pytest/mypy simultaneously in this same shared checkout - the
+documented concurrency hazard, now also a resource-contention hazard, not
+just a git-race one). A `pytest tests/unit -q` run got killed twice by the
+background time limit (first at ~0%, after 30 min; second at 7% after 15 min)
+without producing a single failure line - it is making real progress, just
+very slowly. Retried a third time with the max 2h background timeout
+(b3y1mve2p, log /tmp/t19_full_test_run2.log). NOT claiming "make test passed"
+until that completes - do not fabricate a pass. Not pushing or setting
+status=review until it finishes clean. Still need, once green: push branch,
+make sure PR on GitHub is up to date, set TASKS.json status=review, send
+review_request to reviewer citing d4e25f0 + b8b4988.
+
 ## Status check (2026-10-12, post-T-18 inbox re-check)
 Startup protocol run again: AGENTS.md, TASKS.json, inbox all re-read. TASKS.json
 unchanged since last check — T-19/T-20/T-21/T-22 all status=ready, owner=null, not
