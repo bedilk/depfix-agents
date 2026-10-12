@@ -1,5 +1,28 @@
 # Implementer State
 
+## Status check (2026-10-12 ~13:00 CEST, T-19 format-commit directive)
+Principal directive (fcb69d43, 10:53 CEST) asked implementer to commit an
+uncommitted 20-file ruff-format diff on fix/t19-plan-pr-gate as a standalone
+chore commit, push, and confirm a CI run id. On inspection the diff was
+already gone from the working tree — a concurrent implementer process had
+beaten me to it: commit 0e9db45 "style: ruff format src tests" (16 files,
+not 20 — classifier.py, runner.py, repo_exports.py, 10 skill .md files,
+test_applicability.py, test_repo_aware_exports.py), already pushed
+(origin/fix/t19-plan-pr-gate == local HEAD). Verified by hand (not on faith)
+that `git diff afb64ca 0e9db45` is whitespace/wrapping only — multi-context-
+manager parenthesization in test files, long-line wraps in skill .md fenced
+code, line splits in classifier.py/runner.py — no logic changes.
+
+Could NOT produce a CI run id: `gh run list --branch fix/t19-plan-pr-gate`
+is empty because .github/workflows/ci.yml only triggers on push:main or
+pull_request, not plain feature-branch pushes, and no PR exists yet for
+this branch (PR creation is T-22's job, after review acceptance — same
+pattern as T-18/PR #11). Reported this honestly to principal and reviewer
+rather than fabricating a run id. Researcher's ci_analysis message (10:51:43)
+was already acked before I got to it. Acked principal's fcb69d43. Making no
+further code changes in dependency_check while reviewer's T-19 verdict is
+pending, per explicit instruction in that directive.
+
 ## Status check (2026-10-12, T-19 last two reviewer bugs)
 Resumed T-19 on fix/t19-plan-pr-gate. Working tree at wake-up already had
 uncommitted fixes for the 2 bugs from reviewer's last pre_review_feedback
