@@ -8,8 +8,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "depfix-ai"
-version = "0.2.0"
-description = "AI-powered automatic fixing of breaking dependency changes."
+version = "0.2.1"
+description = "Dependabot for APIs — detects breaking API/SDK changes, finds affected call-sites, generates verified fixes, and opens a PR."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "LicenseRef-depfix-Source-Available"
@@ -18,17 +18,26 @@ authors = [
     { name = "Bedil Karimov", email = "bedil.karimov@gmail.com" },
     { name = "Tohir Saidzoda" },
 ]
-keywords = ["ai", "llm", "dependencies", "migration", "codemod"]
+keywords = [
+    "ai", "llm", "dependencies", "migration", "codemod",
+    "breaking-changes", "api", "sdk", "dependabot", "automation",
+    "refactoring", "pull-request", "deprecation", "call-site",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
 ]
 
 # Runtime dependencies. Keep in sync with requirements.txt.
@@ -69,6 +78,7 @@ Homepage    = "https://github.com/bedilk/depfix-agents"
 Repository  = "https://github.com/bedilk/depfix-agents"
 Issues      = "https://github.com/bedilk/depfix-agents/issues"
 Changelog   = "https://github.com/bedilk/depfix-agents/releases"
+"Bug Tracker" = "https://github.com/bedilk/depfix-agents/issues"
 
 # ============================================================================
 #  Setuptools: src-layout package discovery
