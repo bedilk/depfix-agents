@@ -7,23 +7,28 @@ build-backend = "setuptools.build_meta"
 # ============================================================================
 
 [project]
-name = "depfix"
+name = "depfix-ai"
 version = "0.2.0"
 description = "AI-powered automatic fixing of breaking dependency changes."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "LicenseRef-depfix-Source-Available"
+license-files = ["LICENSE"]
 authors = [
-    { name = "depfix authors" },
+    { name = "Bedil Karimov", email = "bedil.karimov@gmail.com" },
+    { name = "Tohir Saidzoda" },
 ]
 keywords = ["ai", "llm", "dependencies", "migration", "codemod"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Quality Assurance",
 ]
 
 # Runtime dependencies. Keep in sync with requirements.txt.
@@ -60,8 +65,10 @@ dev = [
 depfix = "depfix.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/bedilk/dependency_check"
-Issues   = "https://github.com/bedilk/dependency_check/issues"
+Homepage    = "https://github.com/bedilk/depfix-agents"
+Repository  = "https://github.com/bedilk/depfix-agents"
+Issues      = "https://github.com/bedilk/depfix-agents/issues"
+Changelog   = "https://github.com/bedilk/depfix-agents/releases"
 
 # ============================================================================
 #  Setuptools: src-layout package discovery
