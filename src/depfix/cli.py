@@ -1253,7 +1253,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         result.severity, result.severity_evidence = severity_from_scan(
             scan_change, result.call_sites
         )
-    if change is None and not args.old_api:
+    if not explicitly_selected_change and not args.old_api:
         # The first feed poll after ``init`` is correctly a baseline, but a
         # repository lockfile supplies the missing old side of a version
         # comparison.  Persist that scan-specific drift before assessing call
