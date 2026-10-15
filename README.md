@@ -2,7 +2,6 @@
 
 **Dependabot for APIs.** When a provider ships a breaking change, depfix scans your codebase, finds every affected call-site, generates verified fixes, and opens a pull request.
 
-[![CI](https://github.com/bedilk/depfix-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/bedilk/depfix-agents/actions)
 [![PyPI version](https://img.shields.io/pypi/v/depfix-ai.svg)](https://pypi.org/project/depfix-ai/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Source%20Available-orange.svg)](LICENSE)
