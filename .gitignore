@@ -19,7 +19,9 @@ changes.txt
 __pycache__/
 *.pyc
 .venv/
-src/depfix.egg-info/
+dist/
+build/
+src/*.egg-info/
 output/
 .depfix-e2e.sqlite3
 .depfix-cache/
