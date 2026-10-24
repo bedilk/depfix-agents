@@ -2,7 +2,7 @@
 
 ## Work Loop
 
-Each agent runs a shell loop. Every round:
+Each agent runs a shell loop. Every wake-up:
 1. Read startup docs (AGENTS.md, your state file, TASKS.json, inbox)
 2. Pick up or continue your assigned task
 3. Do real work (read code, write code, run tests, research)
@@ -25,7 +25,7 @@ Reviewer reads inbox
   → writes coordination/review/<task_id>_receipt.json
   → sets status=done or status=rejected in TASKS.json
   → messages implementer/tester with verdict
-Principal checks progress every 2 rounds
+Principal checks progress periodically
   → pings idle agents with ready tasks
   → escalates stalled tasks
 ```
@@ -90,14 +90,14 @@ All pushes go to `agents` remote only.
 ## Rate Limit Observance
 
 Principal and reviewer share the 25 req/min Opus pool:
-- Principal: run one claude round, then sleep 120s minimum before next round
-- Reviewer: run one review round per task; wait for principal's sleep window
+- Principal: run one wake-up, then sleep 120s minimum before next
+- Reviewer: run one review per task; wait for principal's sleep window
 - If both need to run in the same 2-minute window: reviewer defers to next window
 
-Researcher, implementer, tester: run on Sonnet 4.6. No effective rate limit. 
-Can run multiple concurrent rounds on different tasks (see run-team.sh).
+Researcher, implementer, tester: run on Sonnet 4.6. No effective rate limit.
+Can run concurrently on different tasks (see run-team.sh).
 
-**429 / Overloaded handling:** If any round receives a 429 error, the loop script automatically
+**429 / Overloaded handling:** If a wake-up receives a 429 error, the loop script automatically
 sleeps 30 minutes before retrying. Agents must save state to their *.md file before this sleep
 so no work is lost.
 
@@ -132,9 +132,9 @@ Receipt schema:
 
 ## Stall Detection
 
-Principal checks every 2 rounds for tasks that have been `running` for >15 min with no new commit.
+Principal checks periodically for tasks that have been `running` for >15 min with no new commit.
 If found: principal sends accountability ping to the task owner via inbox.
-If no response after next round: principal reassigns the task.
+If no response within 10 min: principal reassigns the task.
 
 ## Dynamic Task Creation
 
@@ -182,7 +182,7 @@ The smoke test runs as part of this cycle.
 
 The cycle:
 1. The script runs `scripts/smoke-real-repos.sh` (real-repo scan)
-2. Creates `.stop` files for all agents (graceful pause after current round)
+2. Creates `.stop` files for all agents (graceful pause after current task step)
 3. Generates `coordination/HUMAN-REVIEW.md` with: task status, smoke results, recent commits, agent health
 4. Human reviews, edits TASKS.json or AGENTS.md as needed, then runs `bash scripts/human-review.sh --resume`
 5. Resume clears `.stop` files and restarts all agents

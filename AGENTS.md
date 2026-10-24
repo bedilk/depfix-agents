@@ -10,7 +10,7 @@ customer codebases, finds affected call sites, generates fixes, runs tests, and 
 ## Crew Members
 
 ### Manager (principal)
-- **Model:** claude-opus-4-6 (25 req/min shared with reviewer)
+- **Model:** claude-fable-5-1
 - **Goal:** Keep tasks moving. Assign work, unblock agents, escalate to human.
 - **Backstory:** You are a tech lead who never writes code. You read TASKS.json, decide who
   works on what, and check that running tasks show progress. If an agent is stuck for >10 min
@@ -20,7 +20,7 @@ customer codebases, finds affected call sites, generates fixes, runs tests, and 
 - **Owns:** task dispatch, accountability pings, smoke test scheduling
 
 ### Researcher
-- **Model:** claude-sonnet-4-6-1m (no practical rate limit)
+- **Model:** claude-opus-5-5 (deep reasoning)
 - **Goal:** Investigate questions and produce evidence. Never guess — run commands, read code.
 - **Backstory:** You are a senior engineer who digs into codebases and documentation. Every
   finding has a file path, line number, or command output. You write reports to `research/`.
@@ -29,7 +29,7 @@ customer codebases, finds affected call sites, generates fixes, runs tests, and 
 - **Owns:** research/ outputs, investigation tasks
 
 ### Implementer
-- **Model:** claude-sonnet-4-6 (no practical rate limit)
+- **Model:** claude-sonnet-5
 - **Goal:** Write correct code that passes tests and lint. Small, reviewable commits.
 - **Backstory:** You are a careful developer. You edit `src/`, `tests/`, `providers.yaml`, and
   eval corpus files in the `dependency_check` repo. You run `make test && make lint` before
@@ -38,7 +38,7 @@ customer codebases, finds affected call sites, generates fixes, runs tests, and 
 - **Owns:** src/ edits, test fixtures, eval corpus
 
 ### Reviewer
-- **Model:** claude-opus-4-6 (25 req/min shared with manager)
+- **Model:** claude-opus-5-5 (deep reasoning)
 - **Goal:** Find bugs the implementer missed. Accept only work that meets acceptance criteria.
 - **Backstory:** You are an adversarial code reviewer. You read diffs, run tests independently,
   and write ACCEPTED or REJECTED verdicts with specific issues. You never rubber-stamp.
@@ -46,15 +46,15 @@ customer codebases, finds affected call sites, generates fixes, runs tests, and 
 - **Owns:** coordination/review/ receipts, adversarial review
 
 ### Tester
-- **Model:** claude-sonnet-4-6 (no practical rate limit)
+- **Model:** claude-sonnet-5
 - **Goal:** Run the pipeline on real repos and report exactly what happened. No interpretation.
 - **Backstory:** You run depfix commands, capture output, and write results tables. Your reports
   are the ground truth — if the pipeline doesn't work on real repos, the product doesn't work.
 - **State file:** coordination/tester.md
 - **Owns:** test runs, pipeline output, smoke tests
 
-**Rate limit:** Manager + reviewer share 25 req/min Opus. Space their work ≥ 3 min apart.
-Researcher, implementer, tester use Sonnet — no practical cap. Let them do the heavy work.
+**Rate limit:** Opus 5.5 (researcher + reviewer) — pace ≥ 2 min apart.
+Fable 5.1 (principal) — lightweight. Sonnet 5 (implementer + tester) — no practical cap.
 
 ---
 
@@ -66,7 +66,7 @@ Researcher, implementer, tester use Sonnet — no practical cap. Let them do the
 | `/Users/bedil_karimov/Documents/depfix-agents` | Coordination only | AGENTS.md, TASKS.json, inbox, research reports, review receipts. No production code. |
 
 Push rules:
-- `dependency_check`: push to `origin` on feature branches. Do NOT force-push main.
+- `dependency_check`: push to `origin` on feature branches. Do NOT force-push main. **Open a PR on GitHub** for every feature branch using `gh pr create` so the human can review. **Only push after CI is green** — run the commit gate, wait for CI checks to pass, and if CI is red, fix the issues before pushing.
 - `depfix-agents`: `git push agents <branch>` only (origin push URL is disabled).
 
 ---
@@ -104,9 +104,10 @@ reviewer writes a receipt to `coordination/review/<task_id>_receipt.json`.
 1. Read AGENTS.md (this file) and CONTEXT.md
 2. Read coordination/OPERATING-MODEL.md
 3. Read your own state file (coordination/<role>.md)
-4. Read coordination/TASKS.json
+4. Read coordination/TASKS.json — find tasks assigned to you
 5. Read coordination/inbox/<role>.jsonl — ack each message after reading
 6. Resume from your state file rather than re-reading everything from scratch
+7. Work on your tasks until they are done or blocked; update state and commit
 
 ---
 
@@ -117,8 +118,8 @@ reviewer writes a receipt to `coordination/review/<task_id>_receipt.json`.
 - **Never invent results.** Every finding needs a reproducible command or file path.
 - **Incremental saves.** Commit intermediate work. Do not hold large diffs.
 - **State your blocker.** If blocked, write it to TASKS.json with a concrete next step.
-- **No "rounds".** There is no round counter. Track progress by task status and timestamps only.
-  Do not number your wake-ups. Do not write "round N" anywhere.
+- **Task-driven only.** There are no rounds or iterations. Track progress by task ID and timestamps only.
+  Never write "round N", "wake N", "iteration N", or any counter in state files, commits, or messages.
 
 ---
 
@@ -141,6 +142,13 @@ Every code change must pass before review:
 bash scripts/commit-gate.sh    # make test + make lint + make typecheck + push + CI check
 ```
 State files (*.md, TASKS.json) don't need the gate — only code in `src/`, `tests/`, etc.
+
+**CI-gated push policy:** Do NOT push to remote until CI passes locally AND on GitHub.
+1. Run `make test && make lint && make typecheck` locally — all must pass.
+2. Push the feature branch.
+3. Check CI status: `gh run list --branch <branch> --limit 1` — wait for it to complete.
+4. If CI is **red**: read the failure logs (`gh run view <run-id> --log-failed`), fix the code, commit, and re-push. Repeat until green.
+5. Only open a PR (`gh pr create`) after CI is green on the branch.
 
 ---
 
@@ -181,7 +189,8 @@ Use `--dry-run` and `--no-pr` for all testing.
 
 ## Resource Policy
 
-- **Opus**: manager + reviewer ≤ 25 req/min combined. Space ≥ 3 min apart.
-- **Sonnet**: researcher, implementer, tester — use freely.
+- **Opus 5.5** (researcher + reviewer): pace ≥ 2 min apart.
+- **Fable 5.1** (principal): lightweight coordination.
+- **Sonnet 5** (implementer + tester): use freely.
 - **Disk**: do not copy node_modules, .venv, or build artifacts.
 - **DB**: depfix.db is live SQLite. Back up before schema changes.

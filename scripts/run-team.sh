@@ -62,7 +62,7 @@ done
 
 echo "Starting depfix agent team..."
 echo "Repo: $(pwd)"
-echo "Logs: .local/<role>-<round>.log"
+echo "Logs: .local/<role>-<N>.log"
 echo ""
 
 # Make all scripts executable
@@ -89,7 +89,7 @@ IMPLEMENTER_PID=$!
 echo "  implementer PID: $IMPLEMENTER_PID"
 
 # --- Launch Opus agents (25 req/min shared — stagger to avoid collision) ---
-# Principal starts immediately, runs a round, then sleeps 120s.
+# Principal starts immediately, runs one wake-up, then sleeps 120s.
 # Reviewer starts 60s later: it runs while principal is sleeping (60–180s).
 # This way they don't overlap on the Opus pool.
 
