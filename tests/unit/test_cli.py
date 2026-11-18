@@ -171,8 +171,11 @@ def test_scan_with_auto_detected_changes_starts_with_broad_usage_discovery(
     assert captured["symbols"] == ()
 
 
-def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> None:
-    """The optional regression corpus is the final scan workflow phase."""
+@pytest.mark.parametrize(
+    ("extra", "expected"), [([], ["detect", "scan"]), (["--eval"], ["detect", "scan", "evaluate"])]
+)
+def test_scan_evaluates_only_when_asked(monkeypatch, tmp_path, extra, expected) -> None:
+    """The regression corpus is an opt-in final scan phase (``--eval``)."""
     providers_file = tmp_path / "providers.yaml"
     providers_file.write_text(
         """providers:
@@ -188,7 +191,7 @@ def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> N
     checkout = tmp_path / "checkout"
     checkout.mkdir()
     args = build_parser().parse_args(
-        ["scan", "--path", str(checkout), "--provider", "openai", "--no-save"]
+        ["scan", "--path", str(checkout), "--provider", "openai", "--no-save", *extra]
     )
     settings = Settings(providers_file=str(providers_file), llm_provider="ollama")
     phases: list[str] = []
@@ -213,7 +216,7 @@ def test_scan_evaluates_after_detecting_and_scanning(monkeypatch, tmp_path) -> N
     monkeypatch.setattr(cli, "_cmd_eval", lambda _args: phases.append("evaluate") or 0)
 
     assert cli._cmd_scan(args) == 0
-    assert phases == ["detect", "scan", "evaluate"]
+    assert phases == expected
 
 
 def test_scan_derives_feed_candidate_only_from_observed_api_usage(monkeypatch, tmp_path) -> None:
@@ -424,3 +427,210 @@ def test_resolve_light_model_works_for_ollama() -> None:
     )
     light, heavy = cli._resolve_light_model(settings)
     assert light == heavy == "qwen2.5-coder:7b"
+
+
+# ── report command ───────────────────────────────────────────────────────────
+
+
+def test_version_gap_major() -> None:
+    gap, risk = cli._version_gap("3.1.0", "4.73.0")
+    assert gap == "major"
+    assert "Breaking" in risk
+
+
+def test_version_gap_minor() -> None:
+    gap, _ = cli._version_gap("4.1.0", "4.5.0")
+    assert gap == "minor"
+
+
+def test_version_gap_patch() -> None:
+    gap, _ = cli._version_gap("4.5.0", "4.5.3")
+    assert gap == "patch"
+
+
+def test_version_gap_current() -> None:
+    gap, _ = cli._version_gap("4.5.0", "4.5.0")
+    assert gap == "current"
+
+
+def test_version_gap_ahead() -> None:
+    gap, _ = cli._version_gap("5.0.0", "4.5.0")
+    assert gap == "current"
+
+
+def test_version_gap_unparseable() -> None:
+    gap, _ = cli._version_gap("latest", "4.5.0")
+    assert gap == "unknown"
+
+
+def test_report_parser_accepted() -> None:
+    args = build_parser().parse_args(["report", "--path", "/tmp/repo"])
+    assert args.command == "report"
+    assert args.path == "/tmp/repo"
+
+
+# ── quickstart command ───────────────────────────────────────────────────────
+
+
+def test_quickstart_parser_accepted() -> None:
+    args = build_parser().parse_args(["quickstart", "--path", "/tmp/app"])
+    assert args.command == "quickstart"
+    assert args.path == "/tmp/app"
+
+
+def test_quickstart_parser_defaults() -> None:
+    args = build_parser().parse_args(["quickstart"])
+    assert args.command == "quickstart"
+    assert args.path is None
+
+
+# ── scan --comment-pr / --annotate ───────────────────────────────────────────
+
+
+def test_scan_comment_pr_flag_parsed() -> None:
+    args = build_parser().parse_args(
+        ["scan", "--path", "/tmp", "--provider", "openai", "--comment-pr", "42"]
+    )
+    assert args.comment_pr == 42
+
+
+def test_scan_annotate_flag_parsed() -> None:
+    args = build_parser().parse_args(
+        ["scan", "--path", "/tmp", "--provider", "openai", "--annotate"]
+    )
+    assert args.annotate is True
+
+
+# ── _llm_is_configured ──────────────────────────────────────────────────────
+
+
+def test_llm_is_configured_gemini_with_key() -> None:
+    settings = Settings(llm_provider="gemini", google_api_key="sk-test")
+    assert cli._llm_is_configured(settings) is True
+
+
+def test_llm_is_configured_gemini_without_key() -> None:
+    settings = Settings(llm_provider="gemini", google_api_key="")
+    assert cli._llm_is_configured(settings) is False
+
+
+def test_llm_is_configured_bedrock_with_profile() -> None:
+    settings = Settings(llm_provider="bedrock", bedrock_profile="default")
+    assert cli._llm_is_configured(settings) is True
+
+
+def test_llm_is_configured_bedrock_without_credentials() -> None:
+    settings = Settings(llm_provider="bedrock", bedrock_access_key="", bedrock_profile="")
+    assert cli._llm_is_configured(settings) is False
+
+
+def test_llm_is_configured_ollama_always_true() -> None:
+    settings = Settings(llm_provider="ollama")
+    assert cli._llm_is_configured(settings) is True
+
+
+# ── report / quickstart / scan-output fixes ─────────────────────────────────
+
+
+def _bc(kind: ChangeKind, old_api: str, new_api: str) -> BreakingChange:
+    return BreakingChange(
+        package="openai",
+        old_version="3.0.0",
+        new_version="4.0.0",
+        old_api=old_api,
+        new_api=new_api,
+        description="",
+        migration_guide="",
+        kind=kind,
+        source=ClassificationSource.LLM_SYNTHESIS,
+        provider_id="openai",
+    )
+
+
+def test_report_looks_up_npm_version_when_pypi_package_shares_the_name(
+    monkeypatch, tmp_path
+) -> None:
+    providers_file = tmp_path / "providers.yaml"
+    providers_file.write_text(
+        """providers:
+  - id: openai
+    sdk_packages:
+      - {name: openai, ecosystem: npm}
+      - {name: openai, ecosystem: pypi}
+    feeds: [{kind: fixture_change, id: t, old_token: '3', new_token: '4'}]
+"""
+    )
+    (tmp_path / "package.json").write_text('{"dependencies": {"openai": "3.3.0"}}')
+    calls: list[tuple[str, str]] = []
+
+    def fake_latest(_npm, package, ecosystem):
+        calls.append((package, ecosystem))
+        return "7.0.0"
+
+    monkeypatch.setattr(cli, "get_settings", lambda: Settings(providers_file=str(providers_file)))
+    monkeypatch.setattr(cli, "_fetch_latest_version", fake_latest)
+    args = build_parser().parse_args(["report", "--path", str(tmp_path)])
+    assert cli._cmd_report(args) == 0
+    assert calls == [("openai", "npm")]
+
+
+@pytest.mark.parametrize(
+    ("remote", "expected"),
+    [
+        ("https://github.com/bedilk/depfix-demo", "bedilk/depfix-demo"),
+        ("https://github.com/bedilk/depfix-demo.git", "bedilk/depfix-demo"),
+        ("git@github.com:bedilk/depfix-demo.git", "bedilk/depfix-demo"),
+        ("https://gitlab.com/x/y.git", None),
+    ],
+)
+def test_github_slug_from_origin(tmp_path, remote, expected) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "remote", "add", "origin", remote], check=True)
+    assert cli._github_slug(tmp_path) == expected
+
+
+def test_github_slug_none_without_git(tmp_path) -> None:
+    assert cli._github_slug(tmp_path) is None
+
+
+def test_scan_assessments_hide_drift_and_unmatched_by_default(monkeypatch) -> None:
+    from rich.console import Console
+
+    from depfix.scanners.matching import ScanChangeAssessment, ScanMatchStatus
+
+    recorder = Console(record=True, width=200)
+    monkeypatch.setattr(cli, "console", recorder)
+    assessments = [
+        ScanChangeAssessment(
+            _bc(ChangeKind.DEPENDENCY_VERSION_BUMP, "openai@3.0.0", "openai@4.0.0"),
+            ScanMatchStatus.ACTIONABLE,
+            "drift",
+        ),
+        ScanChangeAssessment(
+            _bc(
+                ChangeKind.METHOD_RENAMED, "openai.createChatCompletion", "chat.completions.create"
+            ),
+            ScanMatchStatus.ACTIONABLE,
+            "1 call site",
+        ),
+        ScanChangeAssessment(
+            _bc(ChangeKind.METHOD_REMOVED, "openai.createEdit", ""),
+            ScanMatchStatus.NO_CALL_SITES,
+            "none",
+        ),
+    ]
+    cli._print_scan_assessments(assessments)
+    out = recorder.export_text()
+    assert "createChatCompletion" in out
+    assert "openai@3.0.0" not in out
+    assert "createEdit" not in out
+    assert "1 version-drift record(s)" in out
+    assert "1 change(s) with no matching call site" in out
+
+    recorder = Console(record=True, width=200)
+    monkeypatch.setattr(cli, "console", recorder)
+    cli._print_scan_assessments(assessments, show_all=True)
+    out = recorder.export_text()
+    assert "openai@3.0.0" in out and "createEdit" in out

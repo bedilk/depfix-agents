@@ -10,6 +10,11 @@ A removed export is a genuine breaking signal: every ``import { X }`` of it
 breaks. Treat a hit as "this symbol is gone, go look," not as a completed
 migration. Signature changes, renamed parameters, and widened return types
 pass through undetected — the event body says so explicitly.
+
+When an export disappears and a similarly-named one appears in the same
+version, we emit an ``OPERATION_ID_CHANGED`` (rename) instead of a plain
+removal. The heuristic uses case-insensitive suffix matching and
+Levenshtein-like prefix overlap to pair candidates.
 """
 
 from __future__ import annotations
@@ -38,6 +43,80 @@ from depfix.sources.semver import is_major_bump
 logger = logging.getLogger(__name__)
 
 _MAX_TARBALL_BYTES = 30_000_000
+
+_RENAME_SIMILARITY_THRESHOLD = 0.45
+
+_CAMEL_SPLIT_RE = re.compile(r"[A-Z][a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\b)|[a-z]+|[A-Z]+|\d+")
+
+
+def _camel_words(name: str) -> list[str]:
+    """Split camelCase/PascalCase into lowercase words."""
+    return [m.lower() for m in _CAMEL_SPLIT_RE.findall(name)]
+
+
+def _similarity(old: str, new: str) -> float:
+    """Heuristic similarity using camelCase word overlap.
+
+    Compares the sets of camelCase-split words (e.g. "startTransaction" →
+    {"start", "transaction"}) and returns Jaccard-like overlap, weighted
+    toward shared words at the start of the name.
+    """
+    if old == new:
+        return 1.0
+    if old.lower() == new.lower():
+        return 0.95
+
+    old_words = _camel_words(old)
+    new_words = _camel_words(new)
+    if not old_words or not new_words:
+        return 0.0
+
+    old_set = set(old_words)
+    new_set = set(new_words)
+    shared = old_set & new_set
+    if not shared:
+        return 0.0
+
+    jaccard = len(shared) / len(old_set | new_set)
+
+    prefix_bonus = 0.0
+    if old_words[0] == new_words[0]:
+        prefix_bonus = 0.15
+
+    return min(jaccard + prefix_bonus, 1.0)
+
+
+def pair_renames(
+    removed: set[str], added: set[str]
+) -> tuple[list[tuple[str, str]], set[str]]:
+    """Match removed exports to added ones that look like renames.
+
+    Returns (rename_pairs, unmatched_removed). Each pair is (old_name, new_name).
+    Greedy best-match: highest similarity wins, no name is used twice.
+    """
+    if not removed or not added:
+        return [], removed
+
+    candidates: list[tuple[float, str, str]] = []
+    for old_name in removed:
+        for new_name in added:
+            sim = _similarity(old_name, new_name)
+            if sim >= _RENAME_SIMILARITY_THRESHOLD:
+                candidates.append((sim, old_name, new_name))
+    candidates.sort(reverse=True)
+
+    paired: list[tuple[str, str]] = []
+    used_old: set[str] = set()
+    used_new: set[str] = set()
+    for _sim, old_name, new_name in candidates:
+        if old_name in used_old or new_name in used_new:
+            continue
+        paired.append((old_name, new_name))
+        used_old.add(old_name)
+        used_new.add(new_name)
+
+    unmatched = removed - used_old
+    return paired, unmatched
 
 _EXPORT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -124,31 +203,52 @@ class TsExportsSource(ChangeSource):
         if old_names is None or new_names is None:
             return FeedPoll.baseline(version, path=state.last_payload_path)
 
-        removed = sorted(old_names - new_names)
-        changes = [
-            SpecChange(
-                kind=SpecChangeKind.EXPORT_REMOVED,
-                severity=Severity.BREAKING,
-                # Provider-qualified so the scanner's symbol namespace matches.
-                subject=f"{self.provider_id}.{name}",
-                pointer=f"{self.package}#{name}",
-                detail="exported symbol removed between versions",
-                before=name,
+        raw_removed = old_names - new_names
+        added = new_names - old_names
+        rename_pairs, unmatched_removed = pair_renames(raw_removed, added)
+
+        changes: list[SpecChange] = []
+        for old_name, new_name in rename_pairs:
+            changes.append(
+                SpecChange(
+                    kind=SpecChangeKind.OPERATION_ID_CHANGED,
+                    severity=Severity.BREAKING,
+                    subject=f"{self.provider_id}.{old_name}",
+                    pointer=f"{self.package}#{old_name}",
+                    detail=f"exported symbol renamed: {old_name} → {new_name}",
+                    before=old_name,
+                    after=f"{self.provider_id}.{new_name}",
+                )
             )
-            for name in removed
-        ]
+        for name in sorted(unmatched_removed):
+            changes.append(
+                SpecChange(
+                    kind=SpecChangeKind.EXPORT_REMOVED,
+                    severity=Severity.BREAKING,
+                    subject=f"{self.provider_id}.{name}",
+                    pointer=f"{self.package}#{name}",
+                    detail="exported symbol removed between versions",
+                    before=name,
+                )
+            )
         if not changes and state.last_token is None:
-            # First-sight comparison found nothing: behave like a plain baseline.
             return FeedPoll.baseline(version)
 
+        n_removed = len(unmatched_removed)
+        n_renamed = len(rename_pairs)
         severity = (
             Severity.BREAKING
             if changes
             else (Severity.BREAKING if is_major_bump(old_token, version) else Severity.UNKNOWN)
         )
+        parts = []
+        if n_renamed:
+            parts.append(f"{n_renamed} renamed")
+        if n_removed:
+            parts.append(f"{n_removed} removed")
         summary = (
-            f"{len(removed)} exported symbol(s) removed"
-            if removed
+            f"exported symbols: {', '.join(parts)}"
+            if parts
             else "no exported symbols removed (signature changes are NOT detected)"
         )
         event = ChangeEvent(
@@ -163,7 +263,11 @@ class TsExportsSource(ChangeSource):
             body="\n".join(c.one_line() for c in changes[:60]),
             severity=severity,
             spec_changes=changes,
-            raw={"package": self.package, "removed_exports": removed},
+            raw={
+                "package": self.package,
+                "removed_exports": sorted(unmatched_removed),
+                "renamed_exports": [[old, new] for old, new in rename_pairs],
+            },
         )
         return FeedPoll(changed=True, new_token=version, events=[event])
 

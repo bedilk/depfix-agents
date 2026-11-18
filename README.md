@@ -10,6 +10,8 @@
 pip install depfix-ai
 ```
 
+> **See depfix in action:** [depfix-demo](https://github.com/bedilk/depfix-demo) — an OpenAI v3 app with realistic call sites and a depfix migration PR showing the exact diff.
+
 ---
 
 ## The Problem
@@ -56,6 +58,9 @@ pip install depfix-ai
 ### Basic Usage
 
 ```bash
+# Quick drift report — no setup required
+depfix report --path ./your-app
+
 # Initialize local database and provider feeds
 depfix init
 
@@ -109,6 +114,25 @@ bash scripts/test_pipeline.sh openai:your-org/your-app
 - **Version drift + API migration in one PR.** depfix composes package.json version bumps with code-level fixes into a single, reviewable pull request.
 - **Honest confidence scoring.** Every finding has a confidence level (HIGH/MEDIUM/LOW). depfix doesn't guess.
 
+## Forced Migrations
+
+Most dependency changes can wait. Some cannot. depfix marks a change as **forced** when staying put stops working:
+
+| Why forced | How depfix knows |
+|------------|------------------|
+| Security advisory | The change comes from an advisory feed |
+| Removed from the provider's live API | An OpenAPI diff shows an HTTP operation, field or parameter was removed |
+| Announced sunset date | The release notes or changelog state a date ("will be removed on 2027-01-15") |
+
+`depfix scan` lists forced migrations that affect your repo first, with the deadline and days left. `plan` and `apply` process them before optional changes, earliest deadline first, and the PR body states the deadline.
+
+```bash
+depfix scan --repo org/app --provider stripe --forced-only   # show only what cannot be skipped
+depfix plan org/app --provider stripe --forced-only          # fix only what cannot be skipped
+```
+
+Detection is deterministic: no LLM call and no extra setup.
+
 ## GitHub Action
 
 Add to `.github/workflows/depfix.yml`:
@@ -124,7 +148,7 @@ jobs:
   depfix:
     runs-on: ubuntu-latest
     steps:
-      - uses: bedilk/depfix-agents@main
+      - uses: bedilk/depfix-agents@v0.2
         with:
           provider: openai,stripe,sentry
           mode: apply
@@ -134,6 +158,7 @@ jobs:
 ## CLI Reference
 
 ```bash
+depfix report --path ./your-app                    # zero-config drift report (no LLM, no DB)
 depfix init                                        # set up local database and integrations
 depfix watch --once                                # poll feeds for new changes
 depfix scan --repo org/app --provider stripe       # find affected call-sites
@@ -155,6 +180,10 @@ All config is via environment variables or `.env` file:
 | `DATABASE_URL` | SQLite (default) or Postgres connection string |
 
 See [.env.example](.env.example) for the full list.
+
+### Telemetry (opt-in)
+
+Telemetry is off by default. Set `DEPFIX_TELEMETRY=true` to send one anonymous usage event per command: counts of repos scanned, call sites found, drift detected, fixes applied and PRs opened. Repo names are sent only as truncated SHA-256 hashes; no source code, file paths, hostnames or tokens are sent.
 
 ## Self-Hosted
 

@@ -20,6 +20,14 @@ fi
 PYTHON="${PYTHON:-$(command -v python3 || command -v python)}"
 PROVIDERS_FILE="${PROVIDERS_FILE:-providers.yaml}"
 
+# Result cache: a (repo, provider) pair whose plan artifact already exists under
+# PLAN_DIR is skipped (its summary row is rebuilt from the plan file). Set
+# RETEST=1 to ignore the cache and re-run everything.
+PLAN_DIR="${PLAN_DIR:-.depfix/plans}"
+RETEST="${RETEST:-0}"
+DEPFIX_PY="${DEPFIX_PY:-$(head -1 "$(command -v depfix)" 2>/dev/null | sed 's/^#!//')}"
+[[ -x "$DEPFIX_PY" ]] || DEPFIX_PY="$PYTHON"
+
 # ---------------------------------------------------------------------------
 # ensure_provider: if a provider id is missing from providers.yaml, discover
 # its feeds (npm, pypi, rubygems, github releases, security advisories, etc.)
@@ -325,6 +333,97 @@ else:
         print(f"\n<details><summary>{label}</summary>\n\n```\n{tail}\n```\n</details>\n")
 PY
 
+
+CACHE_PY="$LOG_DIR/plan_cache.py"
+cat > "$CACHE_PY" <<'PY'
+"""Plan-file cache for test_pipeline.sh.
+
+  plan_cache.py find   PLAN_DIR REPO PROVIDER   -> newest plan path, or nothing
+  plan_cache.py row    PLAN_FILE REPO PROVIDER  -> one summary TSV row
+  plan_cache.py detail PLAN_FILE REPO PROVIDER  -> markdown detail block
+
+Rows use the same columns as parse_logs.py. Scan stats come from the local scan
+DB when reachable; cost and breaking-change counts are not stored in plan files.
+"""
+import glob, json, os, sys
+
+def find(plan_dir, repo, provider):
+    stem = repo.replace("/", "__").lower() + "__"
+    hits = [p for p in glob.glob(os.path.join(plan_dir, "archive", provider, "*", "*.json"))
+            if os.path.basename(p).lower().startswith(stem)]
+    if not hits:  # fall back to canonical plan files, matching provider inside the JSON
+        for p in glob.glob(os.path.join(plan_dir, "*.json")):
+            if not os.path.basename(p).lower().startswith(stem):
+                continue
+            try:
+                if json.load(open(p)).get("change", {}).get("provider_id") == provider:
+                    hits.append(p)
+            except (OSError, ValueError):
+                pass
+    return max(hits, key=os.path.getmtime) if hits else ""
+
+def scan_stats(repo, provider, base_sha):
+    try:
+        from sqlalchemy import select, func
+        from depfix.storage.db import session_scope
+        from depfix.storage.schema import RepoScanRow, CallSiteRow, ScanChangeMatchRow
+        with session_scope() as s:
+            rows = s.execute(select(RepoScanRow).where(
+                RepoScanRow.repo_id.ilike(repo), RepoScanRow.provider_id == provider
+            ).order_by(RepoScanRow.id.desc())).scalars().all()
+            if not rows:
+                return None
+            scan = next((r for r in rows if r.commit_sha == base_sha), rows[0])
+            sites = s.execute(select(CallSiteRow.confidence, func.count()).where(
+                CallSiteRow.repo_scan_id == scan.id).group_by(CallSiteRow.confidence)).all()
+            total = sum(n for _, n in sites)
+            actionable = sum(n for c, n in sites if str(getattr(c, "value", c)).lower() in ("high", "medium"))
+            matches = s.execute(select(func.count()).select_from(ScanChangeMatchRow).where(
+                ScanChangeMatchRow.repo_scan_id == scan.id,
+                ScanChangeMatchRow.status == "actionable")).scalar()
+            return scan.files_scanned, total, actionable, matches
+    except Exception:
+        return None
+
+def fields(plan_file, repo, provider):
+    d = json.load(open(plan_file))
+    c = d.get("change", {})
+    edits = [e.get("relpath", "?") for e in d.get("edits", [])]
+    if c.get("kind") == "dependency_version_bump":
+        what = f"bump {c.get('package')} {c.get('old_version')} -> {c.get('new_version')}"
+    else:
+        what = f"{c.get('kind')}: {c.get('old_api')} -> {c.get('new_api')}"
+    what += f" ({len(edits)} edit(s): {', '.join(edits[:3])})" if edits else " (no committable edits)"
+    stats = scan_stats(repo, provider, d.get("base_sha"))
+    files, sites, actionable, matches = stats if stats else ("—", "—", "—", "—")
+    return dict(files=files, sites=sites, actionable=actionable, breaking="—",
+                drift_from=c.get("old_version") or "—", drift_to=c.get("new_version") or "—",
+                risk=d.get("drift_risk") or "—", matches=matches, cost="—",
+                artifact="Yes", proposed=what[:300], conf=d.get("confidence", ""),
+                verified=d.get("verified_by", ""), notes=d.get("notes", []))
+
+mode = sys.argv[1]
+if mode == "find":
+    print(find(*sys.argv[2:5]))
+elif mode == "row":
+    f = fields(*sys.argv[2:5])
+    print("\t".join(map(str, [sys.argv[3], sys.argv[4], f["files"], f["sites"], f["actionable"],
+        f["breaking"], f["drift_from"], f["drift_to"], f["risk"], f["matches"], f["cost"],
+        f["artifact"], f["proposed"]])))
+elif mode == "detail":
+    f = fields(*sys.argv[2:5])
+    print(f"## {sys.argv[3]} ({sys.argv[4]})  _(from cached plan file)_\n")
+    print("| Metric | Value |\n| --- | --- |")
+    for k, v in [("Files scanned", f["files"]), ("Call sites (total)", f["sites"]),
+                 ("Actionable sites", f["actionable"]),
+                 ("Drift", f"{f['drift_from']} → {f['drift_to']} ({f['risk']})"),
+                 ("API matches", f["matches"]), ("PR artifact?", f["artifact"]),
+                 ("Confidence", f["conf"]), ("Verified by", f["verified"]),
+                 ("Proposed changes", f["proposed"]), ("Notes", "; ".join(f["notes"]) or "—")]:
+        print(f"| {k} | {v} |")
+    print()
+PY
+
 printf 'repo\tprovider\tfiles_scanned\tcall_sites\tactionable\tbreaking_changes\tdrift_from\tdrift_to\tdrift_risk\tapi_matches\ttotal_cost\tartifact\tproposed_changes\n' > "$SUMMARY"
 {
     echo "# depfix pipeline test — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -338,6 +437,24 @@ run_one() {
     local short="${repo##*/}"
     local scan_log="$LOG_DIR/${short}.${provider}.scan.log"
     local plan_log="$LOG_DIR/${short}.${provider}.plan.log"
+
+    if [[ "$RETEST" != "1" ]]; then
+        local cached
+        cached=$("$DEPFIX_PY" "$CACHE_PY" find "$PLAN_DIR" "$repo" "$provider" 2>/dev/null || true)
+        if [[ -n "$cached" ]]; then
+            echo "[cache] $repo / $provider — plan exists ($cached), skipping (RETEST=1 to force)"
+            local crow
+            crow=$("$DEPFIX_PY" "$CACHE_PY" row "$cached" "$repo" "$provider" 2>/dev/null || true)
+            if [[ -n "$crow" ]]; then
+                printf '%s\n' "$crow" >> "$SUMMARY"
+                "$DEPFIX_PY" "$CACHE_PY" detail "$cached" "$repo" "$provider" >> "$DETAIL" 2>/dev/null || true
+                echo "[done] $(printf '%s' "$crow" | cut -f1,3,4,5,12 | tr '\t' ' ') (cached)"
+                echo
+                return 0
+            fi
+            echo "  (could not read cached plan; running the test instead)"
+        fi
+    fi
 
     echo "──────────────────────────────────────"
     echo "  $repo ($provider)"

@@ -19,6 +19,10 @@ Subcommands
   installation(s), useful before pointing ``scan`` at one.
 * ``depfix init`` — initialize the local database and run the full machine,
   integration, and toolchain preflight diagnostic.
+* ``depfix report [--path DIR]`` — zero-config dependency drift report
+  (no LLM, no database). Shows version gaps for tracked SDK packages.
+* ``depfix quickstart [--path DIR]`` — guided first-run experience: detects
+  SDK dependencies, shows drift, and suggests next steps.
 * ``depfix plan [OWNER/NAME ...]`` — run the repository workflow read-only and
   report the verified edits that would be proposed.
 * ``depfix apply [OWNER/NAME ...]`` — run the live repository workflow and open
@@ -35,10 +39,14 @@ import contextlib
 import hashlib
 import json
 import logging
+import re
+import shlex
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from rich.console import Console
@@ -49,6 +57,9 @@ from rich.table import Table
 from sqlalchemy import or_, select
 
 from depfix import DependencyFixAgent
+
+if TYPE_CHECKING:
+    from depfix.registry.client import NpmRegistryClient
 from depfix.apply import EditVerdict, FileEdit
 from depfix.classify import (
     Classifier,
@@ -97,6 +108,8 @@ from depfix.gh import (
 )
 from depfix.obs.cost import CostLedger
 from depfix.obs.logging import configure_logging, configure_sentry
+from depfix.obs.telemetry import flush as flush_telemetry
+from depfix.obs.telemetry import init_telemetry
 from depfix.orchestrator import ChangeOutcome, Orchestrator, OrchestratorOutcome, PlanArtifact
 from depfix.providers.loader import ProviderConfigError, load_providers_file
 from depfix.providers.models import ProviderSpec
@@ -429,6 +442,15 @@ def _apply_model_overrides(args: argparse.Namespace, settings: Settings) -> None
         settings.codemods_enabled = False
 
 
+def _llm_is_configured(settings: Settings) -> bool:
+    """Check if any LLM backend has credentials without making a network call."""
+    if settings.llm_provider == "gemini":
+        return bool(settings.google_api_key)
+    if settings.llm_provider == "bedrock":
+        return bool(settings.bedrock_access_key or settings.bedrock_profile)
+    return True
+
+
 def _print_header() -> None:
     console.print(
         Panel.fit(
@@ -629,10 +651,26 @@ def _print_scan_result(result: RepoScanResult, *, show_low: bool) -> None:
         console.print(f"  [yellow]{err}[/yellow]")
 
 
-def _print_scan_assessments(assessments: list[ScanChangeAssessment]) -> None:
-    """Show the commit-specific upstream-change decisions from a scan."""
+def _print_scan_assessments(
+    assessments: list[ScanChangeAssessment], *, show_all: bool = False
+) -> None:
+    """Show the commit-specific upstream-change decisions from a scan.
+
+    By default only API-level changes that are actionable are listed; version
+    drift is covered by the drift summary, and the rest is collapsed to counts.
+    """
     if not assessments:
         return
+
+    def _is_drift(a: ScanChangeAssessment) -> bool:
+        return a.change.kind is ChangeKind.DEPENDENCY_VERSION_BUMP
+
+    shown = (
+        assessments
+        if show_all
+        else [a for a in assessments if a.is_actionable and not _is_drift(a)]
+    )
+    hidden = [a for a in assessments if a not in shown]
 
     status_style = {
         ScanMatchStatus.ACTIONABLE: "green",
@@ -640,21 +678,73 @@ def _print_scan_assessments(assessments: list[ScanChangeAssessment]) -> None:
         ScanMatchStatus.NO_CALL_SITES: "yellow",
         ScanMatchStatus.VERSION_NOT_AFFECTED: "dim",
     }
-    table = Table(title="Upstream Change Match")
-    table.add_column("Old API", style="cyan")
-    table.add_column("New API")
-    table.add_column("Decision")
-    table.add_column("Evidence", style="dim")
-    for assessment in assessments:
-        style = status_style[assessment.status]
+    if shown:
+        table = Table(title="Upstream Change Match")
+        table.add_column("Old API", style="cyan")
+        table.add_column("New API")
+        table.add_column("Decision")
+        table.add_column("Evidence", style="dim")
+        for assessment in shown:
+            style = status_style[assessment.status]
+            table.add_row(
+                assessment.change.old_api or "(version drift)",
+                assessment.change.new_api or "—",
+                f"[{style}]{assessment.status.value}[/{style}]",
+                assessment.reason,
+            )
+        console.print(table)
+    else:
+        console.print("[dim]No upstream API change matches a call site in this repo.[/dim]")
+
+    if hidden:
+        n_drift = sum(1 for a in hidden if _is_drift(a))
+        n_no_sites = sum(
+            1 for a in hidden if not _is_drift(a) and a.status is ScanMatchStatus.NO_CALL_SITES
+        )
+        n_other = len(hidden) - n_drift - n_no_sites
+        parts = []
+        if n_drift:
+            parts.append(f"{n_drift} version-drift record(s) (summarised below)")
+        if n_no_sites:
+            parts.append(f"{n_no_sites} change(s) with no matching call site")
+        if n_other:
+            parts.append(f"{n_other} change(s) not affecting this version")
+        console.print(
+            f"[dim]Not listed: {', '.join(parts)}. Use --show-all-changes to see them.[/dim]"
+        )
+    console.print()
+
+
+def _print_forced_migrations(assessments: list[ScanChangeAssessment]) -> int:
+    """List the changes this repo cannot skip, most urgent first. Returns the count."""
+    from depfix.core.urgency import assess_urgency, urgency_sort_key
+
+    forced = sorted(
+        (a for a in assessments if a.is_actionable and assess_urgency(a.change).forced),
+        key=lambda a: urgency_sort_key(a.change),
+    )
+    if not forced:
+        return 0
+    table = Table(title="Forced Migrations (cannot be skipped)")
+    table.add_column("Package", style="cyan")
+    table.add_column("What changes")
+    table.add_column("Why forced")
+    table.add_column("Due")
+    table.add_column("Call sites", justify="right")
+    for assessment in forced:
+        change = assessment.change
+        urgency = assess_urgency(change)
+        style = "red bold" if urgency.overdue or urgency.deadline is None else "yellow"
         table.add_row(
-            assessment.change.old_api or "(version drift)",
-            assessment.change.new_api or "—",
-            f"[{style}]{assessment.status.value}[/{style}]",
-            assessment.reason,
+            change.package,
+            f"{change.old_api} -> {change.replacement}",
+            urgency.why,
+            f"[{style}]{urgency.when}[/{style}]",
+            str(len(assessment.matched_sites)) if assessment.matched_sites else "—",
         )
     console.print(table)
     console.print()
+    return len(forced)
 
 
 def _print_dependency_drift_summary(
@@ -742,6 +832,93 @@ def _write_scan_report(
     console.print(
         f"[green]Scan report branch:[/green] https://github.com/{remote_repo}/tree/{branch}/{relpath}"
     )
+
+
+def _post_scan_comment(
+    *,
+    owner: str,
+    name: str,
+    pr_number: int,
+    result: RepoScanResult,
+    assessments: list[ScanChangeAssessment],
+    provider_id: str,
+    settings: Settings,
+) -> None:
+    """Best-effort: post scan results as a PR comment."""
+    import os
+
+    from depfix.gh.pr import build_drift_comment_body, post_issue_comment
+    from depfix.scanners.drift_summary import summarize_dependency_drift
+
+    token = os.environ.get("GITHUB_TOKEN") or settings.github_token
+    if not token:
+        console.print("[yellow]--comment-pr: no GITHUB_TOKEN set, skipping comment.[/yellow]")
+        return
+
+    drift_rows_raw = summarize_dependency_drift(result, assessments)
+    drift_rows = [
+        (r.package, r.current_version, r.feed_version, r.decision, r.risk) for r in drift_rows_raw
+    ]
+    body = build_drift_comment_body(
+        provider_id=provider_id,
+        drift_rows=drift_rows,
+        call_site_count=len(result.actionable_sites),
+    )
+    try:
+        post_issue_comment(
+            owner=owner,
+            repo=name,
+            issue_number=pr_number,
+            body=body,
+            token=token,
+            api_url=settings.github_api_url,
+        )
+        console.print(f"[green]Posted scan comment on PR #{pr_number}[/green]")
+    except Exception as exc:
+        console.print(f"[yellow]Failed to post PR comment: {exc}[/yellow]")
+
+
+def _post_scan_annotations(
+    *,
+    owner: str,
+    name: str,
+    result: RepoScanResult,
+    assessments: list[ScanChangeAssessment],
+    settings: Settings,
+) -> None:
+    """Best-effort: post scan results as GitHub Check annotations."""
+    import os
+
+    from depfix.gh.checks import annotations_from_scan, create_check_run
+
+    token = os.environ.get("GITHUB_TOKEN") or settings.github_token
+    if not token:
+        console.print("[yellow]--annotate: no GITHUB_TOKEN set, skipping annotations.[/yellow]")
+        return
+
+    annotations = annotations_from_scan(result, assessments)
+    if not annotations:
+        console.print("[dim]No call-site annotations to post.[/dim]")
+        return
+
+    try:
+        create_check_run(
+            owner=owner,
+            repo=name,
+            name="depfix scan",
+            head_sha=result.commit_sha,
+            token=token,
+            conclusion="neutral" if result.actionable_sites else "success",
+            title=f"depfix: {len(annotations)} finding(s)",
+            summary=f"Found {len(result.actionable_sites)} actionable call site(s).",
+            annotations=annotations,
+            api_url=settings.github_api_url,
+        )
+        console.print(
+            f"[green]Posted {len(annotations)} check annotation(s) on {result.commit_sha[:12]}[/green]"
+        )
+    except Exception as exc:
+        console.print(f"[yellow]Failed to post check annotations: {exc}[/yellow]")
 
 
 def _record_scan_detections(
@@ -1338,8 +1515,36 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         result=result,
         assessments=assessments,
     )
-    _print_scan_assessments(assessments)
-    _print_dependency_drift_summary(result, assessments)
+    n_forced = _print_forced_migrations(assessments)
+    if getattr(args, "forced_only", False):
+        if not n_forced:
+            console.print("[green]No forced migrations affect this repo.[/green]\n")
+    else:
+        _print_scan_assessments(assessments, show_all=getattr(args, "show_all_changes", False))
+        _print_dependency_drift_summary(result, assessments)
+
+    # --- Telemetry: record scan completion and drift observations ----------
+    from depfix.obs.telemetry import record_drift as _tel_drift
+    from depfix.obs.telemetry import record_scan as _tel_scan
+
+    _tel_scan(
+        provider_id=provider.id,
+        repo_name=repo_full_name,
+        files_scanned=result.files_scanned,
+        call_sites_found=len(result.call_sites),
+        actionable_sites=len(result.actionable_sites),
+    )
+    from depfix.scanners.drift_summary import summarize_dependency_drift as _drift_rows
+
+    for _row in _drift_rows(result, assessments):
+        _tel_drift(
+            provider_id=provider.id,
+            package_name=_row.package,
+            repo_version=_row.current_version,
+            latest_version=_row.feed_version,
+            gap_kind=_row.decision,
+        )
+
     if ledger.by_stage:
         console.print(f"[dim]LLM cost:[/dim] {ledger.summary()}")
     else:
@@ -1434,6 +1639,28 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             "(and re-pay any scan-agent cost).[/yellow]"
         )
 
+    if getattr(args, "comment_pr", None) is not None:
+        _post_scan_comment(
+            owner=owner or "local",
+            name=name or Path(local_path or ".").name,
+            pr_number=args.comment_pr,
+            result=result,
+            assessments=assessments,
+            provider_id=provider.id,
+            settings=settings,
+        )
+
+    if getattr(args, "annotate", False) and result.commit_sha:
+        _post_scan_annotations(
+            owner=owner or "local",
+            name=name or Path(local_path or ".").name,
+            result=result,
+            assessments=assessments,
+            settings=settings,
+        )
+
+    if not getattr(args, "eval", False):
+        return 0
     console.print("[dim]Evaluating depfix's deterministic regression corpus...[/dim]")
     evaluation_args = argparse.Namespace(
         corpus_dir=None,
@@ -1867,6 +2094,272 @@ def _cmd_repos(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fetch_latest_version(npm: NpmRegistryClient, package: str, ecosystem: str) -> str:
+    """Fetch the latest published version for a package from its registry."""
+    if ecosystem == "npm":
+        try:
+            meta = npm.get_package_metadata(package)
+            return meta.dist_tags.get("latest") or "?"
+        except Exception:
+            return "?"
+    if ecosystem in ("pypi", "pip"):
+        try:
+            import httpx
+
+            resp = httpx.get(f"https://pypi.org/pypi/{package}/json", timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("info", {}).get("version", "?")
+        except Exception:
+            pass
+        return "?"
+    if ecosystem == "rubygems":
+        try:
+            import httpx
+
+            resp = httpx.get(f"https://rubygems.org/api/v1/gems/{package}.json", timeout=10)
+            if resp.status_code == 200:
+                return resp.json().get("version", "?")
+        except Exception:
+            pass
+        return "?"
+    return "?"
+
+
+def _version_gap(repo_version: str, latest: str) -> tuple[str, str]:
+    """Classify the gap between repo version and latest as (gap_label, risk_text)."""
+    from depfix.sources.semver import parse_semver
+
+    repo_sv = parse_semver(repo_version)
+    latest_sv = parse_semver(latest)
+    if repo_sv is None or latest_sv is None:
+        return "unknown", "Cannot compare versions"
+    if repo_sv >= latest_sv:
+        return "current", "Up to date"
+    if repo_sv[0] < latest_sv[0]:
+        return "major", "Breaking changes likely — review migration guides"
+    if repo_sv[1] < latest_sv[1]:
+        return "minor", "New features available — generally safe"
+    return "patch", "Bug fixes only — safe to update"
+
+
+def _cmd_report(args: argparse.Namespace) -> int:
+    """Zero-config dependency drift report — no LLM, no database."""
+    settings = get_settings()
+
+    local_path = args.path
+    if local_path is None:
+        local_path = "."
+    root = Path(local_path).resolve()
+    if not root.is_dir():
+        console.print(f"[red]Error: {root} is not a directory[/red]")
+        return 2
+
+    providers_file = args.providers_file or settings.providers_file
+    try:
+        providers = load_providers_file(providers_file)
+    except (FileNotFoundError, ProviderConfigError) as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        return 2
+
+    # scan_manifests reads package.json files only, so every match is an npm
+    # package. Keying by name alone let a same-named PyPI SDK (e.g. "openai")
+    # overwrite the npm entry and report the PyPI version as "latest".
+    sdk_names: list[str] = []
+    pkg_provider: dict[str, str] = {}
+    for p in providers:
+        if not p.enabled:
+            continue
+        for sdk in p.sdk_packages:
+            if sdk.ecosystem != "npm":
+                continue
+            sdk_names.append(sdk.name)
+            pkg_provider[sdk.name] = p.id
+
+    if not sdk_names:
+        console.print("[yellow]No SDK packages configured in providers.yaml[/yellow]")
+        return 0
+
+    from depfix.scanners.manifest import scan_manifests
+
+    mscan = scan_manifests(root, sdk_names)
+    if not mscan.matches:
+        console.print(
+            f"[dim]Scanned {len(mscan.manifests_found)} manifest(s) "
+            "— no tracked SDK dependencies found.[/dim]"
+        )
+        return 0
+
+    _print_header()
+    console.print(f"[dim]Path: {root}[/dim]")
+    console.print(
+        f"[dim]Found {len(mscan.matches)} tracked dependency(ies) "
+        f"across {len(mscan.manifests_found)} manifest(s)[/dim]\n"
+    )
+
+    from depfix.registry.client import NpmRegistryClient
+
+    table = Table(title="Dependency Drift Report")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Package")
+    table.add_column("Repo Version")
+    table.add_column("Latest")
+    table.add_column("Gap", justify="center")
+    table.add_column("Risk", style="dim")
+
+    n_major = n_minor = n_patch = n_current = 0
+    with NpmRegistryClient() as npm:
+        seen: set[str] = set()
+        for match in mscan.matches:
+            if match.package in seen:
+                continue
+            seen.add(match.package)
+
+            repo_version = match.resolved_version or match.declared_range or "?"
+            provider_id = pkg_provider.get(match.package, "?")
+            latest = _fetch_latest_version(npm, match.package, "npm")
+            gap, risk = _version_gap(repo_version, latest)
+
+            gap_style = {
+                "major": "red bold",
+                "minor": "yellow",
+                "patch": "green",
+                "current": "green dim",
+            }.get(gap, "dim")
+
+            table.add_row(
+                provider_id,
+                match.package,
+                repo_version,
+                latest,
+                f"[{gap_style}]{gap}[/{gap_style}]",
+                risk,
+            )
+            if gap == "major":
+                n_major += 1
+            elif gap == "minor":
+                n_minor += 1
+            elif gap == "patch":
+                n_patch += 1
+            else:
+                n_current += 1
+
+    console.print(table)
+
+    parts = []
+    if n_major:
+        parts.append(f"[red]{n_major} major[/red]")
+    if n_minor:
+        parts.append(f"[yellow]{n_minor} minor[/yellow]")
+    if n_patch:
+        parts.append(f"[green]{n_patch} patch[/green]")
+    if n_current:
+        parts.append(f"[dim]{n_current} current[/dim]")
+    if parts:
+        console.print(f"\nSummary: {', '.join(parts)}")
+    if n_major:
+        console.print(
+            f"\n[dim]Tip: run [bold]depfix scan --path {shlex.quote(local_path)} --provider ID[/bold] "
+            "to find affected call sites for a specific provider.[/dim]"
+        )
+    return 0
+
+
+def _github_slug(root: Path) -> str | None:
+    """Return ``owner/name`` from the checkout's GitHub ``origin`` remote, if any."""
+    try:
+        url = subprocess.run(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+    return m.group(1) if m else None
+
+
+def _cmd_quickstart(args: argparse.Namespace) -> int:
+    """Guided first-run: detect SDK dependencies, show drift, suggest next steps."""
+    settings = get_settings()
+    local_path = args.path or "."
+    root = Path(local_path).resolve()
+    if not root.is_dir():
+        console.print(f"[red]Error: {root} is not a directory[/red]")
+        return 2
+
+    _print_header()
+    console.print("[bold]Welcome to depfix![/bold]\n")
+    console.print("[dim]Scanning your project for known SDK dependencies...[/dim]\n")
+
+    providers_file = args.providers_file or settings.providers_file
+    try:
+        providers = load_providers_file(providers_file)
+    except (FileNotFoundError, ProviderConfigError) as exc:
+        console.print(f"[red]Error loading providers: {exc}[/red]")
+        return 2
+
+    from depfix.providers.loader import detect_providers_from_manifests
+
+    detected = detect_providers_from_manifests(root, providers)
+    if not detected:
+        console.print(
+            "[yellow]No known SDK dependencies found in this project.[/yellow]\n"
+            "[dim]depfix tracks 40+ providers including OpenAI, Stripe, Sentry, "
+            "Anthropic, Prisma, and more.\n"
+            "Check that your dependencies are declared in package.json, "
+            "pyproject.toml, Gemfile, or go.mod.[/dim]"
+        )
+        return 0
+
+    from depfix.scanners.manifest import scan_manifests
+
+    npm_names = [s.name for p in detected for s in p.sdk_packages if s.ecosystem == "npm"]
+    found = {m.package for m in scan_manifests(root, npm_names).matches}
+    table = Table(title="Detected SDK Dependencies")
+    table.add_column("Provider", style="cyan")
+    table.add_column("SDK Packages")
+    for p in detected:
+        pkgs = sorted({s.name for s in p.sdk_packages if s.name in found})
+        table.add_row(p.id, ", ".join(pkgs) or "—")
+    console.print(table)
+    console.print()
+
+    console.print("[bold]Running dependency drift report...[/bold]\n")
+    report_args = argparse.Namespace(path=local_path, providers_file=args.providers_file)
+    _cmd_report(report_args)
+
+    llm_ready = _llm_is_configured(settings)
+    first_provider = detected[0].id
+    step = 1
+    lines = []
+    if not llm_ready:
+        lines.append(
+            f"{step}. Set up an LLM provider:\n"
+            "   export GOOGLE_API_KEY=...   # or LLM_PROVIDER=bedrock/ollama"
+        )
+        step += 1
+    lines.append(
+        f"{step}. Scan for affected call sites:\n"
+        f"   depfix scan --path {shlex.quote(local_path)} --provider {first_provider}"
+    )
+    step += 1
+    slug = _github_slug(root)
+    lines.append(
+        f"{step}. Generate and verify fixes (repo must be on GitHub with the depfix App):\n"
+        f"   depfix plan {slug or 'OWNER/NAME'} --provider {first_provider}"
+    )
+    console.print(
+        Panel.fit(
+            "[bold]Next steps:[/bold]\n\n" + "\n\n".join(lines),
+            title="What's next?",
+            border_style="green",
+        )
+    )
+    return 0
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     """Initialize local state, then run the complete preflight diagnostic."""
     from depfix.doctor import CheckStatus, run_checks, worst_status
@@ -2017,6 +2510,15 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
                     console.print(f"[dim]  {change.old_api} → {change.new_api}[/dim]")
                 if len(provider_changes) > 5:
                     console.print(f"[dim]  ... and {len(provider_changes) - 5} more[/dim]")
+    if getattr(args, "forced_only", False):
+        from depfix.core.urgency import assess_urgency
+
+        n_before = len(changes)
+        changes = [c for c in changes if assess_urgency(c).forced]
+        console.print(
+            f"[dim]--forced-only: {len(changes)} of {n_before} change(s) cannot be skipped "
+            "(security advisory, live-API removal or announced sunset date)[/dim]"
+        )
     # `apply <repo>` may obtain its one change from the repo's canonical
     # plan artifact, so do not reject an empty database/change-file result
     # until plan discovery has had a chance to run.
@@ -2171,6 +2673,45 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
         gh_auth.close()
 
     _print_orchestrator_outcome(outcome, show_skips=args.show_skips)
+
+    # --- Telemetry: record plan/apply outcomes ----------------------------
+    from depfix.obs.telemetry import record_fix as _tel_fix
+    from depfix.obs.telemetry import record_plan as _tel_plan
+    from depfix.obs.telemetry import record_pr as _tel_pr
+
+    _provider_by_key = {c.dedupe_key: c.provider_id for c in changes}
+    for _repo in outcome.repos:
+        for _chg in _repo.changes:
+            _pid = _provider_by_key.get(_chg.dedupe_key, _chg.package)
+            if _chg.plan_artifact is not None:
+                _kept = len(_chg.plan_artifact.edits)
+                _reverted = 0
+                if _chg.fix_result is not None:
+                    _reverted = len(getattr(_chg.fix_result, "reverted_edits", []) or [])
+                _tel_plan(
+                    provider_id=_pid,
+                    repo_name=_repo.repo_full_name,
+                    edits_kept=_kept,
+                    edits_reverted=_reverted,
+                )
+                if _chg.plan_artifact.edits:
+                    _strategy = (
+                        "manifest"
+                        if _chg.plan_artifact.change.kind.value == "dependency_version_bump"
+                        else "llm"
+                    )
+                    _tel_fix(
+                        provider_id=_pid,
+                        files_edited=len(_chg.plan_artifact.edits),
+                        strategy=_strategy,
+                    )
+            if _chg.pr_url:
+                _tel_pr(
+                    provider_id=_pid,
+                    repo_name=_repo.repo_full_name,
+                    changes_count=len(_repo.changes),
+                )
+
     if args.command == "plan":
         # Write the canonical per-repo artifact so ``apply <repo>`` can use
         # the latest reviewed plan without a copied filename. Keep optional
@@ -2604,6 +3145,34 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write .depfix/scan-report.md locally, or to a dedicated depfix branch for --repo",
     )
+    scan_p.add_argument(
+        "--comment-pr",
+        type=int,
+        default=None,
+        metavar="NUMBER",
+        help="Post scan results as a comment on this PR number (requires GITHUB_TOKEN)",
+    )
+    scan_p.add_argument(
+        "--annotate",
+        action="store_true",
+        help="Post scan results as GitHub Check annotations (requires GITHUB_TOKEN)",
+    )
+    scan_p.add_argument(
+        "--show-all-changes",
+        action="store_true",
+        help="List every upstream change considered, not just those matching call sites",
+    )
+    scan_p.add_argument(
+        "--forced-only",
+        action="store_true",
+        help="Show only migrations that cannot be skipped: security advisories, "
+        "live-API removals and changes with an announced sunset date",
+    )
+    scan_p.add_argument(
+        "--eval",
+        action="store_true",
+        help="After scanning, also run depfix's own deterministic regression corpus",
+    )
     _add_command_logging_arguments(scan_p)
 
     # -- repos --------------------------------------------------------------------
@@ -2695,6 +3264,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Cap the number of breaking_change rows loaded from the database "
         "(only applies when neither --change-file nor --from-event is given)",
+    )
+    workflow_p.add_argument(
+        "--forced-only",
+        action="store_true",
+        help="Process only migrations that cannot be skipped: security advisories, "
+        "live-API removals and changes with an announced sunset date",
     )
     workflow_p.add_argument(
         "--api-key", type=str, default=None, help="Google API key (or set GOOGLE_API_KEY)"
@@ -2814,6 +3389,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(init_p)
 
+    report_p = sub.add_parser(
+        "report",
+        help="Zero-config dependency drift report (no LLM, no database)",
+    )
+    report_p.add_argument(
+        "--path",
+        type=str,
+        default=None,
+        help="Local directory to scan (default: current directory)",
+    )
+    report_p.add_argument(
+        "--providers-file",
+        type=str,
+        default=None,
+        help="Path to providers.yaml (default: PROVIDERS_FILE env)",
+    )
+    _add_command_logging_arguments(report_p)
+
+    quickstart_p = sub.add_parser(
+        "quickstart",
+        help="Guided first-run: detect SDK dependencies, show drift, suggest next steps",
+    )
+    quickstart_p.add_argument(
+        "--path",
+        type=str,
+        default=None,
+        help="Local directory to scan (default: current directory)",
+    )
+    quickstart_p.add_argument(
+        "--providers-file",
+        type=str,
+        default=None,
+        help="Path to providers.yaml (default: PROVIDERS_FILE env)",
+    )
+    _add_command_logging_arguments(quickstart_p)
+
     return p
 
 
@@ -2827,8 +3438,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     ollama_model = args.ollama_model or settings.ollama_model
 
     if provider == "gemini" and not api_key:
-        console.print("[red]Error: GOOGLE_API_KEY not set. Use --api-key or .env[/red]")
-        return 2
+        console.print(
+            "[yellow]No LLM key configured — running in report-only mode.[/yellow]\n"
+            "[dim]Set GOOGLE_API_KEY, or use LLM_PROVIDER=ollama/bedrock "
+            "for full fix generation.[/dim]\n"
+        )
+        report_args = argparse.Namespace(path=codebase, providers_file=None)
+        return _cmd_report(report_args)
     if not Path(codebase).exists():
         console.print(f"[red]Error: codebase not found: {codebase}[/red]")
         return 2
@@ -3115,7 +3731,14 @@ def main(argv: list[str] | None = None) -> int:
     log_format = getattr(args, "log_format", None) or settings.log_format
     configure_logging(log_level, json_output=log_format == "json")
     configure_sentry(settings.sentry_dsn, environment=settings.environment)
+    init_telemetry(enabled=settings.telemetry_enabled, dsn=settings.telemetry_dsn)
+    try:
+        return _dispatch(args)
+    finally:
+        flush_telemetry(args.command)
 
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "watch":
         return _cmd_watch(args)
     if args.command == "classify":
@@ -3128,6 +3751,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_repos(args)
     if args.command == "init":
         return _cmd_init(args)
+    if args.command == "report":
+        return _cmd_report(args)
     if args.command == "status":
         return _cmd_status(args)
     if args.command == "pr":
@@ -3135,6 +3760,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_pr_list(args)
         console.print("[red]Error: pass `depfix pr list --repo OWNER/NAME`.[/red]")
         return 2
+    if args.command == "quickstart":
+        return _cmd_quickstart(args)
     if args.command in {"plan", "apply"}:
         return _cmd_pipeline(args)
     return _cmd_run(args)

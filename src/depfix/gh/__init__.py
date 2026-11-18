@@ -5,11 +5,13 @@ from depfix.gh.branch import BRANCH_PREFIX, BranchWriter, branch_name_for
 from depfix.gh.models import Installation, InstallationToken, PullRequest, Repository
 from depfix.gh.pr import (
     apply_pr_labels,
+    build_drift_comment_body,
     build_pr_body,
     committable_edits,
     kept_edits,
     open_pull_request,
     parse_pr_state_trailer,
+    post_issue_comment,
     pr_title_for,
 )
 
@@ -25,10 +27,12 @@ __all__ = [
     "Repository",
     "apply_pr_labels",
     "branch_name_for",
+    "build_drift_comment_body",
     "build_pr_body",
     "committable_edits",
     "kept_edits",
     "open_pull_request",
     "parse_pr_state_trailer",
+    "post_issue_comment",
     "pr_title_for",
 ]

@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from depfix.providers.loader import ProviderConfigError, load_providers_file
+from depfix.providers.loader import (
+    ProviderConfigError,
+    detect_providers_from_manifests,
+    load_providers_file,
+)
+from depfix.providers.models import FeedSpec, ProviderSpec, SdkPackage
 from depfix.sources.models import SourceKind
 
 
@@ -108,9 +113,10 @@ def test_missing_top_level_key(tmp_path: Path) -> None:
         load_providers_file(path)
 
 
-def test_missing_file(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
-        load_providers_file(tmp_path / "does-not-exist.yaml")
+def test_missing_file_falls_back_to_bundled(tmp_path: Path) -> None:
+    """A missing explicit path falls back to the bundled providers.yaml."""
+    providers = load_providers_file(tmp_path / "does-not-exist.yaml")
+    assert len(providers) > 0
 
 
 def test_name_defaults_to_id(tmp_path: Path) -> None:
@@ -176,3 +182,58 @@ def test_call_site_anchors_are_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ProviderConfigError, match="call_site_anchors"):
         load_providers_file(path)
+
+
+# ── detect_providers_from_manifests ──────────────────────────────────────────
+
+
+def _make_providers() -> list[ProviderSpec]:
+    return [
+        ProviderSpec(
+            id="openai",
+            name="OpenAI",
+            feeds=(FeedSpec(kind=SourceKind.NPM_DIST_TAG, config={"package": "openai"}),),
+            sdk_packages=(SdkPackage(name="openai", ecosystem="npm"),),
+        ),
+        ProviderSpec(
+            id="stripe",
+            name="Stripe",
+            feeds=(FeedSpec(kind=SourceKind.NPM_DIST_TAG, config={"package": "stripe"}),),
+            sdk_packages=(SdkPackage(name="stripe", ecosystem="npm"),),
+        ),
+    ]
+
+
+def test_detect_providers_finds_matching_sdk(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"dependencies": {"openai": "^4.0.0"}}', encoding="utf-8"
+    )
+    detected = detect_providers_from_manifests(tmp_path, _make_providers())
+    assert len(detected) == 1
+    assert detected[0].id == "openai"
+
+
+def test_detect_providers_returns_empty_when_no_match(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"dependencies": {"express": "^4.0.0"}}', encoding="utf-8"
+    )
+    detected = detect_providers_from_manifests(tmp_path, _make_providers())
+    assert detected == []
+
+
+def test_fallback_to_bundled_providers_yaml() -> None:
+    """Loading a nonexistent path should fall back to the bundled copy."""
+    providers = load_providers_file("/nonexistent/path/providers.yaml")
+    assert len(providers) > 0
+    ids = {p.id for p in providers}
+    assert "openai" in ids
+
+
+def test_detect_providers_multiple_matches(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"dependencies": {"openai": "^4.0.0", "stripe": "^14.0.0"}}',
+        encoding="utf-8",
+    )
+    detected = detect_providers_from_manifests(tmp_path, _make_providers())
+    ids = {p.id for p in detected}
+    assert ids == {"openai", "stripe"}

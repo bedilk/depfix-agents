@@ -91,6 +91,7 @@ include = ["depfix*"]
 [tool.setuptools.package-data]
 depfix = [
     "py.typed",
+    "providers.yaml",
     "migrations/*.py",
     "migrations/*.mako",
     "migrations/versions/*.py",

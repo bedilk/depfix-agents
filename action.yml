@@ -31,7 +31,7 @@ inputs:
     description: 'API key for LLM provider (GOOGLE_API_KEY, etc.)'
     required: false
   github-token:
-    description: 'GitHub token for PR creation'
+    description: 'GitHub token for PR creation and comments'
     required: false
     default: ${{ github.token }}
   auto-pr:
@@ -40,6 +40,14 @@ inputs:
     default: 'true'
   dry-run:
     description: 'Run in dry-run mode (no PRs, no writes)'
+    required: false
+    default: 'false'
+  comment-on-pr:
+    description: 'Post scan results as a comment on the triggering PR (only on pull_request events)'
+    required: false
+    default: 'false'
+  annotate:
+    description: 'Post scan results as GitHub Check annotations for file-level visibility'
     required: false
     default: 'false'
 
@@ -58,7 +66,7 @@ runs:
 
     - name: Install depfix
       shell: bash
-      run: pip install depfix
+      run: pip install depfix-ai
 
     - name: Initialize depfix
       shell: bash
@@ -85,16 +93,30 @@ runs:
           DRY_FLAG="--dry-run --no-pr"
         fi
 
+        # PR comment and annotation flags
+        COMMENT_FLAG=""
+        if [ "${{ inputs.comment-on-pr }}" = "true" ] && [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          PR_NUMBER=$(jq -r .number "$GITHUB_EVENT_PATH")
+          if [ "$PR_NUMBER" != "null" ] && [ -n "$PR_NUMBER" ]; then
+            COMMENT_FLAG="--comment-pr $PR_NUMBER"
+          fi
+        fi
+
+        ANNOTATE_FLAG=""
+        if [ "${{ inputs.annotate }}" = "true" ]; then
+          ANNOTATE_FLAG="--annotate"
+        fi
+
         case "$MODE" in
           scan)
-            depfix scan --repo "$REPO" $PROVIDER_FLAG $DRY_FLAG
+            depfix scan --repo "$REPO" $PROVIDER_FLAG $DRY_FLAG $COMMENT_FLAG $ANNOTATE_FLAG
             ;;
           plan)
-            depfix scan --repo "$REPO" $PROVIDER_FLAG
+            depfix scan --repo "$REPO" $PROVIDER_FLAG $COMMENT_FLAG $ANNOTATE_FLAG
             depfix plan "$REPO" $PROVIDER_FLAG --force $DRY_FLAG
             ;;
           apply)
-            depfix scan --repo "$REPO" $PROVIDER_FLAG
+            depfix scan --repo "$REPO" $PROVIDER_FLAG $COMMENT_FLAG $ANNOTATE_FLAG
             depfix plan "$REPO" $PROVIDER_FLAG --force
             depfix apply "$REPO" $PROVIDER_FLAG $DRY_FLAG
             ;;
@@ -112,3 +134,5 @@ runs:
         echo "| Provider | \`${{ inputs.provider }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| Mode | \`${{ inputs.mode }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| Dry run | \`${{ inputs.dry-run }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| PR comment | \`${{ inputs.comment-on-pr }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| Annotations | \`${{ inputs.annotate }}\` |" >> $GITHUB_STEP_SUMMARY

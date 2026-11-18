@@ -22,7 +22,7 @@ from depfix.sources.asyncapi_spec import AsyncApiSpecSource
 from depfix.sources.models import FeedStateSnapshot, SpecChangeKind
 from depfix.sources.redis_commands import RedisCommandsSource
 from depfix.sources.smithy_spec import SmithySpecSource
-from depfix.sources.ts_exports import TsExportsSource, _names_in_dts
+from depfix.sources.ts_exports import TsExportsSource, _names_in_dts, pair_renames
 
 _BASE = "https://raw.example"
 
@@ -273,3 +273,78 @@ def test_ts_exports_first_sight_compares_against_previous_major() -> None:
     versions = ["1.0.0", "1.5.2", "2.0.0-beta.1", "2.0.0", "2.1.0"]
     assert TsExportsSource._previous_major_release(versions, "2.1.0") == "1.5.2"
     assert TsExportsSource._previous_major_release(["1.0.0", "1.2.0"], "1.2.0") is None
+
+
+def test_pair_renames_matches_similar_names() -> None:
+    removed = {"startTransaction", "getCurrentHub", "configureScope"}
+    added = {"startSpan", "getCurrentScope", "withScope"}
+    pairs, unmatched = pair_renames(removed, added)
+    paired_old = {old for old, _ in pairs}
+    assert "getCurrentHub" in paired_old or "configureScope" in paired_old
+    assert "startTransaction" in unmatched or "startTransaction" in paired_old
+
+
+def test_pair_renames_no_false_matches() -> None:
+    removed = {"Foo", "Bar"}
+    added = {"CompletelyDifferent", "AlsoUnrelated"}
+    pairs, unmatched = pair_renames(removed, added)
+    assert len(pairs) == 0
+    assert unmatched == removed
+
+
+def test_pair_renames_empty_sets() -> None:
+    pairs, unmatched = pair_renames(set(), {"NewThing"})
+    assert pairs == []
+    assert unmatched == set()
+
+    pairs, unmatched = pair_renames({"OldThing"}, set())
+    assert pairs == []
+    assert unmatched == {"OldThing"}
+
+
+def test_pair_renames_case_change() -> None:
+    removed = {"setupConnectErrorHandler"}
+    added = {"setupConnectErrorhandler"}
+    pairs, unmatched = pair_renames(removed, added)
+    assert len(pairs) == 1
+    assert pairs[0] == ("setupConnectErrorHandler", "setupConnectErrorhandler")
+    assert len(unmatched) == 0
+
+
+def test_ts_exports_detects_a_rename(tmp_path: Path) -> None:
+    old_dts = (
+        "export declare function startTransaction(): void;\n"
+        "export declare function captureException(): void;\n"
+    )
+    new_dts = (
+        "export declare function startSpan(): void;\n"
+        "export declare function captureException(): void;\n"
+    )
+    old_tgz = _tgz_with_dts(old_dts)
+    new_tgz = _tgz_with_dts(new_dts)
+
+    npm = MagicMock()
+    npm.base_url = "https://registry.example"
+    meta = MagicMock()
+    meta.dist_tags = {"latest": "2.0.0"}
+    npm.get_package_metadata.return_value = meta
+
+    http = MagicMock()
+    http.get.side_effect = [
+        MagicMock(status_code=200, content=old_tgz),
+        MagicMock(status_code=200, content=new_tgz),
+    ]
+
+    source = TsExportsSource("sentry", {"package": "@sentry/node"}, http, npm)
+    state = FeedStateSnapshot(last_token="1.0.0")
+    result = source.poll(state)
+
+    assert result.changed
+    changes = result.events[0].spec_changes
+    renamed = [c for c in changes if c.kind is SpecChangeKind.OPERATION_ID_CHANGED]
+    removed = [c for c in changes if c.kind is SpecChangeKind.EXPORT_REMOVED]
+    assert len(renamed) == 1
+    assert renamed[0].before == "startTransaction"
+    assert renamed[0].after == "sentry.startSpan"
+    assert renamed[0].subject == "sentry.startTransaction"
+    assert len(removed) == 0

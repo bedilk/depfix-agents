@@ -19,10 +19,16 @@ class ProviderConfigError(ValueError):
     """providers.yaml is missing or malformed."""
 
 
+_BUNDLED_PROVIDERS = Path(__file__).resolve().parent.parent / "providers.yaml"
+
+
 def load_providers_file(path: str | Path) -> list[ProviderSpec]:
     file_path = Path(path)
     if not file_path.exists():
-        raise FileNotFoundError(f"providers file not found: {file_path}")
+        if _BUNDLED_PROVIDERS.exists():
+            file_path = _BUNDLED_PROVIDERS
+        else:
+            raise FileNotFoundError(f"providers file not found: {file_path}")
 
     data = yaml.safe_load(file_path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict) or "providers" not in data:
@@ -129,3 +135,40 @@ def _str_tuple(raw: Any, where: str) -> tuple[str, ...]:
 
 def _optional_str(raw: Any) -> str | None:
     return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
+
+def detect_providers_from_manifests(
+    root: Path,
+    providers: list[ProviderSpec] | None = None,
+) -> list[ProviderSpec]:
+    """Return providers whose SDK packages appear in manifests under *root*.
+
+    Loads the default providers file (including the bundled fallback) when
+    *providers* is ``None``.
+    """
+    if providers is None:
+        providers = load_providers_file("providers.yaml")
+
+    sdk_to_provider: dict[str, ProviderSpec] = {}
+    all_sdk_names: list[str] = []
+    for p in providers:
+        if not p.enabled:
+            continue
+        for sdk in p.sdk_packages:
+            all_sdk_names.append(sdk.name)
+            sdk_to_provider[sdk.name] = p
+
+    if not all_sdk_names:
+        return []
+
+    from depfix.scanners.manifest import scan_manifests
+
+    mscan = scan_manifests(root, all_sdk_names)
+    seen_ids: set[str] = set()
+    detected: list[ProviderSpec] = []
+    for match in mscan.matches:
+        provider = sdk_to_provider.get(match.package)
+        if provider and provider.id not in seen_ids:
+            seen_ids.add(provider.id)
+            detected.append(provider)
+    return detected

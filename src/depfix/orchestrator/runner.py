@@ -351,8 +351,17 @@ class Orchestrator:
         changes_processed = 0
         stopped_early = False
 
+        # Forced migrations (advisories, live-API removals, announced sunsets)
+        # go first, earliest deadline first, so the per-run cap can never spend
+        # the budget on optional drift while a deadline is running.
+        from depfix.core.urgency import urgency_sort_key
+
         ordered = sorted(
-            changes, key=lambda c: (0 if c.kind is ChangeKind.DEPENDENCY_VERSION_BUMP else 1,)
+            changes,
+            key=lambda c: (
+                *urgency_sort_key(c),
+                0 if c.kind is ChangeKind.DEPENDENCY_VERSION_BUMP else 1,
+            ),
         )
 
         # Pre-scan: populate _scan_cache for every provider before filtering.

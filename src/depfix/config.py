@@ -579,6 +579,17 @@ class Settings(BaseSettings):
     environment: Literal["development", "staging", "production", "test"] = "development"
     sentry_dsn: str = Field(default="")
     log_format: Literal["text", "json"] = "text"
+    telemetry_enabled: bool = Field(
+        default=False,
+        description="Opt-in anonymous usage telemetry (one Sentry event per command). "
+        "Set DEPFIX_TELEMETRY=true to enable.",
+        validation_alias="DEPFIX_TELEMETRY",
+    )
+    telemetry_dsn: str = Field(
+        default="",
+        description="Sentry DSN that receives usage events. Empty uses the built-in default.",
+        validation_alias="DEPFIX_TELEMETRY_DSN",
+    )
 
 
 @lru_cache(maxsize=1)
