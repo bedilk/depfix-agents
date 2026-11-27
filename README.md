@@ -141,24 +141,22 @@ Add to `.github/workflows/depfix.yml`:
 name: depfix
 on:
   schedule:
-    - cron: '0 8 * * 1'  # every Monday at 8am
+    - cron: '0 8 * * 1'
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: write
-
 jobs:
   depfix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: bedilk/depfix-agents@v0.3.0
-        with:
-          api-key: ${{ secrets.GOOGLE_API_KEY }}
+      - uses: bedilk/depfix-action@v0.3.1
 ```
 
-Each run detects the tracked SDKs in your manifests, scans for drift and affected call sites, and opens one pull request per upgrade. It needs no GitHub App: it uses the workflow's own token, so enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**. Set `provider: openai,stripe` to restrict it, or `dry-run: 'true'` to plan without opening PRs.
+Then enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**. No API key, secret or GitHub App is needed: model calls go through the depfix LLM service, which accepts the workflow's own token, with a daily limit per repository.
+
+Each run detects the tracked SDKs in your manifests, scans for drift and affected call sites, and opens one pull request per upgrade. Set `provider: openai,stripe` to restrict it, or `dry-run: 'true'` to plan without opening PRs.
 
 The same run is available locally as `depfix ci --repo OWNER/NAME` with `GITHUB_TOKEN` set.
 

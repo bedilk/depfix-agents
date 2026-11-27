@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "depfix-ai"
-version = "0.3.0"
+version = "0.3.1"
 description = "Dependabot for APIs — detects breaking API/SDK changes, finds affected call-sites, generates verified fixes, and opens a PR."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -169,7 +169,7 @@ markers = [
     "integration: hits real external services (LLM API). Slow and costs $.",
     "e2e: end-to-end test running the full pipeline.",
 ]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 
 # ============================================================================
 #  coverage
