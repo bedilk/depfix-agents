@@ -634,3 +634,86 @@ def test_scan_assessments_hide_drift_and_unmatched_by_default(monkeypatch) -> No
     cli._print_scan_assessments(assessments, show_all=True)
     out = recorder.export_text()
     assert "openai@3.0.0" in out and "createEdit" in out
+
+
+# ── ci command ───────────────────────────────────────────────────────────────
+
+_CI_PROVIDERS = """
+providers:
+  - id: openai
+    name: OpenAI
+    sdk_packages: [{ecosystem: npm, name: openai}]
+    feeds: [{kind: fixture_change, id: t, old_token: '3', new_token: '4'}]
+  - id: stripe
+    name: Stripe
+    sdk_packages: [{ecosystem: npm, name: stripe}]
+    feeds: [{kind: fixture_change, id: s, old_token: '1', new_token: '2'}]
+"""
+
+
+def _ci_setup(monkeypatch, tmp_path, *, token="ghs_x", scan_rc=None):
+    providers_file = tmp_path / "providers.yaml"
+    providers_file.write_text(_CI_PROVIDERS)
+    (tmp_path / "package.json").write_text('{"dependencies": {"openai": "3.3.0"}}')
+    settings = Settings(
+        providers_file=str(providers_file), github_token=token, github_app_id="", _env_file=None
+    )
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+    calls: list[list[str]] = []
+
+    def fake_dispatch(args):
+        providers = args.provider if isinstance(args.provider, list) else [args.provider]
+        calls.append([args.command, *providers])
+        return (scan_rc or {}).get(providers[0], 0) if args.command == "scan" else 0
+
+    monkeypatch.setattr(cli, "_dispatch", fake_dispatch)
+    return calls
+
+
+def test_ci_detects_providers_then_scans_plans_and_applies(monkeypatch, tmp_path) -> None:
+    calls = _ci_setup(monkeypatch, tmp_path)
+    args = build_parser().parse_args(["ci", "--path", str(tmp_path)])
+    assert cli._cmd_ci(args) == 0
+    assert calls == [["scan", "openai"], ["plan", "openai"], ["apply", "openai"]]
+
+
+def test_ci_dry_run_never_applies(monkeypatch, tmp_path) -> None:
+    calls = _ci_setup(monkeypatch, tmp_path)
+    args = build_parser().parse_args(
+        ["ci", "--path", str(tmp_path), "--provider", "openai,stripe", "--dry-run"]
+    )
+    assert cli._cmd_ci(args) == 0
+    assert calls == [["scan", "openai"], ["scan", "stripe"], ["plan", "openai", "stripe"]]
+
+
+def test_ci_skips_a_provider_whose_scan_failed_and_reports_it(monkeypatch, tmp_path) -> None:
+    calls = _ci_setup(monkeypatch, tmp_path, scan_rc={"openai": 1})
+    args = build_parser().parse_args(
+        ["ci", "--path", str(tmp_path), "--provider", "openai", "--provider", "stripe"]
+    )
+    assert cli._cmd_ci(args) == 1
+    assert calls[-2:] == [["plan", "stripe"], ["apply", "stripe"]]
+
+
+def test_ci_without_tracked_dependencies_is_a_clean_no_op(monkeypatch, tmp_path) -> None:
+    calls = _ci_setup(monkeypatch, tmp_path)
+    (tmp_path / "package.json").write_text('{"dependencies": {"left-pad": "1.0.0"}}')
+    assert cli._cmd_ci(build_parser().parse_args(["ci", "--path", str(tmp_path)])) == 0
+    assert calls == []
+
+
+def test_ci_without_github_credentials_fails_before_scanning(monkeypatch, tmp_path) -> None:
+    calls = _ci_setup(monkeypatch, tmp_path, token="")
+    assert cli._cmd_ci(build_parser().parse_args(["ci", "--path", str(tmp_path)])) == 2
+    assert calls == []
+
+
+def test_build_gh_auth_falls_back_to_a_plain_token() -> None:
+    from depfix.gh import GitHubTokenAuth
+
+    auth = cli._build_gh_auth(Settings(github_token="ghs_x", github_app_id="", _env_file=None))
+    assert isinstance(auth, GitHubTokenAuth)
+    auth.close()
+    assert cli._build_gh_auth(Settings(github_token="", github_app_id="", _env_file=None)) is None
