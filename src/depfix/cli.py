@@ -39,6 +39,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import os
 import re
 import shlex
 import subprocess
@@ -100,6 +101,7 @@ from depfix.gh import (
     BranchWriter,
     GitHubAppAuth,
     GitHubAppError,
+    GitHubTokenAuth,
     PullRequest,
     branch_name_for,
     build_pr_body,
@@ -323,12 +325,16 @@ def _build_gh_auth(settings) -> GitHubAppAuth | None:
     """Build a ``GitHubAppAuth`` from settings, or ``None`` if the App isn't
     configured -- callers turn that into an actionable CLI error rather than
     letting a blank app_id/private_key fail deep inside a JWT-signing call."""
-    if not settings.github_app_id:
-        return None
-    private_key = settings.github_app_private_key
-    if not private_key and settings.github_app_private_key_path:
-        private_key = Path(settings.github_app_private_key_path).read_text(encoding="utf-8")
+    private_key = ""
+    if settings.github_app_id:
+        private_key = settings.github_app_private_key
+        if not private_key and settings.github_app_private_key_path:
+            private_key = Path(settings.github_app_private_key_path).read_text(encoding="utf-8")
     if not private_key:
+        # No App: a plain token (a workflow's GITHUB_TOKEN, or a PAT) can
+        # still act on the repositories it was issued for.
+        if settings.github_token:
+            return GitHubTokenAuth(token=settings.github_token, api_url=settings.github_api_url)
         return None
     return GitHubAppAuth(
         app_id=settings.github_app_id, private_key=private_key, api_url=settings.github_api_url
@@ -1375,7 +1381,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             gh_auth = _build_gh_auth(settings)
             if gh_auth is None:
                 console.print(
-                    "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+                    "[red]Error: no GitHub credentials. Set GITHUB_TOKEN, or GITHUB_APP_ID with "
                     "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
                 )
                 return 2
@@ -1935,7 +1941,7 @@ def _cmd_fix(args: argparse.Namespace) -> int:
             gh_auth = _build_gh_auth(settings)
             if gh_auth is None:
                 console.print(
-                    "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+                    "[red]Error: no GitHub credentials. Set GITHUB_TOKEN, or GITHUB_APP_ID with "
                     "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
                 )
                 return 2
@@ -2045,7 +2051,7 @@ def _cmd_repos(args: argparse.Namespace) -> int:
     gh_auth = _build_gh_auth(settings)
     if gh_auth is None:
         console.print(
-            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+            "[red]Error: no GitHub credentials. Set GITHUB_TOKEN, or GITHUB_APP_ID with "
             "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
         )
         return 2
@@ -2109,7 +2115,7 @@ def _fetch_latest_version(npm: NpmRegistryClient, package: str, ecosystem: str) 
             resp = httpx.get(f"https://pypi.org/pypi/{package}/json", timeout=10)
             if resp.status_code == 200:
                 return resp.json().get("info", {}).get("version", "?")
-        except Exception:
+        except Exception:  # nosec B110 -- best-effort registry lookup; '?' is the fallback
             pass
         return "?"
     if ecosystem == "rubygems":
@@ -2119,7 +2125,7 @@ def _fetch_latest_version(npm: NpmRegistryClient, package: str, ecosystem: str) 
             resp = httpx.get(f"https://rubygems.org/api/v1/gems/{package}.json", timeout=10)
             if resp.status_code == 200:
                 return resp.json().get("version", "?")
-        except Exception:
+        except Exception:  # nosec B110 -- best-effort registry lookup; '?' is the fallback
             pass
         return "?"
     return "?"
@@ -2267,7 +2273,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
 def _github_slug(root: Path) -> str | None:
     """Return ``owner/name`` from the checkout's GitHub ``origin`` remote, if any."""
     try:
-        url = subprocess.run(
+        url = subprocess.run(  # nosec B607 -- fixed argv, git resolved from PATH by design
             ["git", "-C", str(root), "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
@@ -2358,6 +2364,74 @@ def _cmd_quickstart(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _cmd_ci(args: argparse.Namespace) -> int:
+    """One unattended run for one repository: detect the providers it uses,
+    scan each, plan, and open pull requests."""
+    settings = get_settings()
+    root = Path(args.path or os.environ.get("GITHUB_WORKSPACE") or ".").resolve()
+    repo = args.repo or os.environ.get("GITHUB_REPOSITORY") or _github_slug(root)
+    if not repo or "/" not in repo:
+        console.print(
+            "[red]Error: could not determine the repository. Pass --repo OWNER/NAME "
+            "or set GITHUB_REPOSITORY.[/red]"
+        )
+        return 2
+
+    provider_ids = [
+        part.strip() for raw in (args.provider or []) for part in raw.split(",") if part.strip()
+    ]
+    if not provider_ids:
+        if not root.is_dir():
+            console.print(f"[red]Error: {root} is not a directory[/red]")
+            return 2
+        try:
+            providers = load_providers_file(args.providers_file or settings.providers_file)
+        except (FileNotFoundError, ProviderConfigError) as exc:
+            console.print(f"[red]Error: {exc}[/red]")
+            return 2
+        from depfix.providers.loader import detect_providers_from_manifests
+
+        provider_ids = [p.id for p in detect_providers_from_manifests(root, providers)]
+    if not provider_ids:
+        console.print("[yellow]No tracked SDK dependencies found; nothing to do.[/yellow]")
+        return 0
+
+    gh_auth = _build_gh_auth(settings)
+    if gh_auth is None:
+        console.print(
+            "[red]Error: no GitHub credentials. Set GITHUB_TOKEN, or GITHUB_APP_ID with "
+            "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
+        )
+        return 2
+    gh_auth.close()
+
+    console.print(f"[bold]depfix ci[/bold] {repo}  providers: {', '.join(provider_ids)}")
+    common = ["--providers-file", args.providers_file] if args.providers_file else []
+    parser = build_parser()
+    worst = 0
+    scanned: list[str] = []
+    for provider_id in provider_ids:
+        rc = _dispatch(
+            parser.parse_args(["scan", "--repo", repo, "--provider", provider_id, *common])
+        )
+        if rc == 0:
+            scanned.append(provider_id)
+        else:
+            console.print(
+                f"[yellow]scan failed for {provider_id} (exit {rc}); skipping it[/yellow]"
+            )
+            worst = max(worst, rc)
+    if not scanned:
+        return worst
+
+    flags = [flag for provider_id in scanned for flag in ("--provider", provider_id)] + common
+    worst = max(worst, _dispatch(parser.parse_args(["plan", repo, *flags])))
+    if args.dry_run:
+        console.print("[dim]--dry-run: stopping after plan; no branches or PRs written.[/dim]")
+        return worst
+    return max(worst, _dispatch(parser.parse_args(["apply", repo, *flags])))
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
@@ -2455,7 +2529,7 @@ def _cmd_pipeline(args: argparse.Namespace) -> int:
     gh_auth = _build_gh_auth(settings)
     if gh_auth is None:
         console.print(
-            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+            "[red]Error: no GitHub credentials. Set GITHUB_TOKEN, or GITHUB_APP_ID with "
             "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
         )
         return 2
@@ -3425,6 +3499,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_command_logging_arguments(quickstart_p)
 
+    ci_p = sub.add_parser(
+        "ci",
+        help="Unattended run for one repository: detect providers, scan, plan, open PRs",
+    )
+    ci_p.add_argument(
+        "--repo", default=None, help="OWNER/NAME (default: GITHUB_REPOSITORY, else git origin)"
+    )
+    ci_p.add_argument(
+        "--path",
+        default=None,
+        help="Checkout used to detect providers (default: GITHUB_WORKSPACE, else .)",
+    )
+    ci_p.add_argument(
+        "--provider",
+        action="append",
+        default=None,
+        metavar="ID",
+        help="Provider id; repeatable or comma-separated (default: detect from manifests)",
+    )
+    ci_p.add_argument("--providers-file", default=None, help="Path to providers.yaml")
+    ci_p.add_argument(
+        "--dry-run", action="store_true", help="Scan and plan only; never write branches or PRs"
+    )
+    _add_command_logging_arguments(ci_p)
+
     return p
 
 
@@ -3674,7 +3773,7 @@ def _cmd_pr_list(args: argparse.Namespace) -> int:
     gh_auth = _build_gh_auth(settings)
     if gh_auth is None:
         console.print(
-            "[red]Error: GitHub App not configured. Set GITHUB_APP_ID and either "
+            "[red]Error: no GitHub credentials. Set GITHUB_TOKEN, or GITHUB_APP_ID with "
             "GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH.[/red]"
         )
         return 2
@@ -3762,6 +3861,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return 2
     if args.command == "quickstart":
         return _cmd_quickstart(args)
+    if args.command == "ci":
+        return _cmd_ci(args)
     if args.command in {"plan", "apply"}:
         return _cmd_pipeline(args)
     return _cmd_run(args)

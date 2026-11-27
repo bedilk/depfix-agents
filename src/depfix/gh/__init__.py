@@ -1,6 +1,11 @@
 """GitHub App authentication and repo access."""
 
-from depfix.gh.app import DEFAULT_GITHUB_API_URL, GitHubAppAuth, GitHubAppError
+from depfix.gh.app import (
+    DEFAULT_GITHUB_API_URL,
+    GitHubAppAuth,
+    GitHubAppError,
+    GitHubTokenAuth,
+)
 from depfix.gh.branch import BRANCH_PREFIX, BranchWriter, branch_name_for
 from depfix.gh.models import Installation, InstallationToken, PullRequest, Repository
 from depfix.gh.pr import (
@@ -21,6 +26,7 @@ __all__ = [
     "BranchWriter",
     "GitHubAppAuth",
     "GitHubAppError",
+    "GitHubTokenAuth",
     "Installation",
     "InstallationToken",
     "PullRequest",

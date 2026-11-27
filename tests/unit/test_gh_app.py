@@ -363,3 +363,37 @@ def test_default_ref_resolves_via_installation_and_repo(
         ref = auth.default_ref("acme", "widgets")
 
     assert ref == "develop"
+
+
+@respx.mock(base_url=_BASE)
+def test_token_auth_uses_the_token_without_any_app_endpoint(respx_mock: respx.Router) -> None:
+    from depfix.gh.app import GitHubTokenAuth
+
+    route = respx_mock.get("/repos/acme/widgets").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 1, "full_name": "acme/widgets", "default_branch": "trunk", "private": True},
+        )
+    )
+
+    with GitHubTokenAuth(token="ghs_workflow", api_url=_BASE) as auth:
+        assert auth.default_ref("acme", "widgets") == "trunk"
+        assert auth.list_installations() == []
+        write = auth.installation_token(0, permissions={"contents": "write"})
+
+    assert route.calls.last.request.headers["Authorization"] == "token ghs_workflow"
+    assert len(respx_mock.calls) == 1
+    assert write.token == "ghs_workflow" and not write.is_expired()
+
+
+@respx.mock(base_url=_BASE)
+def test_token_auth_403_names_the_token_not_the_app(respx_mock: respx.Router) -> None:
+    from depfix.gh.app import GitHubTokenAuth
+
+    respx_mock.get("/repos/acme/widgets").mock(return_value=httpx.Response(403, text="nope"))
+
+    with (
+        GitHubTokenAuth(token="t", api_url=_BASE) as auth,
+        pytest.raises(GitHubAppError, match="GITHUB_TOKEN"),
+    ):
+        auth.default_ref("acme", "widgets")
