@@ -56,10 +56,14 @@ def test_client_needs_github_context() -> None:
         client.messages.create(model="m", max_tokens=1, messages=[])
 
 
-def test_factory_uses_the_proxy_only_when_configured(monkeypatch) -> None:
+def test_factory_uses_the_proxy_when_configured(monkeypatch) -> None:
     monkeypatch.setenv("DEPFIX_LLM_PROXY_URL", _URL)
     assert isinstance(bedrock_messages_client(), ProxyMessagesClient)
-    monkeypatch.delenv("DEPFIX_LLM_PROXY_URL")
+
+
+def test_factory_calls_bedrock_directly_without_a_proxy(monkeypatch) -> None:
+    pytest.importorskip("anthropic")
+    monkeypatch.delenv("DEPFIX_LLM_PROXY_URL", raising=False)
     assert not isinstance(bedrock_messages_client(aws_region="us-east-1"), ProxyMessagesClient)
 
 
