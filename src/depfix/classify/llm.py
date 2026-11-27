@@ -118,15 +118,14 @@ class BedrockCompleter:
         aws_profile: str = "",
         model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     ) -> None:
-        from anthropic import AnthropicBedrock
+        from depfix.llm_proxy import bedrock_messages_client
 
-        kwargs: dict = {"aws_region": aws_region}
-        if aws_access_key and aws_secret_key:
-            kwargs["aws_access_key"] = aws_access_key
-            kwargs["aws_secret_key"] = aws_secret_key
-        elif aws_profile:
-            kwargs["aws_profile"] = aws_profile
-        self._client = AnthropicBedrock(**kwargs)
+        self._client = bedrock_messages_client(
+            aws_access_key=aws_access_key,
+            aws_secret_key=aws_secret_key,
+            aws_region=aws_region,
+            aws_profile=aws_profile,
+        )
         self.model = model
 
     def complete(self, prompt: str, *, temperature: float = 0.1) -> LLMResponse:

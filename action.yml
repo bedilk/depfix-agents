@@ -23,13 +23,10 @@ inputs:
     description: 'Python version to use'
     required: false
     default: '3.11'
-  llm-provider:
-    description: 'LLM provider: gemini, bedrock, ollama'
+  llm-service-url:
+    description: 'depfix LLM service that holds the model access, so no key is needed here. Set to an empty string to call Bedrock with AWS credentials from an earlier step instead.'
     required: false
-    default: 'gemini'
-  api-key:
-    description: 'API key for LLM provider (GOOGLE_API_KEY, etc.)'
-    required: false
+    default: 'https://63lkgzutcvdsjgmuusa34bnbtu0ddhzn.lambda-url.us-east-1.on.aws'
   github-token:
     description: 'GitHub token for PR creation and comments'
     required: false
@@ -66,7 +63,7 @@ runs:
 
     - name: Install depfix
       shell: bash
-      run: pip install depfix-ai
+      run: pip install 'depfix-ai==0.3.1'
 
     - name: Initialize depfix
       shell: bash
@@ -76,8 +73,10 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        GOOGLE_API_KEY: ${{ inputs.api-key }}
-        LLM_PROVIDER: ${{ inputs.llm-provider }}
+        LLM_PROVIDER: bedrock
+        BEDROCK_MODEL: us.anthropic.claude-sonnet-4-6
+        BEDROCK_LIGHT_MODEL: us.anthropic.claude-haiku-4-5-20251001-v1:0
+        DEPFIX_LLM_PROXY_URL: ${{ inputs.llm-service-url }}
       run: |
         MODE="${{ inputs.mode }}"
         REPO="${{ inputs.repo }}"

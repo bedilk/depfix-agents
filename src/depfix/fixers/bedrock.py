@@ -1,7 +1,7 @@
 """Bedrock-hosted Claude fix generator.
 
-Uses the ``anthropic`` SDK's ``AnthropicBedrock`` client to call Claude
-models via AWS Bedrock. Mirrors the public surface of
+Calls Claude models via AWS Bedrock, directly or through depfix's hosted
+LLM service (see :mod:`depfix.llm_proxy`). Mirrors the public surface of
 :class:`depfix.fixers.gemini.FixGenerator` so the orchestration layer can
 swap providers without touching its own code.
 """
@@ -41,15 +41,14 @@ class BedrockFixGenerator:
         max_retries: int = 3,
         temperature: float = 0.1,
     ) -> None:
-        from anthropic import AnthropicBedrock
+        from depfix.llm_proxy import bedrock_messages_client
 
-        kwargs: dict = {"aws_region": aws_region}
-        if aws_access_key and aws_secret_key:
-            kwargs["aws_access_key"] = aws_access_key
-            kwargs["aws_secret_key"] = aws_secret_key
-        elif aws_profile:
-            kwargs["aws_profile"] = aws_profile
-        self.client = AnthropicBedrock(**kwargs)
+        self.client = bedrock_messages_client(
+            aws_access_key=aws_access_key,
+            aws_secret_key=aws_secret_key,
+            aws_region=aws_region,
+            aws_profile=aws_profile,
+        )
         self.model = model
         self.max_retries = max_retries
         self.temperature = temperature

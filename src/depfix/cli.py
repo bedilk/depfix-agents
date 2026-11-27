@@ -453,7 +453,9 @@ def _llm_is_configured(settings: Settings) -> bool:
     if settings.llm_provider == "gemini":
         return bool(settings.google_api_key)
     if settings.llm_provider == "bedrock":
-        return bool(settings.bedrock_access_key or settings.bedrock_profile)
+        from depfix.llm_proxy import proxy_url
+
+        return bool(settings.bedrock_access_key or settings.bedrock_profile or proxy_url())
     return True
 
 
