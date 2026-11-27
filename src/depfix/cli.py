@@ -2115,7 +2115,7 @@ def _fetch_latest_version(npm: NpmRegistryClient, package: str, ecosystem: str) 
             resp = httpx.get(f"https://pypi.org/pypi/{package}/json", timeout=10)
             if resp.status_code == 200:
                 return resp.json().get("info", {}).get("version", "?")
-        except Exception:
+        except Exception:  # nosec B110 -- best-effort registry lookup; '?' is the fallback
             pass
         return "?"
     if ecosystem == "rubygems":
@@ -2125,7 +2125,7 @@ def _fetch_latest_version(npm: NpmRegistryClient, package: str, ecosystem: str) 
             resp = httpx.get(f"https://rubygems.org/api/v1/gems/{package}.json", timeout=10)
             if resp.status_code == 200:
                 return resp.json().get("version", "?")
-        except Exception:
+        except Exception:  # nosec B110 -- best-effort registry lookup; '?' is the fallback
             pass
         return "?"
     return "?"
@@ -2273,7 +2273,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
 def _github_slug(root: Path) -> str | None:
     """Return ``owner/name`` from the checkout's GitHub ``origin`` remote, if any."""
     try:
-        url = subprocess.run(
+        url = subprocess.run(  # nosec B607 -- fixed argv, git resolved from PATH by design
             ["git", "-C", str(root), "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
