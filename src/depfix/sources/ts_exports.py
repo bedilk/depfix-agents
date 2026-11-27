@@ -86,9 +86,7 @@ def _similarity(old: str, new: str) -> float:
     return min(jaccard + prefix_bonus, 1.0)
 
 
-def pair_renames(
-    removed: set[str], added: set[str]
-) -> tuple[list[tuple[str, str]], set[str]]:
+def pair_renames(removed: set[str], added: set[str]) -> tuple[list[tuple[str, str]], set[str]]:
     """Match removed exports to added ones that look like renames.
 
     Returns (rename_pairs, unmatched_removed). Each pair is (old_name, new_name).
@@ -117,6 +115,7 @@ def pair_renames(
 
     unmatched = removed - used_old
     return paired, unmatched
+
 
 _EXPORT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(

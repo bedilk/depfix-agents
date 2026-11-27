@@ -350,6 +350,62 @@ class GitHubAppAuth:
         }
 
 
+class GitHubTokenAuth(GitHubAppAuth):
+    """The :class:`GitHubAppAuth` surface backed by one pre-issued token --
+    a workflow's ``GITHUB_TOKEN`` or a PAT.
+
+    The token's own scopes are the only permission boundary here: the
+    ``repositories``/``permissions`` a caller asks for cannot narrow it the
+    way minting an installation token does.
+    """
+
+    def __init__(
+        self,
+        *,
+        token: str,
+        api_url: str = DEFAULT_GITHUB_API_URL,
+        http_timeout: float = 20.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        super().__init__(
+            app_id="", private_key="", api_url=api_url, http_timeout=http_timeout, client=client
+        )
+        self._token = token
+
+    def _raise_for_status(
+        self, resp: httpx.Response, *, requested_permissions: dict[str, str] | None = None
+    ) -> None:
+        if resp.status_code in (401, 403, 404, 422):
+            raise GitHubAppError(
+                f"GitHub API error {resp.status_code} for {resp.request.url}: "
+                f"{resp.text[:300]}. Check that GITHUB_TOKEN can access this repository "
+                "with contents and pull-requests write permission."
+            )
+        super()._raise_for_status(resp, requested_permissions=requested_permissions)
+
+    def list_installations(self) -> list[Installation]:
+        return []
+
+    def resolve_installation_for_repo(self, owner: str, repo: str) -> Installation:
+        return Installation(
+            id=0, account_login=owner, account_type="User", repository_selection="selected"
+        )
+
+    def installation_token(
+        self,
+        installation_id: int,
+        *,
+        repositories: tuple[str, ...] = (),
+        permissions: dict[str, str] | None = None,
+    ) -> InstallationToken:
+        return InstallationToken(
+            token=self._token,
+            expires_at=datetime.max.replace(tzinfo=UTC),
+            installation_id=installation_id,
+            repositories=repositories,
+        )
+
+
 def _installation_from_dict(item: dict) -> Installation:
     account = item.get("account") or {}
     return Installation(
