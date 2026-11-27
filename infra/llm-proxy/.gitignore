@@ -1,0 +1,8 @@
+# Terraform state records the account ID and resource ARNs: keep it local.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.build/
+crash.log

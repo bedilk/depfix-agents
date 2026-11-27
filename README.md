@@ -160,6 +160,16 @@ Each run detects the tracked SDKs in your manifests, scans for drift and affecte
 
 The same run is available locally as `depfix ci --repo OWNER/NAME` with `GITHUB_TOKEN` set.
 
+### Hosting the LLM service
+
+The service the Action calls is defined in `infra/llm-proxy/` (Terraform) and `proxy/handler.py`. To run your own, apply it with your AWS credentials and pass its URL as the Action's `llm-service-url` input:
+
+```bash
+cd infra/llm-proxy && terraform init && terraform apply
+```
+
+Terraform state stays on the machine that applies it; it is git-ignored because it records the AWS account.
+
 ## CLI Reference
 
 ```bash

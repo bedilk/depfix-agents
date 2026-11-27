@@ -26,7 +26,7 @@ inputs:
   llm-service-url:
     description: 'depfix LLM service that holds the model access, so no key is needed here. Set to an empty string to call Bedrock with AWS credentials from an earlier step instead.'
     required: false
-    default: '__DEPFIX_LLM_SERVICE_URL__'
+    default: 'https://63lkgzutcvdsjgmuusa34bnbtu0ddhzn.lambda-url.us-east-1.on.aws'
   github-token:
     description: 'GitHub token for PR creation and comments'
     required: false
